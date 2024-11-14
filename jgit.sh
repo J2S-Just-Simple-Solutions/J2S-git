@@ -6,16 +6,25 @@
 ####################################
 
 j2s_remote="origin"
-reference_branch="main"
-prefix_PR="__PR__"
+reference_branch="develop"
 
-remotes=$( git remote -v )
+####################################
+#
+#        MANDATORY PARAMETERS
+# This section should be the same
+#         for all developers
+#
+####################################
+prefix_PR="__PR__"
+prefix_init_commit="[jgit INIT COMMIT]"
+suffix_init_commit=""
 
 ####################################
 #
 #         GLOBAL VERIFICATIONS
 #
 ####################################
+remotes=$( git remote -v )
 
 if [[ $remotes != *$j2s_remote* ]]; then
   echo "Please configure J2S remote as "$j2s_remote
@@ -27,15 +36,15 @@ diff=$( git diff )
 stash=false;
 if [[ -n $diff ]]; then
     echo "You have uncommited modifications."
-    read -p "Do you want to stash and then unstash changes ? [y/n] " yn
+    read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
     echo
     if [[ ! $yn =~ ^[Yy]$ ]]; then
         exit 0
     fi
     git stash save "[jGIT]"
+    echo "ici1"
     stash=true;
 fi
-
 
 ####################################
 #
@@ -53,11 +62,11 @@ create_all_branches() {
     git push $j2s_remote $branch_PR --quiet
     echo "Create working branch $branch branch"
     git checkout -B $branch --quiet
-    git commit --allow-empty -m "[jgit INIT COMMIT] $branch" --quiet
+    git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
     git push --set-upstream $j2s_remote $branch --quiet
     git branch -D $branch_PR --quiet
     echo "Create pull request"
-    gh pr create --title $feature_name --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label 'NFR'
+    gh pr create --title $feature_name --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label "NFR"
 }
 
 create() {
@@ -79,7 +88,7 @@ create() {
         echo "On est dans la Matrix"
     fi
 
-    if [[ stash ]]; then
+    if $stash; then
         git stash pop
     fi
 }
@@ -93,7 +102,7 @@ help()
     echo
     echo "It will create a branch correctly named on local and on J2S remote."
     echo "It will create all needed branches to create a clean PR on Github."
-    echo "The PR will be created autoamtically by github client cli."
+    echo "The PR will be created automatically by github client cli."
     echo
     echo "For now, only new feature or hotfix creation is supported."
     echo
