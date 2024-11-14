@@ -5,12 +5,9 @@
 #
 ####################################
 
-own_remote="bankette"
 j2s_remote="origin"
 reference_branch="main"
-
-github_own_remote_name=$own_remote
-github_project_name="J2S-Akeneo"
+prefix_PR="__PR__"
 
 remotes=$( git remote -v )
 
@@ -25,17 +22,18 @@ if [[ $remotes != *$j2s_remote* ]]; then
   exit 0
 fi
 
-if [[ $remotes != *$own_remote* ]]; then
-  echo "Please configure your own remote as "$own_remote
-  exit 0
-fi
-
 diff=$( git diff )
 
+stash=false;
 if [[ -n $diff ]]; then
-  echo "Please commit or stash all changes before resuming"
-  git diff
-  exit 0
+    echo "You have uncommited modifications."
+    read -p "Do you want to stash and then unstash changes ? [y/n] " yn
+    echo
+    if [[ ! $yn =~ ^[Yy]$ ]]; then
+        exit 0
+    fi
+    git stash save "[jGIT]"
+    stash=true;
 fi
 
 
@@ -46,16 +44,20 @@ fi
 ####################################
 
 create_all_branches() {
-    echo "Checkout and update $reference_branch branch"
-    git checkout $reference_branch
-    git fetch $j2s_remote
-    git pull $j2s_remote $reference_branch
-    git checkout -B $branch
-    git push $j2s_remote $branch
-    git commit --allow-empty -m "[jgit INIT COMMIT $reference_branch]"
-    git push $own_remote $branch
-# Les pull request ne focntionne pas car le client ne permet pas de créé des PR entre deux remotes...
-#    gh pr create --title $feature_name --body "jira/"$feature_name --web
+    echo "Checkout and reset $reference_branch branch"
+    git checkout $reference_branch --quiet
+    git fetch $j2s_remote --quiet
+    git reset --hard $reference_branch --quiet
+    echo "Create pull request branch $branch_PR branch"
+    git checkout -B $branch_PR --quiet
+    git push $j2s_remote $branch_PR --quiet
+    echo "Create working branch $branch branch"
+    git checkout -B $branch --quiet
+    git commit --allow-empty -m "[jgit INIT COMMIT] $branch" --quiet
+    git push --set-upstream $j2s_remote $branch --quiet
+    git branch -D $branch_PR --quiet
+    echo "Create pull request"
+    gh pr create --title $feature_name --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label 'NFR'
 }
 
 create() {
@@ -72,10 +74,13 @@ create() {
         echo "Existe en local mais pas en distant"
         echo "Non géré pour le moment"
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
-    #    echo "N'existe pas"
         create_all_branches
     else
         echo "On est dans la Matrix"
+    fi
+
+    if [[ stash ]]; then
+        git stash pop
     fi
 }
 
@@ -86,7 +91,11 @@ help()
 {
     echo "This script is used to manage feature or hotfix creation for development purpose."
     echo
-    echo "It will create a branch correctly named on local, on your own remote and on J2S remote as well."
+    echo "It will create a branch correctly named on local and on J2S remote."
+    echo "It will create all needed branches to create a clean PR on Github."
+    echo "The PR will be created autoamtically by github client cli."
+    echo
+    echo "For now, only new feature or hotfix creation is supported."
     echo
     echo "Syntax: jgit [feature|hotfix] feature_name"
     echo "options:"
@@ -124,6 +133,7 @@ if [[ $1 == "feature" ]] || [[ $1 == "hotfix" ]]; then
     fi
     feature_name=$2
     branch=$1-$feature_name
+    branch_PR=$prefix_PR$branch
 
     create;
 elif [[ $1 == "help" ]]; then
