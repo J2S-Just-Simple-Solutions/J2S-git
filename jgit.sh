@@ -6,7 +6,7 @@
 ####################################
 
 j2s_remote="origin"
-reference_branch="develop"
+reference_branch="main"
 
 ####################################
 #
