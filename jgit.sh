@@ -263,4 +263,4 @@ else
     echo "argument $1 note supported"
     exit_safe 0
 fi
-exit_safe(1);
+exit_safe 1 ;
