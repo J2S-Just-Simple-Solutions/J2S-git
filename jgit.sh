@@ -17,7 +17,8 @@ reference_branch="main"
 #
 ####################################
 prefix_PR="__PR__"
-prefix_init_commit="[jgit] INIT "
+prefix_commit="[jgit]"
+prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit=""
 stash=false;
 
@@ -31,6 +32,13 @@ exit_safe() {
     if $stash; then
         git stash pop
     fi
+
+    if [[ $1 == 0 ]]; then
+        echo "/!\ Script finished in error! Be careful about your branch management on local."
+
+        exit $1
+    fi
+
     exit $1
 }
 
@@ -73,7 +81,7 @@ release_start() {
         exit_safe 0;
     fi
 
-    git checkout master
+    git checkout $reference_branch
     git fetch origin
     current_tag=$(git tag -l --sort=-creatordate | head -n 1)
     echo "Current tag: ${current_tag}"
@@ -108,14 +116,45 @@ release_start() {
         echo "Remote branch exists, use it..."
         git checkout --track origin/${branch}
     
-        exit_safe 0
+        return 1;
     fi
 
     echo "Release does not exists, create it..."
-    git reset --hard origin/master
+    git reset --hard origin/$reference_branch
     git checkout -b ${branch}
     git commit --allow-empty -m "$prefix_init_commit release ${branch}. $suffix_init_commit"
     git push origin ${branch}
+}
+
+release_merge() {
+    release_start
+    branch=$branch_PR;
+    existed_in_local=$(git branch --list ${branch})
+    existed_in_remote=$(git ls-remote --heads origin ${branch})
+    release_branch=$(git rev-parse --abbrev-ref HEAD)
+    existed=0
+
+    echo "Searching a branch naming: ${branch}"
+
+    if [[ ! -z ${existed_in_local} ]]; then
+        echo "Feature branch exists on local machine, use it..."
+        existed=1
+        #git merge --no-ff ${branch} -m "$prefix_commit Merge feature branch : $branch"
+    fi
+
+    if [[ ! -z ${existed_in_remote} && existed=0 ]]; then
+        echo "Remote branch exists, use it..."
+        existed=1
+        #git merge --no-ff origin/${branch} -m "$prefix_commit Merge feature branch : $branch"
+    fi
+
+    if [[ $existed == 0 ]]; then
+        echo "/!\ Feature branch was not found!"
+
+        exit 0
+    fi
+
+   # git push origin ${release_branch}
 }
 
 ####################################
@@ -206,6 +245,13 @@ elif [[ $1 == "release" ]]; then
     fi
     if [[ $2 == "start" ]]; then 
         release_start;
+    elif [[ $2 == "merge" ]]; then 
+        if [[ -z $3 ]]; then
+            echo "Please set a branch name as third argument"
+            exit_safe 0;
+        fi
+        branch_PR=$prefix_PR$3
+        release_merge;
     else
         echo "argument $2 note supported"
         exit_safe 0
