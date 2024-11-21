@@ -64,7 +64,7 @@ feature_start() {
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
         git checkout -B $branch --quiet
-        git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
+        git commit --allow-empty -m "$prefix_init_commit ##$branch## $suffix_init_commit" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         git branch -D $branch_PR --quiet
         echo "Create pull request"
@@ -154,7 +154,7 @@ release_merge() {
     if [[ $existed == 0 ]]; then
         echo "/!\ Feature branch was not found!"
 
-        exit 0
+        exit_safe 0
     fi
 
    git push origin ${release_branch}
@@ -188,20 +188,20 @@ release_finish() {
     echo "Release: ${branch}"
     last_commit_message=$(git log -1 --pretty=%B)
 
-    if [[ $last_commit_message == "[swk] Init release ${branch}. [skip ci]" ]]; then
+    if [[ $last_commit_message == "$prefix_init_commit release ${branch}. $suffix_init_commit" ]]; then
         echo "It seems that the release is empty..."
 
-        exit 0;
+        exit_safe 0;
     fi
 
     if [[ $branch =~ $regex_branch ]]; then
-    major="${BASH_REMATCH[1]}"
-    feature="${BASH_REMATCH[2]}"
-    minor="${BASH_REMATCH[3]}"
+        major="${BASH_REMATCH[1]}"
+        feature="${BASH_REMATCH[2]}"
+        minor="${BASH_REMATCH[3]}"
     else
-    echo "Release branch seems to have a wrong format..."
+        echo "Release branch seems to have a wrong format..."
 
-    exit 0
+        exit_safe 0
     fi
 
     future_tag="${major}.${feature}.${minor}"
@@ -219,48 +219,28 @@ release_finish() {
     echo "Delete remote branch ${branch}"
     git push -d origin ${branch}
     git push origin tag ${future_tag}
+
+    gh release create ${future_tag} --generate-notes
 }
 
-####################################
-#
-#         GLOBAL VERIFICATIONS
-#
-####################################
-remotes=$( git remote -v )
-
-if [[ $remotes != *$j2s_remote* ]]; then
-  echo "Please configure J2S remote as "$j2s_remote
-  exit_safe 0
-fi
-
-if [[ $(git status --porcelain) ]]; then
-    echo "You have uncommited modifications."
-    read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
-    echo
-    if [[ ! $yn =~ ^[Yy]$ ]]; then
-        exit_safe 0
-    fi
-    git stash save "[jGIT]"
-    stash=true;
-fi
 
 ################################################################################
 # Help                                                                         #
 ################################################################################
 help()
 {
-    echo "This script is used to manage feature or hotfix creation for development purpose."
+    echo "This script is used to manage feature, hotfix or release creation for development purpose."
     echo
-    echo "It will create branches correctly named on local and on J2S remote."
-    echo "It will create all needed branches to create a clean PR on Github."
-    echo "The PR will be created automatically by github client cli."
-
-    echo
-    echo "For now, only new feature or hotfix creation is supported."
-    echo
-    echo "Syntax: jgit [feature|hotfix] start <feature_name>"
+    echo "Syntax:"
+    echo "jgit [feature|hotfix] start <feature_name>"
+    echo " -> Create a new feature or hotfix or checkout on it."
+    echo "jgit release merge <branch_name>"
+    echo " -> Merge a branch in the current release."
+    echo "jgit release finish "
+    echo " -> Will close the current release : merge the current release branch, create the tag and the release in github."
     echo "options:"
-    echo "-h    Print this Help."
+    echo "-h                                    Print this Help."
+
     echo
 }
 
@@ -285,6 +265,29 @@ while getopts ':hs:' option; do
        ;;
   esac
 done
+
+####################################
+#
+#         GLOBAL VERIFICATIONS
+#
+####################################
+remotes=$( git remote -v )
+
+if [[ $remotes != *$j2s_remote* ]]; then
+  echo "Please configure J2S remote as "$j2s_remote
+  exit_safe 0
+fi
+
+if [[ $(git status --porcelain) ]]; then
+    echo "You have uncommited modifications."
+    read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
+    echo
+    if [[ ! $yn =~ ^[Yy]$ ]]; then
+        exit_safe 0
+    fi
+    git stash save "[jGIT]"
+    stash=true;
+fi
 
 if [[ $1 == "feature" ]] || [[ $1 == "hotfix" ]]; then
     if [[ -z $3 ]]; then
