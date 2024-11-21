@@ -64,7 +64,7 @@ feature_start() {
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
         git checkout -B $branch --quiet
-        git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
+        git commit --allow-empty -m "$prefix_init_commit ##$branch## $suffix_init_commit" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         git branch -D $branch_PR --quiet
         echo "Create pull request"
@@ -154,7 +154,7 @@ release_merge() {
     if [[ $existed == 0 ]]; then
         echo "/!\ Feature branch was not found!"
 
-        exit 0
+        exit_safe 0
     fi
 
    git push origin ${release_branch}
@@ -188,20 +188,20 @@ release_finish() {
     echo "Release: ${branch}"
     last_commit_message=$(git log -1 --pretty=%B)
 
-    if [[ $last_commit_message == "[swk] Init release ${branch}. [skip ci]" ]]; then
+    if [[ $last_commit_message == "$prefix_init_commit release ${branch}. $suffix_init_commit" ]]; then
         echo "It seems that the release is empty..."
 
-        exit 0;
+        exit_safe 0;
     fi
 
     if [[ $branch =~ $regex_branch ]]; then
-    major="${BASH_REMATCH[1]}"
-    feature="${BASH_REMATCH[2]}"
-    minor="${BASH_REMATCH[3]}"
+        major="${BASH_REMATCH[1]}"
+        feature="${BASH_REMATCH[2]}"
+        minor="${BASH_REMATCH[3]}"
     else
-    echo "Release branch seems to have a wrong format..."
+        echo "Release branch seems to have a wrong format..."
 
-    exit 0
+        exit_safe 0
     fi
 
     future_tag="${major}.${feature}.${minor}"
@@ -219,6 +219,8 @@ release_finish() {
     echo "Delete remote branch ${branch}"
     git push -d origin ${branch}
     git push origin tag ${future_tag}
+
+    gh release create ${future_tag} --generate-notes
 }
 
 ####################################
