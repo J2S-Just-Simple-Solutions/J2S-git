@@ -5,9 +5,8 @@
 #
 ####################################
 
-own_remote="bankette"
 j2s_remote="origin"
-reference_branch="main"
+reference_branch="develop"
 
 ####################################
 #
@@ -72,6 +71,10 @@ feature_start() {
         gh pr create --title $feature_name --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label "NFR"
     else
         echo "On est dans la Matrix"
+    fi
+
+    if $stash; then
+        git stash pop
     fi
 }
 
@@ -251,6 +254,7 @@ help()
     echo "It will create branches correctly named on local and on J2S remote."
     echo "It will create all needed branches to create a clean PR on Github."
     echo "The PR will be created automatically by github client cli."
+
     echo
     echo "For now, only new feature or hotfix creation is supported."
     echo
