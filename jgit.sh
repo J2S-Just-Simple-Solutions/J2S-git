@@ -157,6 +157,67 @@ release_merge() {
    git push origin ${release_branch}
 }
 
+release_finish() {
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    regex_tag="([0-9]+).([0-9]+).([0-9]+)"
+    regex_branch="release/${regex_tag}"
+
+    if [[ $branch =~ $regex_branch ]]; then
+    echo "Already in release branch"
+    future_feature="${BASH_REMATCH[2]}"
+
+    current_tag=$(git tag -l --sort=-creatordate | head -n 1)
+    [[ $current_tag =~ $regex_tag ]] && current_feature="${BASH_REMATCH[2]}"
+
+    if [[ $future_feature > $current_feature ]]; then
+        echo "Use current local release ${branch}"
+    else
+        echo "/!\ Local release does not have the right tag, switching to new branch"
+        swkflow_start_release
+        branch=$(git rev-parse --abbrev-ref HEAD)
+    fi
+    else
+    echo "Switch to release branch"
+    swkflow_start_release
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    fi
+
+    echo "Release: ${branch}"
+    last_commit_message=$(git log -1 --pretty=%B)
+
+    if [[ $last_commit_message == "[swk] Init release ${branch}. [skip ci]" ]]; then
+        echo "It seems that the release is empty..."
+
+        exit 0;
+    fi
+
+    if [[ $branch =~ $regex_branch ]]; then
+    major="${BASH_REMATCH[1]}"
+    feature="${BASH_REMATCH[2]}"
+    minor="${BASH_REMATCH[3]}"
+    else
+    echo "Release branch seems to have a wrong format..."
+
+    exit 0
+    fi
+
+    future_tag="${major}.${feature}.${minor}"
+    echo "Future tag: ${future_tag}"
+    git checkout $reference_branch
+    git fetch origin
+    git reset --hard origin/$reference_branch
+    echo "Merging release ${branch} in $reference_branch branch..."
+    git merge --no-ff ${branch} -m "Merge release branch : ${branch}"
+    echo "Create new tag ${future_tag}"
+    git tag ${future_tag}
+    git push origin $reference_branch
+    echo "Delete local branch ${branch}"
+    git branch -D ${branch}
+    echo "Delete remote branch ${branch}"
+    git push -d origin ${branch}
+    git push origin tag ${future_tag}
+}
+
 ####################################
 #
 #         GLOBAL VERIFICATIONS
@@ -245,6 +306,8 @@ elif [[ $1 == "release" ]]; then
     fi
     if [[ $2 == "start" ]]; then 
         release_start;
+    elif [[ $2 == "finish" ]]; then 
+        release_finish;
     elif [[ $2 == "merge" ]]; then 
         if [[ -z $3 ]]; then
             echo "Please set a branch name as third argument"
@@ -263,4 +326,4 @@ else
     echo "argument $1 note supported"
     exit_safe 0
 fi
-exit_safe 1 ;
+exit_safe 1
