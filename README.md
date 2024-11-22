@@ -49,5 +49,3 @@ toto@MacBook-Pro % jgit feature TESTDEV-1111
 `jgit hotfix start <ticket-ID>` will create a hotfix branch on your local and on J2S remote and will create an associated PR on github with NFR flag.
 
 `jgit release start` will create, or checkout the existing, release branch on your local and create it on J2S remote if needed.
-
-
