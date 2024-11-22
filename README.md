@@ -3,7 +3,7 @@
 ### Installation
 First clone the repo
 ```
-cd /path-to-yourj2sgit-project/
+cd /path-to-your-j2sgit-project/
 git clone 
 ```
 
@@ -49,3 +49,8 @@ toto@MacBook-Pro % jgit feature TESTDEV-1111
 `jgit hotfix start <ticket-ID>` will create a hotfix branch on your local and on J2S remote and will create an associated PR on github with NFR flag.
 
 `jgit release start` will create, or checkout the existing, release branch on your local and create it on J2S remote if needed.
+
+`jgit release merge <branch_name>` will merge the branch in the current release.
+
+`jgit release finish` will close the current release : merge the current release branch, create the tag and the release in github.
+

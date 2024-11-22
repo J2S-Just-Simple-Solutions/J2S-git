@@ -6,7 +6,8 @@
 ####################################
 
 j2s_remote="origin"
-reference_branch="main"
+branch_prod="main"
+branch_preprod="develop"
 
 ####################################
 #
@@ -18,7 +19,7 @@ reference_branch="main"
 prefix_PR="__PR__"
 prefix_commit="[jgit]"
 prefix_init_commit="$prefix_commit INIT"
-suffix_init_commit=""
+suffix_init_commit="[empty_commit]"
 stash=false;
 
 ####################################
@@ -42,6 +43,11 @@ exit_safe() {
 }
 
 feature_start() {
+    feature_type=$1
+    feature_name=$2
+    branch=$1/$feature_name
+    branch_PR=$prefix_PR$branch
+
     branch_in_local=$( git branch --list ${branch} )
     branch_in_remote=$(git ls-remote --heads ${j2s_remote} ${branch})
 
@@ -55,16 +61,16 @@ feature_start() {
         echo "Existe en local mais pas en distant"
         echo "Non géré pour le moment"
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
-        echo "Checkout and reset $reference_branch branch"
-        git checkout $reference_branch --quiet
+        echo "Checkout and reset $branch_prod branch"
+        git checkout $branch_prod --quiet
         git fetch $j2s_remote --quiet
-        git reset --hard $reference_branch --quiet
+        git reset --hard $branch_prod --quiet
         echo "Create pull request branch $branch_PR branch"
         git checkout -B $branch_PR --quiet
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
         git checkout -B $branch --quiet
-        git commit --allow-empty -m "$prefix_init_commit ##$branch## $suffix_init_commit" --quiet
+        git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         git branch -D $branch_PR --quiet
         echo "Create pull request"
@@ -78,14 +84,47 @@ feature_start() {
     fi
 }
 
+feature_rebase() {
+    feature_type=$1
+    feature_name=$2
+    branch=$1/$feature_name
+    branch_PR=$prefix_PR$branch
+
+    current_date=`date '+%s'`
+
+    echo "Checkout and reset $branch_prod branch"
+    git checkout $branch_prod --quiet
+    git fetch $j2s_remote --quiet
+    git reset --hard $branch_prod --quiet
+    echo "Rebase $branch_PR"
+    git checkout $branch_PR
+    git reset --hard $branch_PR --quiet
+    git checkout -B "save_"$current_date"_"$branch_PR --quiet
+    git checkout $branch_PR
+    git rebase $branch_prod
+    git push --force
+    git branch -D $branch_PR
+    echo "Rebase $branch"
+    git checkout $branch
+    git reset --hard $branch --quiet
+    git checkout -B "save_"$current_date"_"$branch --quiet
+    git checkout $branch
+    git rebase $branch_PR
+    git push --force
+}
+
+####################################
+#            RELEASE
+####################################
+
 release_start() {
     if [[ $(git status --porcelain) ]]; then
         echo "/!\ Local changes, cannot start release"
         exit_safe 0;
     fi
 
-    git checkout $reference_branch
-    git fetch origin
+    git checkout $branch_prod
+    git fetch $j2s_remote
     current_tag=$(git tag -l --sort=-creatordate | head -n 1)
     echo "Current tag: ${current_tag}"
     major=0
@@ -107,7 +146,7 @@ release_start() {
 
     branch=release/${future_tag};
     existed_in_local=$(git branch --list ${branch})
-    existed_in_remote=$(git ls-remote --heads origin ${branch})
+    existed_in_remote=$(git ls-remote --heads $j2s_remote ${branch})
 
     echo "Searching a branch naming: ${branch}"
 
@@ -117,23 +156,23 @@ release_start() {
             git branch -D ${branch}
         fi
         echo "Remote branch exists, use it..."
-        git checkout --track origin/${branch}
+        git checkout --track $j2s_remote/${branch}
     
         return 1;
     fi
 
     echo "Release does not exists, create it..."
-    git reset --hard origin/$reference_branch
+    git reset --hard $j2s_remote/$branch_prod
     git checkout -b ${branch}
     git commit --allow-empty -m "$prefix_init_commit release ${branch}. $suffix_init_commit"
-    git push origin ${branch}
+    git push $j2s_remote ${branch}
 }
 
 release_merge() {
     release_start
     branch=$branch_PR;
     existed_in_local=$(git branch --list ${branch})
-    existed_in_remote=$(git ls-remote --heads origin ${branch})
+    existed_in_remote=$(git ls-remote --heads $j2s_remote ${branch})
     release_branch=$(git rev-parse --abbrev-ref HEAD)
     existed=0
 
@@ -142,13 +181,13 @@ release_merge() {
     if [[ ! -z ${existed_in_local} ]]; then
         echo "Feature branch exists on local machine, use it..."
         existed=1
-        git merge --no-ff ${branch} -m "$prefix_commit Merge feature branch : $branch"
+        git merge --no-ff ${branch} -m "$prefix_commit Merge feature branch : $branch $suffix_init_commit"
     fi
 
     if [[ ! -z ${existed_in_remote} && existed=0 ]]; then
         echo "Remote branch exists, use it..."
         existed=1
-        git merge --no-ff origin/${branch} -m "$prefix_commit Merge feature branch : $branch"
+        git merge --no-ff $j2s_remote/${branch} -m "$prefix_commit Merge feature branch : $branch $suffix_init_commit"
     fi
 
     if [[ $existed == 0 ]]; then
@@ -157,7 +196,7 @@ release_merge() {
         exit_safe 0
     fi
 
-   git push origin ${release_branch}
+   git push $j2s_remote ${release_branch}
 }
 
 release_finish() {
@@ -176,12 +215,12 @@ release_finish() {
         echo "Use current local release ${branch}"
     else
         echo "/!\ Local release does not have the right tag, switching to new branch"
-        swkflow_start_release
+        release_start
         branch=$(git rev-parse --abbrev-ref HEAD)
     fi
     else
     echo "Switch to release branch"
-    swkflow_start_release
+    release_start
     branch=$(git rev-parse --abbrev-ref HEAD)
     fi
 
@@ -206,19 +245,19 @@ release_finish() {
 
     future_tag="${major}.${feature}.${minor}"
     echo "Future tag: ${future_tag}"
-    git checkout $reference_branch
-    git fetch origin
-    git reset --hard origin/$reference_branch
-    echo "Merging release ${branch} in $reference_branch branch..."
+    git checkout $branch_prod
+    git fetch $j2s_remote
+    git reset --hard $j2s_remote/$branch_prod
+    echo "Merging release ${branch} in $branch_prod branch..."
     git merge --no-ff ${branch} -m "Merge release branch : ${branch}"
     echo "Create new tag ${future_tag}"
     git tag ${future_tag}
-    git push origin $reference_branch
+    git push $j2s_remote $branch_prod
     echo "Delete local branch ${branch}"
     git branch -D ${branch}
     echo "Delete remote branch ${branch}"
-    git push -d origin ${branch}
-    git push origin tag ${future_tag}
+    git push -d $j2s_remote ${branch}
+    git push $j2s_remote tag ${future_tag}
 
     gh release create ${future_tag} --generate-notes
 }
@@ -250,6 +289,7 @@ help()
 #
 ####################################
 
+# Manage options
 while getopts ':hs:' option; do
   case "$option" in
     h) help
@@ -266,11 +306,7 @@ while getopts ':hs:' option; do
   esac
 done
 
-####################################
-#
-#         GLOBAL VERIFICATIONS
-#
-####################################
+# GLOBAL VERIFICATIONS
 remotes=$( git remote -v )
 
 if [[ $remotes != *$j2s_remote* ]]; then
@@ -289,20 +325,21 @@ if [[ $(git status --porcelain) ]]; then
     stash=true;
 fi
 
+# Manage syntax
 if [[ $1 == "feature" ]] || [[ $1 == "hotfix" ]]; then
     if [[ -z $3 ]]; then
         echo "Please set a $1 name as third argument"
         exit_safe 0;
     fi
     feature_name=$3
-    branch=$1-$feature_name
-    branch_PR=$prefix_PR$branch
     
     if [[ -z $2 ]]; then
         help
     fi
     if [[ $2 == "start" ]]; then
-        feature_start;
+        feature_start $1 $feature_name;
+    elif [[ $2 == "rebase" ]]; then
+        feature_rebase $1 $feature_name
     else
         echo "argument $2 note supported"
         exit_safe 0
