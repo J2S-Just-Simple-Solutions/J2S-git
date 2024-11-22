@@ -70,7 +70,7 @@ feature_start() {
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
         git checkout -B $branch --quiet
-        git commit --allow-empty -m "$prefix_init_commit ##$branch## $suffix_init_commit" --quiet
+        git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         git branch -D $branch_PR --quiet
         echo "Create pull request"
@@ -83,6 +83,32 @@ feature_start() {
         git stash pop
     fi
 }
+
+feature_rebase() {
+    feature_type=$1
+    feature_name=$2
+    branch=$1/$feature_name
+    branch_PR=$prefix_PR$branch
+
+    git checkout $branch_prod --quiet
+    git fetch $j2s_remote --quiet
+    git reset --hard $branch_prod --quiet
+    git checkout $branch_PR
+    git pull
+    git checkout -B "save"date '+%s'"_$branch_PR" --quiet
+    git checkout $branch_PR
+    git rebase $branch_prod
+    git checkout $branch
+    git pull
+    git checkout -B "save"date '+%s'"_$branch" --quiet
+    git checkout $branch
+    git rebase $branch_PR
+}
+
+
+####################################
+#            RELEASE
+####################################
 
 release_start() {
     if [[ $(git status --porcelain) ]]; then
@@ -299,12 +325,14 @@ if [[ $1 == "feature" ]] || [[ $1 == "hotfix" ]]; then
         exit_safe 0;
     fi
     feature_name=$3
-
+    
     if [[ -z $2 ]]; then
         help
     fi
     if [[ $2 == "start" ]]; then
         feature_start $1 $feature_name;
+    elif [[ $2 == "rebase" ]]; then
+        feature_rebase $1 $feature_name
     else
         echo "argument $2 note supported"
         exit_safe 0
