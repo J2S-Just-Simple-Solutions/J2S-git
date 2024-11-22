@@ -90,17 +90,21 @@ feature_rebase() {
     branch=$1/$feature_name
     branch_PR=$prefix_PR$branch
 
+    echo "Checkout and reset $branch_prod branch"
     git checkout $branch_prod --quiet
     git fetch $j2s_remote --quiet
     git reset --hard $branch_prod --quiet
+    echo "Rebase $branch_PR"
     git checkout $branch_PR
     git pull
-    git checkout -B "save"date '+%s'"_$branch_PR" --quiet
+    current_date = date '+%s'
+    git checkout -B "save$current_date_$branch_PR" --quiet
     git checkout $branch_PR
     git rebase $branch_prod
+    echo "Rebase $branch"
     git checkout $branch
     git pull
-    git checkout -B "save"date '+%s'"_$branch" --quiet
+    git checkout -B "save$current_date_$branch" --quiet
     git checkout $branch
     git rebase $branch_PR
 }
