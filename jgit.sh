@@ -102,12 +102,15 @@ feature_rebase() {
     git checkout -B "save_"$current_date"_"$branch_PR --quiet
     git checkout $branch_PR
     git rebase $branch_prod
+    git push --force
+    git branch -D $branch_PR
     echo "Rebase $branch"
     git checkout $branch
     git pull
     git checkout -B "save_"$current_date"_"$branch --quiet
     git checkout $branch
     git rebase $branch_PR
+    git push --force
 }
 
 
