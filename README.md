@@ -25,7 +25,6 @@ You should have 1 remote named `origin` that head to a J2S github repository on 
 You must have git install on your local.
 You must have github client install on your local https://cli.github.com/
 
-
 Configure you gh envrionment
 
 ```
@@ -38,7 +37,7 @@ jgit will be used in command line directly from your project folder.
 Example
 ```
 toto@MacBook-Pro ~ % cd Projets/My-project 
-toto@MacBook-Pro % jgit feature TESTDEV-1111
+toto@MacBook-Pro % jgit feature start TESTDEV-1111
 ```
 
 ### Command line options
