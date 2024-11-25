@@ -273,6 +273,8 @@ help()
     echo "Syntax:"
     echo "jgit [feature|hotfix] start <feature_name>"
     echo " -> Create a new feature or hotfix or checkout on it."
+    echo "jgit [feature|hotfix] rebase <feature_name>"
+    echo " -> Rebase the feature or hotfix on main branch. In case of conflicts follow git commands before re-running this script"
     echo "jgit release merge <branch_name>"
     echo " -> Merge a branch in the current release."
     echo "jgit release finish "
