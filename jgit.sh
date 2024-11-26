@@ -9,6 +9,11 @@ j2s_remote="origin"
 branch_prod="main"
 branch_preprod="develop"
 
+FILE=.jgit/conf_local.sh
+if test -f "$FILE"; then
+    source $FILE
+fi
+
 ####################################
 #
 #        MANDATORY PARAMETERS
