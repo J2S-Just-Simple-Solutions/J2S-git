@@ -22,13 +22,35 @@ Restart your terminal.
 
 ### prerequisites
 You should have 1 remote named `origin` that head to a J2S github repository on all your local projects.
+
 You must have git install on your local.
+
 You must have github client install on your local https://cli.github.com/
 
 Configure you gh envrionment
 
 ```
 gh repo set-default
+```
+
+By default jgit use the following parameters
+```
+2s_remote="origin"
+branch_prod="main"
+branch_preprod="develop"
+```
+
+You can ovveride those variable for each projects by creating a specific configuration file.
+
+In your git project, create a file `.git/conf_local.sh`
+
+With the content (update with your needs)
+```
+#!/bin/bash
+
+j2s_remote="origin"
+branch_prod="master2"
+branch_preprod="develop2"
 ```
 
 ## Usage
