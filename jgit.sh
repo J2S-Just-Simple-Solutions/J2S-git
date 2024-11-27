@@ -66,10 +66,15 @@ feature_start() {
         echo "Existe en local mais pas en distant"
         echo "Non géré pour le moment"
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
-        echo "Checkout and reset $branch_prod branch"
-        git checkout $branch_prod --quiet
+        if [[ $feature_type == "hotfix" ]]; then
+            reference_branch=$branch_prod;
+        else
+            reference_branch=$branch_preprod
+        fi
+        echo "Checkout and reset $reference_branch branch"
+        git checkout $reference_branch --quiet
         git fetch $j2s_remote --quiet
-        git reset --hard $branch_prod --quiet
+        git reset --hard $reference_branch --quiet
         echo "Create pull request branch $branch_PR branch"
         git checkout -B $branch_PR --quiet
         git push $j2s_remote $branch_PR --quiet
@@ -97,16 +102,21 @@ feature_rebase() {
 
     current_date=`date '+%s'`
 
-    echo "Checkout and reset $branch_prod branch"
-    git checkout $branch_prod --quiet
+    if [[ $feature_type == "hotfix" ]]; then
+        reference_branch=$branch_prod;
+    else
+        reference_branch=$branch_preprod
+    fi
+    echo "Checkout and reset $reference_branch branch"
+    git checkout $reference_branch --quiet
     git fetch $j2s_remote --quiet
-    git reset --hard $branch_prod --quiet
+    git reset --hard $reference_branch --quiet
     echo "Rebase $branch_PR"
     git checkout $branch_PR
     git reset --hard $branch_PR --quiet
     git checkout -B "save_"$current_date"_"$branch_PR --quiet
     git checkout $branch_PR
-    git rebase $branch_prod $branch_PR
+    git rebase $reference_branch $branch_PR
     git push --force
     git branch -D $branch_PR
     echo "Rebase $branch"
