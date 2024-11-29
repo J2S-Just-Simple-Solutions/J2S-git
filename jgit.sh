@@ -158,6 +158,7 @@ feature_rebase() {
     git push --force
     echo "Clean up"
     git branch -D $branch_PR
+    echo "Rebase finished successfully"
 }
 
 ####################################
