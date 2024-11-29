@@ -65,7 +65,7 @@ feature_start() {
         git checkout $branch
         git pull
     elif [[ -z ${branch_in_local} ]] && [[ -n ${branch_in_remote} ]]; then
-        echo "Exists in remote "
+        echo "Exists in remote but not in local"
         echo "Use remote branch"
         git fetch
         git checkout -b $branch $j2s_remote/$branch
@@ -119,22 +119,22 @@ feature_rebase() {
         reference_branch=$branch_preprod
     fi
 
-    if [[ -n ${branch_in_remote} ]]; then
-        echo "Something get wrong, this feature $branch doesn't exist on remote"
+    if [[ -z ${branch_in_remote} ]]; then
+        echo "Something get wrong, $branch doesn't exist on remote"
         exit_safe 0
-    elif [[ -n ${branch_PR_in_remote} ]] ; then
+    elif [[ -z ${branch_PR_in_remote} ]] ; then
         echo "Something get wrong, the branch $branch_PR doesn't exist on remote"
         exit_safe 0
     fi
 
-    if [[ -n ${branch_in_local} ]]; then
+    if [[ -z ${branch_in_local} ]]; then
         echo "$branch exists in remote but not in local"
         echo "Use remote branch"
         git checkout -b $branch $j2s_remote/$branch
     fi
 
 
-    if [[ -n ${branch_PR_in_local} ]]; then
+    if [[ -z ${branch_PR_in_local} ]]; then
         echo "$branch_PR exists in remote but not in local"
         echo "Use remote branch"
         git checkout -b $branch_PR $j2s_remote/$branch_PR
