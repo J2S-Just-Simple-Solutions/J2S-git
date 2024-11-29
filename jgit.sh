@@ -144,7 +144,6 @@ feature_rebase() {
     git checkout $reference_branch --quiet
     git reset --hard $reference_branch --quiet
     echo "Rebase $branch_PR"
-    # Vérifier si existe sinon la puller puis la mettre à jour.
     git checkout $branch_PR
     git reset --hard $branch_PR --quiet
     git checkout -B "save_"$current_date"_"$branch_PR --quiet
@@ -152,7 +151,6 @@ feature_rebase() {
     git rebase $reference_branch $branch_PR
     git push --force
     echo "Rebase $branch"
-    # Vérifier si existe sinon la puller puis la mettre à jour.
     git checkout $branch
     git reset --hard $branch --quiet
     git checkout -B "save_"$current_date"_"$branch --quiet
