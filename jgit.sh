@@ -56,6 +56,8 @@ feature_start() {
     branch_in_local=$( git branch --list ${branch} )
     branch_in_remote=$(git ls-remote --heads ${j2s_remote} ${branch})
 
+    git fetch $j2s_remote --quiet
+
     if [[ -n ${branch_in_local} ]] && [[ -n ${branch_in_remote} ]]; then
         echo "Exists in remote and local"
         echo "Use local branch"
@@ -68,7 +70,7 @@ feature_start() {
         git fetch
         git checkout -b $branch $j2s_remote/$branch
     elif [[ -n ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
-        echo "Exists in local and remote"
+        echo "Exists in local and not in remote"
         echo "Is this feature already merged ?"
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
         if [[ $feature_type == "hotfix" ]]; then
@@ -78,14 +80,12 @@ feature_start() {
         fi
 
         echo "Checkout and reset $reference_branch branch"
-        git checkout $reference_branch --quiet
-        git fetch $j2s_remote --quiet
-        git reset --hard $reference_branch --quiet
+        git checkout -B $reference_branch --quiet
         echo "Create pull request branch $branch_PR branch"
-        git checkout -B $branch_PR --quiet
+        git checkout -b $branch_PR --quiet
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
-        git checkout -B $branch --quiet
+        git checkout -b $branch --quiet
         git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         git branch -D $branch_PR --quiet
@@ -141,8 +141,7 @@ feature_rebase() {
     fi
 
     echo "Checkout and reset $reference_branch branch"
-    git checkout $reference_branch --quiet
-    git reset --hard $reference_branch --quiet
+    git checkout -B $reference_branch --quiet
     echo "Rebase $branch_PR"
     git checkout $branch_PR
     git reset --hard $branch_PR --quiet
