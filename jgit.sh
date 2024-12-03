@@ -61,13 +61,11 @@ feature_start() {
     if [[ -n ${branch_in_local} ]] && [[ -n ${branch_in_remote} ]]; then
         echo "Exists in remote and local"
         echo "Use local branch"
-        git fetch
         git checkout $branch
         git pull
     elif [[ -z ${branch_in_local} ]] && [[ -n ${branch_in_remote} ]]; then
         echo "Exists in remote but not in local"
         echo "Use remote branch"
-        git fetch
         git checkout -b $branch $j2s_remote/$branch
     elif [[ -n ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
         echo "Exists in local and not in remote"
