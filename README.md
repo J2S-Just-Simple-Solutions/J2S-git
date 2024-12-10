@@ -64,7 +64,6 @@ toto@MacBook-Pro ~ % cd Projets/My-project
 toto@MacBook-Pro % jgit feature start TESTDEV-1111
 ```
 
-
 ### Command line options
 `jgit -h` to get help
 
