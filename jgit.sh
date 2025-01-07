@@ -140,6 +140,7 @@ feature_rebase() {
 
     echo "Checkout and reset $reference_branch branch"
     git checkout -B $reference_branch --quiet
+    git pull $j2s_remote $reference_branch --quiet
     echo "Rebase $branch_PR"
     git checkout $branch_PR
     git reset --hard $branch_PR --quiet
