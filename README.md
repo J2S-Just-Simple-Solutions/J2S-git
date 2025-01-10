@@ -22,6 +22,7 @@ Restart your terminal.
 
 ### prerequisites
 You should have 1 remote named `origin` that head to a J2S github repository on all your local projects.
+You must have your reference branch existing on local (`develop2` or `master`)
 
 You must have git install on your local.
 
