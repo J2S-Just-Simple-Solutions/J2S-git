@@ -78,11 +78,7 @@ feature_start() {
         fi
 
         echo "Checkout and reset $reference_branch branch"
-<<<<<<< HEAD
         git checkout $reference_branch --quiet
-=======
-        git checkout -B $reference_branch --quiet
->>>>>>> origin/__PR__feature/demo
         echo "Create pull request branch $branch_PR branch"
         git checkout -b $branch_PR --quiet
         git push $j2s_remote $branch_PR --quiet
