@@ -370,7 +370,7 @@ if [[ $(git status --porcelain) ]]; then
     if [[ ! $yn =~ ^[Yy]$ ]]; then
         exit_safe 0
     fi
-    git stash save "[jGIT]"
+    git stash push -m "[jGIT]" -u
     stash=true;
 fi
 
