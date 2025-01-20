@@ -68,6 +68,8 @@ toto@MacBook-Pro % jgit feature start TESTDEV-1111
 `jgit -h` to get help
 
 `jgit feature|hotfix start <ticket-ID>` will create a feature or a hotfix branch on your local and on J2S remote and will create an associated PR on github with NFR flag. If the feature already exists, it will just checkout on it and update it.
+    - feature will be based on the preproduction branch
+    - hotfix will be based on the production branch
 
 `jgit feature|hotfix rebase <ticket-ID>` will rebase the PR branch and the feature or hotfix branch based on main branch.
     -> In case of conflicts, follow git recommended commands to fix all conflicts before re-running this command. You should be on your feature branch to re-run this command and not on a conflict resolution branch. 
