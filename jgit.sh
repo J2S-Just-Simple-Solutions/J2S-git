@@ -55,6 +55,37 @@ help()
     echo
 }
 
+
+####################################
+#
+#      Manage parameters
+#
+####################################
+# Définition des variables
+JGIT_TYPE=$1
+JGIT_ACTION=$2
+JGIT_NAME=$3
+JGIT_BASED_ON=""  # Valeur par défaut
+
+
+# Parcourir tous les arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --based-on)
+      if [[ -n "$2" && "$2" != -* ]]; then
+        JGIT_BASED_ON="$2"  # Récupérer la valeur suivante
+        shift 2         # Passer à l'argument suivant
+      else
+        echo "Erreur : L'option --based-on nécessite un argument." >&2
+        exit 1
+      fi
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
 ####################################
 #
 #         RUNNING script
@@ -98,50 +129,50 @@ if [[ $(git status --porcelain) ]]; then
 fi
 
 # Manage syntax
-if [[ $1 == "feature" ]] || [[ $1 == "hotfix" ]]; then
-    if [[ -z $3 ]]; then
-        echo "Please set a $1 name as third argument"
+if [[ $JGIT_TYPE == "feature" ]] || [[ $JGIT_TYPE == "hotfix" ]]; then
+    if [[ -z $JGIT_NAME ]]; then
+        echo "Please set a $JGIT_TYPE name as third argument"
         exit_safe 0;
     fi
-    feature_name=$3
+    feature_name=$JGIT_NAME
     
-    if [[ -z $2 ]]; then
+    if [[ -z $JGIT_ACTION ]]; then
         help
     fi
-    if [[ $2 == "start" ]]; then
-        feature_start $1 $feature_name;
-    elif [[ $2 == "rebase" ]]; then
-        feature_rebase $1 $feature_name
+    if [[ $JGIT_ACTION == "start" ]]; then
+        feature_start $JGIT_TYPE $feature_name $JGIT_BASED_ON;
+    elif [[ $JGIT_ACTION == "rebase" ]]; then
+        feature_rebase $JGIT_TYPE $feature_name $JGIT_BASED_ON
     else
-        echo "argument $2 note supported"
+        echo "argument $JGIT_ACTION note supported"
         exit_safe 0
     fi
-elif [[ $1 == "release" ]]; then
-    if [[ -z $2 ]]; then
+elif [[ $JGIT_TYPE == "release" ]]; then
+    if [[ -z $JGIT_ACTION ]]; then
         help
     fi
-    if [[ $2 == "start" ]]; then 
+    if [[ $JGIT_ACTION == "start" ]]; then 
         release_start;
-    elif [[ $2 == "finish" ]]; then 
+    elif [[ $JGIT_ACTION == "finish" ]]; then 
         release_finish;
-    elif [[ $2 == "merge" ]]; then 
-        if [[ -z $3 ]]; then
+    elif [[ $JGIT_ACTION == "merge" ]]; then 
+        if [[ -z $JGIT_NAME ]]; then
             echo "Please set a branch name as third argument"
             exit_safe 0;
         fi
-        branch_PR=$prefix_PR$3
+        branch_PR=$prefix_PR$JGIT_NAME
         release_merge;
     else
-        echo "argument $2 note supported"
+        echo "argument $JGIT_ACTION not supported"
         exit_safe 0
     fi
-elif [[ $1 == "help" ]]; then
+elif [[ $JGIT_TYPE == "help" ]]; then
     help
     exit_safe 1;
-elif [[ $1 == "clean" ]]; then
+elif [[ $JGIT_TYPE == "clean" ]]; then
     clean_branches
 else
-    echo "argument $1 note supported"
+    echo "argument $JGIT_TYPE not supported"
     exit_safe 0
 fi
 exit_safe 1

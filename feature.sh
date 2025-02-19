@@ -4,6 +4,7 @@ source "$(dirname "$0")/functions.sh"
 feature_start() {
     local feature_type=$1
     local feature_name=$2
+    local BASED_ON=$3
     local branch=$1/$feature_name
     local branch_PR=$prefix_PR$branch
 
@@ -25,7 +26,28 @@ feature_start() {
         echo "Exists in local and not in remote"
         echo "Is this feature already merged ?"
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
-        reference_branch=$(get_reference_branch "$feature_type")
+
+        if [[ -n "$BASED_ON" ]]; then
+            reference_branch="$BASED_ON"
+        else
+            reference_branch=$(get_reference_branch "$feature_type")
+        fi
+
+        # Vérifier si la branche référence existe
+        if ! git rev-parse --verify "$reference_branch" >/dev/null 2>&1; then
+            echo "Erreur : La branche référence '$reference_branch' n'existe pas."
+            exit_safe 1
+        fi
+
+         printf "%sJGit va créer la branche %s%s%s%s et sa PR associée qui se basera sur la branche %s%s%s\n" \
+        "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$reference_branch" "$(tput sgr0)"
+        
+        # Demander confirmation à l'utilisateur
+        read -p "Souhaitez-vous continuer ? (y/n) " user_input
+        if [[ "$user_input" != "y" ]]; then
+            echo "Opération annulée."
+            exit 0
+        fi
 
         echo "Checkout and reset $reference_branch branch"
         git checkout $reference_branch --quiet

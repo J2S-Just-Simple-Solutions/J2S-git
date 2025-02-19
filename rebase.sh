@@ -4,6 +4,7 @@ source "$(dirname "$0")/functions.sh"
 feature_rebase() {
     local feature_type=$1
     local feature_name=$2
+    local BASED_ON=$3
     local branch=$1/$feature_name
     local branch_PR=$prefix_PR$branch
     local branch_rebase="jgit_rebase_"$branch
@@ -18,7 +19,17 @@ feature_rebase() {
     branch_in_local=$( git branch --list ${branch} )
     branch_PR_in_local=$( git branch --list ${branch_PR} )
 
-    reference_branch=$(get_reference_branch "$feature_type")
+    if [[ -n "$BASED_ON" ]]; then
+        reference_branch="$BASED_ON"
+    else
+        reference_branch=$(get_reference_branch "$feature_type" "$BASED_ON")
+    fi
+
+    # Vérifier si la branche référence existe
+    if ! git rev-parse --verify "$reference_branch" >/dev/null 2>&1; then
+        echo "Erreur : La branche référence '$reference_branch' n'existe pas."
+        exit_safe 1
+    fi
 
     if [[ -z ${branch_in_remote} ]]; then
         echo "Something get wrong, $branch doesn't exist on remote"
