@@ -14,36 +14,70 @@ exit_safe() {
     exit $1
 }
 
+# Renvoie la branche de référence et vérifie son existence.
+# La paramètre --based-on sera pris en priorité.
+# Les paramètre du fichier .jgit/conf_local.sh seront pris en 2nd
+# Sinon le script prendra la première branche qui existe parmis les fallback_branches
+#
+#Si la branche de référence n'existe pas une erreur est lancée.
 get_reference_branch() {
-  local feature_type=$1
-  local fallback_branches=("develop2" "develop" "master" "main")
+    local feature_type=$1
+    # fonction qui ne renvoit qu'un nom de branche sans faire de vérification d'existence.
+    get_branch_name() {
+        # On vérifie le paramètre based-on qui surchargera s'il existe.
+        while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --based-on)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                echo "$2"  # Récupérer la valeur suivante
+                return 0  # Succès
+            else
+                echo "Erreur : L'option --based-on nécessite un argument." >&2
+                exit 1
+            fi
+            ;;
+            *)
+            shift
+            ;;
+        esac
+        done
 
-  if [ -z "$feature_type" ]; then
-    echo "Erreur: Aucun feature_type fourni."
-    exit_safe 0
-  fi
+        local fallback_branches=("develop2" "develop" "master" "main")
 
-  # Vérifier la branche en fonction du type de feature
-  if [ "$feature_type" == "hotfix" ] && git rev-parse --verify "$branch_prod" >/dev/null 2>&1; then
-    echo "$branch_prod"
-    return 0  # Succès
-  elif [ "$feature_type" == "feature" ] && git rev-parse --verify "$branch_preprod" >/dev/null 2>&1; then
-    echo "$branch_prod"
-    return 0  # Succès
-  fi
+        if [ -z "$feature_type" ]; then
+            echo "Erreur: Aucun feature_type fourni."
+            exit_safe 0
+        fi
 
-  # Vérifier la première branche existante parmi la liste de fallback
-  for branch in "${fallback_branches[@]}"; do
-    if git rev-parse --verify "$branch" >/dev/null 2>&1; then
-      echo "$branch"
-      return 0  # Succès
+        # Vérifier la branche en fonction du type de feature
+        if [ "$feature_type" == "hotfix" ] && git rev-parse --verify "$branch_prod" >/dev/null 2>&1; then
+            echo "$branch_prod"
+            return 0  # Succès
+        elif [ "$feature_type" == "feature" ] && git rev-parse --verify "$branch_preprod" >/dev/null 2>&1; then
+            echo "$branch_prod"
+            return 0  # Succès
+        fi
+
+        # Vérifier la première branche existante parmi la liste de fallback
+        for branch in "${fallback_branches[@]}"; do
+            if git rev-parse --verify "$branch" >/dev/null 2>&1; then
+            echo "$branch"
+            return 0  # Succès
+            fi
+        done
+
+        echo "Erreur: Aucune branche valide trouvée."
+        exit_safe 1
+    }
+
+    local branch_reference=$(get_branch_name "$feature_type")
+
+    # Vérifier si la branche source existe
+    if ! git rev-parse --verify "$branch_reference" >/dev/null 2>&1; then
+        echo "Erreur : La branche source '$branbranch_referencech' n'existe pas."
+        exit_safe 1
     fi
-  done
-
-  echo "Erreur: Aucune branche valide trouvée."
-  exit_safe 1
 }
-
 
 # Fonction pour récupérer le dernier commit contenant le pattern de commit d'init jgit.
 get_last_commit_with_pattern() {

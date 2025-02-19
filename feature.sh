@@ -25,11 +25,7 @@ feature_start() {
         echo "Exists in local and not in remote"
         echo "Is this feature already merged ?"
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
-        if [[ $feature_type == "hotfix" ]]; then
-            reference_branch=$branch_prod;
-        else
-            reference_branch=$branch_preprod
-        fi
+        reference_branch=$(get_reference_branch "$feature_type")
 
         echo "Checkout and reset $reference_branch branch"
         git checkout $reference_branch --quiet
