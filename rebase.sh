@@ -57,7 +57,7 @@ feature_rebase() {
     last_init_commit=$(get_last_commit_with_pattern)
     if [ -z "$last_init_commit" ]; then
         echo "Aucun commit trouvé avec le pattern jgit"
-        exit 1
+        exit_safe 1
     fi
 
     # Lister les commits depuis le dernier commit d'init (dans l'ordre du plus ancien au plus récent)
@@ -76,7 +76,7 @@ feature_rebase() {
     read -p "Souhaitez-vous continuer ? (y/n) " user_input
     if [[ "$user_input" != "y" ]]; then
         echo "Opération annulée."
-        exit 0
+        exit_safe 1
     fi
 
     # On met à jour la branche de référence par rapport au remote pour être bien à jour
@@ -84,19 +84,20 @@ feature_rebase() {
     git checkout $reference_branch --quiet
     git pull $j2s_remote $reference_branch --quiet
 
-
+    # rebase de la branche PR par application du commit d'init en cherry pick
     checkout_or_create_branch $branch_PR_rebase
     cherry_pick "$last_init_commit"
 
+    # rebase de la branche principal par application de tous les commits en cherry pick
     checkout_or_create_branch $branch_rebase
     cherry_pick_commits "${commits[@]:1}" # On exclut le commit d'init qui a déjà été cherry-pick au dessus.  
 
-    #echo "Rename branches"
+    # On vient écraser les branches historiques par les branches que l'on vient de rebase
     git checkout $reference_branch
     rename_branch $branch_PR_rebase $branch_PR
     rename_branch $branch_rebase $branch
     
-    #echo "Verifications"
+    # On propose à l'utlisateur de vérifier son arbre GIT avant de pusher en force sur le remote.
     git checkout $branch
     git_history_with_merges
 
@@ -106,6 +107,7 @@ feature_rebase() {
         exit_safe 0
     fi
 
+    # on push force les nouvelles branches fraichement rebasée.
     git checkout $branch_PR
     git push --force --set-upstream origin "$branch_PR"
 

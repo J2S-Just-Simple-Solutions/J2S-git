@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
 exit_safe() {
     if $stash; then
         git stash pop
@@ -102,6 +103,7 @@ cherry_pick() {
     fi
 }
 
+# Permet d'afficher le git log bien présenté avec les couleurs et l'arbres des commits
 git_history_with_merges() {
   local branch="${1:-HEAD}"  # Si aucun argument n'est fourni, utilise HEAD (branche actuelle)
 
@@ -109,7 +111,7 @@ git_history_with_merges() {
   git log --oneline --graph --decorate --all --abbrev-commit --pretty=format:'%C(yellow)%h%C(reset) - %C(cyan)%d%C(reset) %s %C(blue)(%cr) %C(reset)%C(green)<%an>%C(reset)' "$branch"
 }
 
-
+# Permt d'afficher un commit sur une ligne avec son hash et son nom
 get_commit_info() {
   local commit_hash=$1
   if [ -z "$commit_hash" ]; then
@@ -129,7 +131,8 @@ get_commit_info() {
   echo "$commit_info"
 }
 
-
+# Permet de renommer une branche. La branche destination sera supprimée si elle existe déjà en locale.
+# Cette fonction ne travaille qu'en local et ne touche pas au remote.
 rename_branch() {
   local source_branch="$1"
   local destination_branch="$2"
@@ -155,18 +158,9 @@ rename_branch() {
   # Renommer la branche source en destination
   echo "Renommage de '$source_branch' en '$destination_branch'..."
   git branch -m "$source_branch" "$destination_branch"
-
-  # Vérifier si la branche distante correspondante existe
-  #if git ls-remote --exit-code --heads origin "$destination_branch" >/dev/null 2>&1; then
-    #echo "Recréation du lien avec la branche distante '$destination_branch'..."
-    #git push --set-upstream origin "$destination_branch"
-  #else
-  #  echo "Aucune branche distante '$destination_branch' trouvée. Vous devrez peut-être la pousser manuellement."
-  #fi
-
-  echo "Opération terminée."
 }
 
+# Si la branche n'existe pas elle est créé si elle existe on checkout dessus.
 checkout_or_create_branch() {
   local branch="$1"
 
@@ -180,6 +174,7 @@ checkout_or_create_branch() {
   fi
 }
 
+# Script de nettoyage qui va nettoyer toutes les branches utiles à jgit mais pas au développeur.
 clean_branches() {
   # Récupérer toutes les branches locales correspondant aux préfixes
   local branches_to_delete

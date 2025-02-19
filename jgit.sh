@@ -134,15 +134,14 @@ if [[ $JGIT_TYPE == "feature" ]] || [[ $JGIT_TYPE == "hotfix" ]]; then
         echo "Please set a $JGIT_TYPE name as third argument"
         exit_safe 0;
     fi
-    feature_name=$JGIT_NAME
     
     if [[ -z $JGIT_ACTION ]]; then
         help
     fi
     if [[ $JGIT_ACTION == "start" ]]; then
-        feature_start $JGIT_TYPE $feature_name $JGIT_BASED_ON;
+        feature_start $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON;
     elif [[ $JGIT_ACTION == "rebase" ]]; then
-        feature_rebase $JGIT_TYPE $feature_name $JGIT_BASED_ON
+        feature_rebase $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON
     else
         echo "argument $JGIT_ACTION note supported"
         exit_safe 0

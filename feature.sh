@@ -26,7 +26,6 @@ feature_start() {
         echo "Exists in local and not in remote"
         echo "Is this feature already merged ?"
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
-
         if [[ -n "$BASED_ON" ]]; then
             reference_branch="$BASED_ON"
         else
@@ -39,14 +38,14 @@ feature_start() {
             exit_safe 1
         fi
 
-         printf "%sJGit va créer la branche %s%s%s%s et sa PR associée qui se basera sur la branche %s%s%s\n" \
+        printf "%sJGit va créer la branche %s%s%s%s et sa PR associée qui se basera sur la branche %s%s%s\n" \
         "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$reference_branch" "$(tput sgr0)"
         
         # Demander confirmation à l'utilisateur
         read -p "Souhaitez-vous continuer ? (y/n) " user_input
         if [[ "$user_input" != "y" ]]; then
             echo "Opération annulée."
-            exit 0
+            exit_safe 1
         fi
 
         echo "Checkout and reset $reference_branch branch"
