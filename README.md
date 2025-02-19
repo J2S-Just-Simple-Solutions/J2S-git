@@ -70,7 +70,8 @@ toto@MacBook-Pro % jgit feature start TESTDEV-1111
 `jgit feature|hotfix start <ticket-ID>` will create a feature or a hotfix branch on your local and on J2S remote and will create an associated PR on github with NFR flag. If the feature already exists, it will just checkout on it and update it.
 
 `jgit feature|hotfix rebase <ticket-ID>` will rebase the PR branch and the feature or hotfix branch based on main branch.
-    -> In case of conflicts, follow git recommended commands to fix all conflicts before re-running this command. You should be on your feature branch to re-run this command and not on a conflict resolution branch. 
+    -> In case of conflicts, teh command will pause, fix all conflicts and commit them before resuming the execution.
+    -> If you leave the command execution in the middle, you will need to re-run (and fix conflicts) from scratch. 
 
 `jgit release start` will create, or checkout the existing, release branch on your local and create it on J2S remote if needed.
 
@@ -78,5 +79,4 @@ toto@MacBook-Pro % jgit feature start TESTDEV-1111
 
 `jgit release finish` will close the current release : merge the current release branch, create the tag and the release in github.
 
-
-
+`jgit clean` Will clean all local branches to remove working branches as rebase and _ _PR__.

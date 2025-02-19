@@ -47,6 +47,8 @@ help()
     echo " -> Merge a branch in the current release."
     echo "jgit release finish "
     echo " -> Will close the current release : merge the current release branch, create the tag and the release in github."
+    echo "jgit clean "
+    echo " -> Will clean all local branches to remove working branches as rebase and __PR__."
     echo "options:"
     echo "-h                                    Print this Help."
 
@@ -136,6 +138,8 @@ elif [[ $1 == "release" ]]; then
 elif [[ $1 == "help" ]]; then
     help
     exit_safe 1;
+elif [[ $1 == "clean" ]]; then
+    clean_branches
 else
     echo "argument $1 note supported"
     exit_safe 0
