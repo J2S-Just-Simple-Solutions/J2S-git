@@ -46,7 +46,8 @@ help() {
     printf "    → --based-on permet de choisir la branche sur laquelle se baser.\n"
 
     printf "  jgit \033[1;32mrelease\033[0m merge \033[1;36m<branch_name>\033[0m\n"
-    printf "    → Fusionne une branche dans la release en cours.\n\n"
+    printf "    → Fusionne une branche dans la release en cours.\n"
+    printf "    → La release est créée à la volée au besoin.\n\n"
 
     printf "  jgit \033[1;32mrelease\033[0m finish\n"
     printf "    → Ferme la release en cours : fusion de la branche release,\n"
