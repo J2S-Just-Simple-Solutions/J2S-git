@@ -22,7 +22,7 @@ feature_rebase() {
     if [[ -n "$BASED_ON" ]]; then
         reference_branch="$BASED_ON"
     else
-        reference_branch=$(get_reference_branch "$feature_type" "$BASED_ON")
+        reference_branch=$(get_reference_branch "$feature_type")
     fi
 
     # Vérifier si la branche référence existe
