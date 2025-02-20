@@ -1,5 +1,19 @@
 #!/bin/bash
 
+# Stash all modifications before running any modification
+verify_stash() {
+    if [[ $(git status --porcelain) ]]; then
+        echo "You have uncommited modifications."
+        read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
+        echo
+        if [[ ! $yn =~ ^[Yy]$ ]]; then
+            exit_safe 0
+        fi
+        git stash save "[jGIT]"
+        stash=true;
+    fi
+}
+
 # fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
 exit_safe() {
     if $stash; then
@@ -23,7 +37,7 @@ exit_safe() {
 #Si la branche de référence n'existe pas une erreur est lancée.
 get_reference_branch() {
     local feature_type=$1
-    local fallback_branches=("develop2" "develop" "master" "main")
+    local fallback_branches=("develop2" "master2" "develop" "master" "main")
 
     if [ -z "$feature_type" ]; then
         echo "Erreur: Aucun feature_type fourni."

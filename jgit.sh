@@ -92,40 +92,12 @@ done
 #
 ####################################
 
-# Manage options
-while getopts ':hs:' option; do
-  case "$option" in
-    h) help
-       exit_safe 1
-       ;;
-    :) printf "missing argument for -%s\n" "$OPTARG" >&2
-       echo "$usage" >&2
-       exit_safe 1
-       ;;
-   \?) printf "illegal option: -%s\n" "$OPTARG" >&2
-       echo "$usage" >&2
-       exit_safe 1
-       ;;
-  esac
-done
-
 # GLOBAL VERIFICATIONS
 remotes=$( git remote -v )
 
 if [[ $remotes != *$j2s_remote* ]]; then
   echo "Please configure J2S remote as "$j2s_remote
   exit_safe 0
-fi
-
-if [[ $(git status --porcelain) ]]; then
-    echo "You have uncommited modifications."
-    read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
-    echo
-    if [[ ! $yn =~ ^[Yy]$ ]]; then
-        exit_safe 0
-    fi
-    git stash save "[jGIT]"
-    stash=true;
 fi
 
 # Manage syntax
@@ -139,8 +111,10 @@ if [[ $JGIT_TYPE == "feature" ]] || [[ $JGIT_TYPE == "hotfix" ]]; then
         help
     fi
     if [[ $JGIT_ACTION == "start" ]]; then
+        verify_stash
         feature_start $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON;
     elif [[ $JGIT_ACTION == "rebase" ]]; then
+        verify_stash
         feature_rebase $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON
     else
         echo "argument $JGIT_ACTION note supported"
@@ -150,6 +124,7 @@ elif [[ $JGIT_TYPE == "release" ]]; then
     if [[ -z $JGIT_ACTION ]]; then
         help
     fi
+    verify_stash
     if [[ $JGIT_ACTION == "start" ]]; then 
         release_start;
     elif [[ $JGIT_ACTION == "finish" ]]; then 
@@ -165,7 +140,7 @@ elif [[ $JGIT_TYPE == "release" ]]; then
         echo "argument $JGIT_ACTION not supported"
         exit_safe 0
     fi
-elif [[ $JGIT_TYPE == "help" ]]; then
+elif [[ $JGIT_TYPE == "help" ]] || [[ $JGIT_TYPE == "-h" ]]; then
     help
     exit_safe 1;
 elif [[ $JGIT_TYPE == "clean" ]]; then
