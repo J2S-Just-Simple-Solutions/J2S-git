@@ -84,7 +84,7 @@ feature_rebase() {
     fi
 
     # On est dans le cas d'une PR qui déjà été mergée puis réouverte, on affiche la liste complète pour bien la valider visuellement.
-    if [[ $commits_in_advance_on_PR -gt 2 ]]; then
+    if [[ ${#commits_in_advance_on_PR[@]} -gt 2 ]]; then
         printf "%sLes commits suivants sont présents sur la branche %s%s%s actuelle mais pas sur la branche %s%s%s. Il seront repris sur la future branche %s%s%s%s\n" \
         "$(tput setaf 2)"  \
         "$(tput setaf 1)" "$branch_PR" "$(tput setaf 2)" \
