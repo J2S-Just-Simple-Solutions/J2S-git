@@ -34,25 +34,29 @@ stash=false;
 ################################################################################
 # Help                                                                         #
 ################################################################################
-help()
-{
-    echo "This script is used to manage feature, hotfix or release creation for development purpose."
-    echo
-    echo "Syntax:"
-    echo "jgit [feature|hotfix] start <feature_name>"
-    echo " -> Create a new feature or hotfix or checkout on it."
-    echo "jgit [feature|hotfix] rebase <feature_name>"
-    echo " -> Rebase the feature or hotfix on main branch. In case of conflicts follow git commands before re-running this script"
-    echo "jgit release merge <branch_name>"
-    echo " -> Merge a branch in the current release."
-    echo "jgit release finish "
-    echo " -> Will close the current release : merge the current release branch, create the tag and the release in github."
-    echo "jgit clean "
-    echo " -> Will clean all local branches to remove working branches as rebase and __PR__."
-    echo "options:"
-    echo "-h                                    Print this Help."
+help() {
+    printf "\n\033[1;34mUsage:\033[0m\n"
+    printf "  jgit \033[1;32m[feature|hotfix]\033[0m start \033[1;36m<feature_name>\033[0m \033[38;5;214m[OPTIONAL]\033[0m --based-on \033[1;36m<branch_name>\033[0m\n"
+    printf "    → Crée une nouvelle feature ou hotfix ou permet de s'y positionner.\n"
+    printf "    → --based-on permet de choisir la branche sur laquelle se baser.\n\n"
 
-    echo
+    printf "  jgit \033[1;32m[feature|hotfix]\033[0m rebase \033[1;36m<feature_name>\033[0m \033[38;5;214m[OPTIONAL]\033[0m --based-on \033[1;36m<branch_name>\033[0m\n"
+    printf "    → Rebase la feature ou le hotfix sur la branche principale.\n"
+    printf "      En cas de conflits, suivez les commandes git avant de relancer ce script.\n\n"
+    printf "    → --based-on permet de choisir la branche sur laquelle se baser.\n"
+
+    printf "  jgit \033[1;32mrelease\033[0m merge \033[1;36m<branch_name>\033[0m\n"
+    printf "    → Fusionne une branche dans la release en cours.\n\n"
+
+    printf "  jgit \033[1;32mrelease\033[0m finish\n"
+    printf "    → Ferme la release en cours : fusion de la branche release,\n"
+    printf "      création du tag et publication sur GitHub.\n\n"
+
+    printf "  jgit \033[1;32mclean\033[0m\n"
+    printf "    → Nettoie les branches locales temporaires comme les branches de rebase et __PR__.\n\n"
+
+    printf "\033[1;34mOptions:\033[0m\n"
+    printf "  -h    Affiche cette aide.\n\n"
 }
 
 
