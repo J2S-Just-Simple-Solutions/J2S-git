@@ -61,11 +61,10 @@ feature_rebase() {
     fi
 
     #############################################################################
-    # Cette partie permet de gérer le cas où la PR avait déjà été validé et mergée
+    # Cette partie permet de gérer le cas où la PR avait déjà été validée et mergée
     # puis réouverte par la suite, en effet dans ce cas là il y a déjà des commits 
     # présents sur la branche PR qui ne doivent pas être oubliés
     ##############################################################################
-    
     
     # Récupérer la liste des commits en avance sur branch_PR
     local commits_in_advance_on_PR=($(git rev-list "$reference_branch..$branch_PR"))
@@ -125,7 +124,7 @@ feature_rebase() {
     git checkout $reference_branch --quiet
     git pull $j2s_remote $reference_branch --quiet
 
-    # rebase de la branche PR par application des commit déjà présent sur l'ancienne branche PR en cherry pick
+    # rebase de la branche PR par application des commits déjà présents sur l'ancienne branche PR en cherry pick
     checkout_or_create_branch $branch_PR_rebase
     cherry_pick_commits "${commits_in_advance_on_PR[@]}"
 
