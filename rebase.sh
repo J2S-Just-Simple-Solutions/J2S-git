@@ -40,14 +40,12 @@ feature_rebase() {
     fi
 
     if [[ -z ${branch_in_local} ]]; then
-        echo "$branch exists in remote but not in local"
-        echo "Use remote branch"
+        echo "$branch exists in remote but not in local, checkout from remote"
         git checkout -b $branch $j2s_remote/$branch --quiet
     fi
 
     if [[ -z ${branch_PR_in_local} ]]; then
-        echo "$branch_PR exists in remote but not in local"
-        echo "Use remote branch"
+        echo "$branch_PR exists in remote but not in local, checkout from remote"
         git checkout -b $branch_PR $j2s_remote/$branch_PR --quiet
     fi
 
