@@ -137,7 +137,6 @@ git_history_with_merges() {
   printf "git log --oneline --graph --decorate --all --abbrev-commit --pretty=format:'%%C(yellow)%%h%%C(reset) - %%C(cyan)%%d%%C(reset) %%s %%C(blue)(%%cr) %%C(reset)%%C(green)<%%an>%%C(reset)' %s\n\n\n" "$feature_branch"
 }
 
-  #
 # Permt d'afficher un commit sur une ligne avec son hash et son nom
 get_commit_info() {
   local commit_hash=$1
