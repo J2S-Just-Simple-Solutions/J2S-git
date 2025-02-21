@@ -137,7 +137,7 @@ feature_rebase() {
     
     # On propose à l'utlisateur de vérifier son arbre GIT avant de pusher en force sur le remote.
     git checkout $branch
-    git_history_with_merges
+    git_history_with_merges "$branch" "$reference_branch"
 
     read -p "Confirmez-vous que le rebase s'est bien passé, les branches vont être push --force ? (y/n) " user_input
     if [[ "$user_input" != "y" ]]; then

@@ -117,14 +117,27 @@ cherry_pick() {
     fi
 }
 
-# Permet d'afficher le git log bien présenté avec les couleurs et l'arbres des commits
 git_history_with_merges() {
-  local branch="${1:-HEAD}"  # Si aucun argument n'est fourni, utilise HEAD (branche actuelle)
+  local feature_branch="${1:-HEAD}"     # Branche à afficher (par défaut HEAD)
+  local reference_branch="${2}"         # Branche de référence (optionnelle)
 
-  echo "Historique de la branche '$branch' avec les merges :"
-  git log --oneline --graph --decorate --all --abbrev-commit --pretty=format:'%C(yellow)%h%C(reset) - %C(cyan)%d%C(reset) %s %C(blue)(%cr) %C(reset)%C(green)<%an>%C(reset)' "$branch"
+  printf "\033[1;31mHistorique A VERIFIER de la branche '%s'%s :\033[0m\n" "$feature_branch" "$( [[ -n "$reference_branch" ]] && printf " depuis '%s' (A lire de bas en haut)" "$reference_branch" )"
+
+  if [[ -n "$reference_branch" ]]; then
+    git log --oneline --graph --decorate --abbrev-commit --boundary \
+      --pretty=format:'%C(yellow)%h%C(reset) - %C(cyan)%d%C(reset) %s %C(blue)(%cr) %C(reset)%C(green)<%an>%C(reset)' \
+      "$feature_branch" "^$reference_branch"
+  else
+    git log --oneline --graph --decorate --abbrev-commit \
+      --pretty=format:'%C(yellow)%h%C(reset) - %C(cyan)%d%C(reset) %s %C(blue)(%cr) %C(reset)%C(green)<%an>%C(reset)' \
+      "$feature_branch"
+  fi
+
+  printf "\nVous pouvez afficher un arbre plus détaillé, si besoin, en copiant collant la commande ci-dessous dans un autre terminal\n"
+  printf "git log --oneline --graph --decorate --all --abbrev-commit --pretty=format:'%%C(yellow)%%h%%C(reset) - %%C(cyan)%%d%%C(reset) %%s %%C(blue)(%%cr) %%C(reset)%%C(green)<%%an>%%C(reset)' %s\n\n\n" "$feature_branch"
 }
 
+  #
 # Permt d'afficher un commit sur une ligne avec son hash et son nom
 get_commit_info() {
   local commit_hash=$1
