@@ -49,7 +49,7 @@ get_reference_branch() {
         echo "$branch_prod"
         return 0  # Succès
     elif [ "$feature_type" == "feature" ] && git rev-parse --verify "$branch_preprod" >/dev/null 2>&1; then
-        echo "$branch_prod"
+        echo "$branch_preprod"
         return 0  # Succès
     fi
 
