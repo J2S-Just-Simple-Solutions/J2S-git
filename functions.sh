@@ -153,6 +153,7 @@ cherry_pick() {
     fi
 }
 
+# Permet d'afficher le git log bien présenté depuis le dernier noeud en commun avec la $reference_branch et avec les couleurs et l'arbres des commits
 git_history_with_merges() {
   local feature_branch="${1:-HEAD}"     # Branche à afficher (par défaut HEAD)
   local reference_branch="${2}"         # Branche de référence (optionnelle)
@@ -267,34 +268,6 @@ checkout_if_exists() {
     exit_safe 1
   fi
 }
-
-# Si la branche existe en local on la met à jour
-# Si elle existe sur le remote on le récupère
-# Sinon on la crée en local
-update_or_checkout_branch() {
-    local branch="$1"
-
-    if [[ -z "$branch" ]]; then
-      echo -e "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m" >&2
-      return 1
-    fi
-
-    if git show-ref --verify --quiet "refs/heads/$branch"; then
-        # La branche existe en local
-        git checkout "$branch" --quiet || return 1
-        git pull --ff-only origin "$branch" --quiet || return 1
-
-    elif git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
-        # La branche existe sur origin mais pas en local
-        git fetch origin --quiet || return 1
-        git checkout -b "$branch" "origin/$branch" --quiet || return 1
-
-    else
-        # La branche n'existe ni en local ni sur origin → Création locale
-        git checkout -b "$branch" --quiet|| return 1
-    fi
-}
-
 
 # Script de nettoyage qui va nettoyer toutes les branches utiles à jgit mais pas au développeur.
 clean_branches() {

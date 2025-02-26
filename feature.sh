@@ -66,7 +66,6 @@ feature_start() {
     exit_safe 1
 }
 
-
 feature_restart() {
     local feature_type=$1
     local feature_name=$2
@@ -81,8 +80,8 @@ feature_restart() {
     fi
 
     # On remet les branches à jour en local.
-    update_or_checkout_branch $branch_PR
-    update_or_checkout_branch $branch
+    checkout_or_create_branch $branch_PR
+    checkout_or_create_branch $branch
 
     branches_have_same_code "$branch" "$branch_PR"
 
@@ -102,10 +101,10 @@ feature_restart() {
     #####################################################
     git checkout $branch_PR --quiet
     
-    # Suppression locale de la branche, avec un arrêt en cas d'échec
-    git branch -d "$branch"
+    # Suppression locale de la branche - on ignore l'erreur si elle n'existe déjà pas
+    git branch -d "$branch" 2>/dev/null
   
-    # Suppression de la branche sur le remote
+    # Suppression de la branche sur le remote - on ignore l'erreur si elle n'existe déjà pas
     git push origin --delete "$branch" 2>/dev/null
 
     echo "Create working branch $branch"
