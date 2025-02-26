@@ -69,13 +69,13 @@ release_merge() {
     if [[ ! -z ${existed_in_local} ]]; then
         echo "Feature branch exists on local machine, use it..."
         existed=1
-        git merge --no-ff ${branch} -m "$prefix_commit Merge feature branch : $branch $suffix_init_commit"
+        git merge --no-ff ${branch} -m "$prefix_commit Merge feature branch : $branch"
     fi
 
     if [[ ! -z ${existed_in_remote} && existed=0 ]]; then
         echo "Remote branch exists, use it..."
         existed=1
-        git merge --no-ff $j2s_remote/${branch} -m "$prefix_commit Merge feature branch : $branch $suffix_init_commit"
+        git merge --no-ff $j2s_remote/${branch} -m "$prefix_commit Merge feature branch : $branch"
     fi
 
     if [[ $existed == 0 ]]; then

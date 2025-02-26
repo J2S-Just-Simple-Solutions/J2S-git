@@ -67,7 +67,14 @@ get_reference_branch() {
 
 # Fonction pour récupérer le dernier commit contenant le pattern de commit d'init jgit.
 get_last_commit_with_pattern() {
-  git log --grep="\[jgit\]" -n 1 --pretty=format:"%H"
+  local pattern="$1"
+
+  # Échapper les caractères spéciaux comme [ ] et ( )
+  local escaped_pattern
+  escaped_pattern=$(echo "$pattern" | sed 's/\[/\\[/g; s/\]/\\]/g; s/(/\\(/g; s/)/\\)/g')
+
+  # Chercher le commit correspondant avec le pattern modifié
+  git log --grep="^$escaped_pattern\?" -n 1 --pretty=format:"%H"
 }
 
 # Fonction pour lister tous les commits depuis celui trouvé (incluant ce commit)
@@ -200,6 +207,34 @@ checkout_or_create_branch() {
   fi
 }
 
+# Si la branche existe en local on la met à jour
+# Si elle existe sur le remote on le récupère
+# Sinon on la crée en local
+update_or_checkout_branch() {
+    local branch="$1"
+
+    if [[ -z "$branch" ]]; then
+        echo -e "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m" >&2
+        return 1
+    fi
+
+    if git show-ref --verify --quiet "refs/heads/$branch"; then
+        # La branche existe en local
+        git checkout "$branch" --quiet || return 1
+        git pull --ff-only origin "$branch" --quiet || return 1
+
+    elif git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+        # La branche existe sur origin mais pas en local
+        git fetch origin --quiet || return 1
+        git checkout -b "$branch" "origin/$branch" --quiet || return 1
+
+    else
+        # La branche n'existe ni en local ni sur origin → Création locale
+        git checkout -b "$branch" --quiet|| return 1
+    fi
+}
+
+
 # Script de nettoyage qui va nettoyer toutes les branches utiles à jgit mais pas au développeur.
 clean_branches() {
   # Récupérer toutes les branches locales correspondant aux préfixes
@@ -223,3 +258,29 @@ clean_branches() {
 
   echo "Suppression terminée."
 }
+
+branches_have_same_code() {
+  local branch1="$1"
+  local branch2="$2"
+  local tree1 tree2
+
+  # Vérifier que les branches existent
+  if ! git rev-parse --verify "$branch1" >/dev/null 2>&1 || ! git rev-parse --verify "$branch2" >/dev/null 2>&1; then
+    echo "❌ L'une des branches n'existe pas."
+    return 1
+  fi
+
+  # Récupérer les arbres des branches
+  tree1=$(git rev-parse "$branch1^{tree}")
+  tree2=$(git rev-parse "$branch2^{tree}")
+
+  # Comparer les arbres
+  if [[ "$tree1" == "$tree2" ]]; then
+    echo "✅ Les branches '$branch1' et '$branch2' ont exactement le même code."
+    return 0
+  else
+    echo "❌ Les branches '$branch1' et '$branch2' ont des différences dans le code."
+    return 1
+  fi
+}
+

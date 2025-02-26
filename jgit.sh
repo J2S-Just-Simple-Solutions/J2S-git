@@ -118,6 +118,9 @@ if [[ $JGIT_TYPE == "feature" ]] || [[ $JGIT_TYPE == "hotfix" ]]; then
     if [[ $JGIT_ACTION == "start" ]]; then
         verify_stash
         feature_start $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON;
+    elif [[ $JGIT_ACTION == "restart" ]]; then
+        verify_stash
+        feature_restart $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON
     elif [[ $JGIT_ACTION == "rebase" ]]; then
         verify_stash
         feature_rebase $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON

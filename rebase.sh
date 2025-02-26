@@ -51,8 +51,8 @@ feature_rebase() {
 
     git checkout $branch --quiet
 
-    # Récupérer le dernier commit avec le pattern jgit
-    last_init_commit=$(get_last_commit_with_pattern)
+    # Récupérer le dernier commit avec le pattern jgit de démarrage de feature
+    last_init_commit=$(get_last_commit_with_pattern "$prefix_init_commit $feature_type")
     if [ -z "$last_init_commit" ]; then
         echo "Aucun commit trouvé avec le pattern jgit"
         exit_safe 1
@@ -78,11 +78,11 @@ feature_rebase() {
         "$(tput setaf 1)" "${last_init_commit[0]}" "$(tput setaf 2)" \
         "$(tput sgr0)"
 
-        exit_safe 0
+        #exit_safe 0
     fi
 
     # On est dans le cas d'une PR qui déjà été mergée puis réouverte, on affiche la liste complète pour bien la valider visuellement.
-    if [[ ${#commits_in_advance_on_PR[@]} -gt 2 ]]; then
+    if [[ ${#commits_in_advance_on_PR[@]} -gt 1 ]]; then
         printf "%sLes commits suivants sont présents sur la branche %s%s%s actuelle mais pas sur la branche %s%s%s. Il seront repris sur la future branche %s%s%s%s\n" \
         "$(tput setaf 2)"  \
         "$(tput setaf 1)" "$branch_PR" "$(tput setaf 2)" \
