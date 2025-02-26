@@ -96,16 +96,6 @@ feature_rebase() {
         fi
     done
 
-    # Afficher une erreur si des éléments communs sont trouvés
-    if [[ ${#common_elements[@]} -gt 0 ]]; then
-        printf "\033[1;31mErreur : Les commits suivants existent sur %s et %s, ce n'est pas normal :\033[0m\n" $branch $branch_PR
-        for commit in "${common_elements[@]}"; do
-            get_commit_info "$commit"
-        done
-        printf "\033[1;31mIl n'est pas possible de rebase une feature dont la PR a été cloturée. Peut-être faut-il la restart avant ?\033[0m\n"
-        exit_safe 1
-    fi
-
     # On ne peut pas automatiser un rebase s'il y a un commit de fusion, on refuse l'action
     for commit in "${commits_in_advance_on_PR[@]}"; do
         if is_merge_commit "$commit"; then
@@ -133,9 +123,39 @@ feature_rebase() {
         "$(tput setaf 1)" "$reference_branch" "$(tput setaf 2)" \
         "$(tput setaf 1)" "$branch_PR" "$(tput setaf 2)" \
         "$(tput sgr0)"
+        printf "Liste des commits repris :\n"
         for commit in "${commits_in_advance_on_PR[@]}"; do
             get_commit_info "$commit"
         done
+    fi
+
+    # Afficher une erreur si des éléments communs sont trouvés
+    if [[ ${#common_elements[@]} -gt 0 ]]; then
+        printf "\033[1;31mErreur : Les commits suivants existent sur %s et %s, ce n'est pas normal :\033[0m\n" $branch $branch_PR
+        printf "Liste des commits communs :\n"
+        for commit in "${common_elements[@]}"; do
+            get_commit_info "$commit"
+        done
+
+        # On doit gérer un cas un peu tordu car le commit d'init n'étant plus créé au même moment depuis la version 1.15, cette vérification peut etre un faux positif
+        # Le code ci dessous devra etre décommenté une fois qu'il n'y aura plus de vieille feature.
+        # printf "\033[1;31mIl n'est pas possible de rebase une feature dont la PR a été cloturée. Peut-être faut-il la restart avant ?\033[0m\n"
+        # exit_safe 1
+
+        # DEBUT DE Partie à supprimer une fois qu'il n'y aura plus de vieille feature.
+        printf "\nCe cas peut se poser pour les features créées avant la v1.15 de jgit.\n"
+        printf "\nDans ce cas : vous devez voir uniquement le commit d'init dans la \"Liste des commits communs\" et dans la \"Liste des commits repris\".\n"
+        printf "Attention en continuant ce process tous les commits existants dans la \"Liste des commits repris\"  seront perdus !!!!!!\n"
+
+        # Demander confirmation à l'utilisateur
+        read -p "Voulez-vous continuer ? (y/n) " user_input
+        if [[ "$user_input" != "y" ]]; then
+            printf "\033[1;31mIl n'est pas possible de rebase une feature dont la PR a été cloturée. Peut-être faut-il la restart avant ?\033[0m\n"
+            exit_safe 1
+        fi
+
+        commits_in_advance_on_PR=()
+        # FIN DE Partie à supprimer une fois qu'il n'y aura plus de vieille feature.
     fi
    
     ###################################
