@@ -143,8 +143,8 @@ feature_rebase() {
         # exit_safe 1
 
         # DEBUT DE Partie à supprimer une fois qu'il n'y aura plus de vieille feature.
-        printf "\nCe cas peut se poser pour les features créées avant la v1.15 de jgit.\n"
-        printf "\nDans ce cas : vous devez voir uniquement le commit d'init dans la \"Liste des commits communs\" et dans la \"Liste des commits repris\".\n"
+        printf "\nCe cas peut se poser pour les features créées avant la v1.15 de jgit et donc être un faux positif.\n"
+        printf "\nDans ce cas : vous devez voir uniquement le commit d'init dans la \"Liste des commits repris\".\n"
         printf "Attention en continuant ce process tous les commits existants dans la \"Liste des commits repris\"  seront perdus !!!!!!\n"
 
         # Demander confirmation à l'utilisateur
