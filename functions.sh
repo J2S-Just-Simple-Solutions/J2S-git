@@ -1,18 +1,10 @@
 #!/bin/bash
 
-# Stash all modifications before running any modification
-verify_stash() {
-    if [[ $(git status --porcelain) ]]; then
-        echo "You have uncommited modifications."
-        read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
-        echo
-        if [[ ! $yn =~ ^[Yy]$ ]]; then
-            exit_safe 0
-        fi
-        git stash save "[jGIT]"
-        stash=true;
-    fi
-}
+###############################################
+###############################################
+#            Fonctions Bash
+###############################################
+###############################################
 
 # fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
 exit_safe() {
@@ -27,6 +19,43 @@ exit_safe() {
     fi
 
     exit $1
+}
+
+check_common_elements() {
+    local -a array_A=("${(@f)1}")  # Convertir l'entrée en tableau
+    local -a array_B=("${(@f)2}")  # Convertir l'entrée en tableau
+    local -a common_elements=()
+
+    for item in "${array_A[@]}"; do
+        for elem in "${array_B[@]}"; do
+            if [[ "$item" == "$elem" ]]; then
+                common_elements+=("$item")
+                break
+            fi
+        done
+    done
+
+    echo "${common_elements[@]}"
+}
+
+###############################################
+###############################################
+#            Manipulations GIT
+###############################################
+###############################################
+
+# Stash all modifications before running any modification
+verify_stash() {
+    if [[ $(git status --porcelain) ]]; then
+        echo "You have uncommited modifications."
+        read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
+        echo
+        if [[ ! $yn =~ ^[Yy]$ ]]; then
+            exit_safe 0
+        fi
+        git stash save "[jGIT]"
+        stash=true;
+    fi
 }
 
 # Renvoie la branche de référence et vérifie son existence.
@@ -197,13 +226,45 @@ rename_branch() {
 checkout_or_create_branch() {
   local branch="$1"
 
-  # Vérifier si la branche existe
-  if git rev-parse --verify "$branch" >/dev/null 2>&1; then
-    echo "Bascule vers '$branch' (Changement vers cette branche)"
-    git checkout "$branch"
+  if [[ -z "$branch" ]]; then
+    printf "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m\n" >&2
+    return 1
+  fi
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+      # La branche existe en local
+      git checkout "$branch" --quiet
+      git pull --ff-only origin "$branch" --quiet
+
+  elif git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+      # La branche existe sur origin mais pas en local
+      git fetch origin --quiet
+      git checkout -b "$branch" "origin/$branch" --quiet
   else
     echo "Bascule vers '$branch' (Création depuis la branche courante)"
     git checkout -b "$branch"
+  fi
+}
+
+# Si la branche existe on checkout dessus et on la met à jour, si elle n'existe pas on lance une erreur.
+checkout_if_exists() {
+  local branch="$1"
+
+  if [[ -z "$branch" ]]; then
+    printf "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m\n" >&2
+    return 1
+  fi
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+      # La branche existe en local
+      git checkout "$branch" --quiet
+      git pull --ff-only origin "$branch" --quiet
+
+  elif git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+      # La branche existe sur origin mais pas en local
+      git fetch origin --quiet
+      git checkout -b "$branch" "origin/$branch" --quiet
+  else
+    echo "La branche n'existe pas"
+    exit_safe 1
   fi
 }
 
@@ -214,8 +275,8 @@ update_or_checkout_branch() {
     local branch="$1"
 
     if [[ -z "$branch" ]]; then
-        echo -e "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m" >&2
-        return 1
+      echo -e "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m" >&2
+      return 1
     fi
 
     if git show-ref --verify --quiet "refs/heads/$branch"; then
@@ -276,11 +337,20 @@ branches_have_same_code() {
 
   # Comparer les arbres
   if [[ "$tree1" == "$tree2" ]]; then
-    echo "✅ Les branches '$branch1' et '$branch2' ont exactement le même code."
     return 0
   else
-    echo "❌ Les branches '$branch1' et '$branch2' ont des différences dans le code."
     return 1
   fi
+}
+
+ is_merge_commit() {
+    local commit_hash="$1"
+    local parent_count=$(git rev-list --parents -n 1 "$commit_hash" | awk '{print NF-1}')
+    
+    if [[ "$parent_count" -gt 1 ]]; then
+        return 0  # C'est un commit de fusion
+    else
+        return 1  # Ce n'est pas un commit de fusion
+    fi
 }
 

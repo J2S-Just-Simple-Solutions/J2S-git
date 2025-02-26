@@ -104,24 +104,16 @@ feature_restart() {
     
     # Suppression locale de la branche, avec un arrêt en cas d'échec
     git branch -d "$branch"
-    if [ $? -ne 0 ]; then
-        echo "Erreur : La branche '$branch' n'a pas pu être supprimée en local. Elle n'est peut-être pas fusionnée."
-        exit 1
-    fi
   
     # Suppression de la branche sur le remote
-    git push origin --delete "$branch"
-    if [ $? -ne 0 ]; then
-        echo "Erreur : La branche '$branch' n'a pas pu être supprimée sur le remote."
-        exit 1
-    fi
+    git push origin --delete "$branch" 2>/dev/null
 
     echo "Create working branch $branch"
     git checkout -b $branch --quiet
-    git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
+    git commit --allow-empty -m "$prefix_init_commit $branch Restart $suffix_init_commit" --quiet
     git push --set-upstream $j2s_remote $branch --quiet
     git branch -D $branch_PR --quiet
     echo "Create pull request"
-    gh pr create --title $feature_name --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label "NFR"
+    gh pr create --title "$feature_name - RESTART" --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label "NFR"
 
 }
