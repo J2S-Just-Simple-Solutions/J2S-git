@@ -51,10 +51,11 @@ feature_start() {
         git checkout $reference_branch --quiet
         echo "Create pull request branch $branch_PR branch"
         git checkout -b $branch_PR --quiet
+        git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
         git checkout -b $branch --quiet
-        git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
+        git commit --allow-empty -m "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - START $branch $suffix_init_commit" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         git branch -D $branch_PR --quiet
         echo "Create pull request"
@@ -109,10 +110,9 @@ feature_restart() {
 
     echo "Create working branch $branch"
     git checkout -b $branch --quiet
-    git commit --allow-empty -m "$prefix_init_commit $branch Restart $suffix_init_commit" --quiet
+    git commit --allow-empty -m "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - RESTART $branch $suffix_init_commit" --quiet
     git push --set-upstream $j2s_remote $branch --quiet
     git branch -D $branch_PR --quiet
     echo "Create pull request"
     gh pr create --title "$feature_name - RESTART" --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label "NFR"
-
 }

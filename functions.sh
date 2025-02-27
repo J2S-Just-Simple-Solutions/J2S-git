@@ -21,23 +21,6 @@ exit_safe() {
     exit $1
 }
 
-check_common_elements() {
-    local -a array_A=("${(@f)1}")  # Convertir l'entrée en tableau
-    local -a array_B=("${(@f)2}")  # Convertir l'entrée en tableau
-    local -a common_elements=()
-
-    for item in "${array_A[@]}"; do
-        for elem in "${array_B[@]}"; do
-            if [[ "$item" == "$elem" ]]; then
-                common_elements+=("$item")
-                break
-            fi
-        done
-    done
-
-    echo "${common_elements[@]}"
-}
-
 ###############################################
 ###############################################
 #            Manipulations GIT
@@ -327,3 +310,27 @@ branches_have_same_code() {
     fi
 }
 
+is_fast_forward() {
+    local base_branch="$1"
+    local target_branch="$2"
+
+    # Vérifier que les branches existent
+    if ! git rev-parse --verify "$base_branch" >/dev/null 2>&1 || ! git rev-parse --verify "$target_branch" >/dev/null 2>&1; then
+        printf "\033[1;31mErreur : Une des branches n'existe pas.\033[0m\n" >&2
+        return 2  # Code d'erreur spécifique
+    fi
+
+    # Vérifier si target_branch est strictement en avance sur base_branch
+    local ahead_behind
+    ahead_behind=$(git rev-list --left-right --count "$base_branch...$target_branch")
+
+    local ahead_count behind_count
+    ahead_count=$(echo "$ahead_behind" | awk '{print $2}')
+    behind_count=$(echo "$ahead_behind" | awk '{print $1}')
+
+    if [[ "$behind_count" -eq 0 && "$ahead_count" -gt 0 ]]; then
+        return 0  # Vrai (fast-forward possible)
+    else
+        return 1  # Faux
+    fi
+}

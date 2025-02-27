@@ -56,6 +56,11 @@ feature_rebase() {
 
     git checkout $branch --quiet
 
+    git checkout $branch --quiet
+    # Lister les commits sur la branche feature en avance de la branche PR (dans l'ordre du plus ancien au plus récent)
+    local commits=($(git rev-list "$branch_PR..$branch" | tail -r))
+
+    git checkout $branch_PR --quiet
     # Récupérer le dernier commit avec le pattern jgit de démarrage de feature
     last_init_commit=$(get_last_commit_with_pattern "$prefix_init_commit $feature_type")
     if [ -z "$last_init_commit" ]; then
@@ -63,41 +68,29 @@ feature_rebase() {
         exit_safe 1
     fi
 
-    # Lister les commits depuis le dernier commit d'init (dans l'ordre du plus ancien au plus récent)
-    local commits=($(list_commits_since "$last_init_commit"))
+    # Récupérer la liste des commits sur la branch_PR depuis le dernier commit d'init
+    local commits_on_PR=($(list_commits_since "$last_init_commit"))
+    local commits_in_advance_on_PR=($(git rev-list "$reference_branch..$branch_PR" | tail -r))
 
+    # On vérifie si la PR n'est pas fermée.
+    if is_fast_forward "$branch_PR" "$branch"; then
+        echo "La branche $branch est un fast-forward de $branch_PR."
+    else
+        printf "\033[1;31mLa branche %s n'est PAS un fast-forward de %s.\033[0m\n" "$branch" "$branch_PR"
+        echo "Cela peut se produire si vous avez déjà cloturé la PR."
+        echo "Ce cas n'est pas encore géré par JGIT. Il va falloir rebase $branch_PR à la mano :) ou la restart"
+        exit_safe 1
+    fi
     #############################################################################
     # Cette partie permet de gérer le cas où la PR avait déjà été validée et mergée
     # puis réouverte par la suite, en effet dans ce cas là il y a déjà des commits 
     # présents sur la branche PR qui ne doivent pas être oubliés
     ##############################################################################
     
-    branches_have_same_code "$branch" "$branch_PR"
-
-    # Vérifier le résultat et afficher un message personnalisé
-    if [[ $? -eq 0 ]]; then
-        printf "\033[1;31mLe code sur la branche \033[1;32m%s\033[1;31m est parfaitement identique à celui sur la branche \033[1;32m%s\033[1;31m .\033[0m\n" "$branch" "$branch_PR" 
-        printf "Cette PRs a-t-elle déjà été cloturée ? Faut-il faire un restart ?\n"
-        printf "Ce rebase est bloqué pour éviter de fusiller des branches de PR après avoir mergée la PR.\n"
-        printf "Si vous êtes sur une feature toute neuve, poussez votre premier commit avant de rebase ou supprimez puis recréez.\n"
-
-        exit_safe 1
-    fi
-    
     git checkout $branch_PR --quiet
-    
-    # Récupérer la liste des commits en avance sur branch_PR
-    local commits_in_advance_on_PR=($(git rev-list "$reference_branch..$branch_PR" | tail -r))
-
-    # Parcourir les commits de la branche feature et vérifier qu'ils ne sont pas pris en doublon dans la branche PR.
-    for item in "${commits[@]}"; do
-        if [[ " ${commits_in_advance_on_PR[@]} " =~ " $item " ]]; then
-            common_elements+=("$item")
-        fi
-    done
 
     # On ne peut pas automatiser un rebase s'il y a un commit de fusion, on refuse l'action
-    for commit in "${commits_in_advance_on_PR[@]}"; do
+    for commit in "${commits_on_PR[@]}"; do
         if is_merge_commit "$commit"; then
             printf "\033[1;31mLe commit \033[1;32m%s\033[1;31m est un commit de fusion. On ne peut pas rebase automatiquement un commit de fusion.\033[0m\n" "$commit"  
             printf "Il ne faut pas mélanger rebase et merge, la prochaine fois merci de ne faire que des rebases ;). Pensez à toujours squash and merge vos PRs"
@@ -115,7 +108,7 @@ feature_rebase() {
         fi
     done
 
-    if [[ ${#commits_in_advance_on_PR[@]} -gt 0 ]]; then
+    if [[ ${#commits_on_PR[@]} -gt 1 ]]; then
         # On est dans le cas d'une PR qui déjà été mergée puis réouverte, on affiche la liste complète pour bien la valider visuellement.
         printf "%sLes commits suivants sont présents sur la branche %s%s%s actuelle mais pas sur la branche %s%s%s. Il seront repris sur la future branche %s%s%s%s\n" \
         "$(tput setaf 2)"  \
@@ -124,38 +117,9 @@ feature_rebase() {
         "$(tput setaf 1)" "$branch_PR" "$(tput setaf 2)" \
         "$(tput sgr0)"
         printf "Liste des commits repris :\n"
-        for commit in "${commits_in_advance_on_PR[@]}"; do
+        for commit in "${commits_on_PR[@]}"; do
             get_commit_info "$commit"
         done
-    fi
-
-    # Afficher une erreur si des éléments communs sont trouvés
-    if [[ ${#common_elements[@]} -gt 0 ]]; then
-        printf "\033[1;31mErreur : Les commits suivants existent sur %s et %s, ce n'est pas normal :\033[0m\n" $branch $branch_PR
-        printf "Liste des commits communs :\n"
-        for commit in "${common_elements[@]}"; do
-            get_commit_info "$commit"
-        done
-
-        # On doit gérer un cas un peu tordu car le commit d'init n'étant plus créé au même moment depuis la version 1.15, cette vérification peut etre un faux positif
-        # Le code ci dessous devra etre décommenté une fois qu'il n'y aura plus de vieille feature.
-        # printf "\033[1;31mIl n'est pas possible de rebase une feature dont la PR a été cloturée. Peut-être faut-il la restart avant ?\033[0m\n"
-        # exit_safe 1
-
-        # DEBUT DE Partie à supprimer une fois qu'il n'y aura plus de vieille feature.
-        printf "\nCe cas peut se poser pour les features créées avant la v1.15 de jgit et donc être un faux positif.\n"
-        printf "\nDans ce cas : vous devez voir uniquement le commit d'init dans la \"Liste des commits repris\".\n"
-        printf "Attention en continuant ce process tous les commits existants dans la \"Liste des commits repris\"  seront perdus !!!!!!\n"
-
-        # Demander confirmation à l'utilisateur
-        read -p "Voulez-vous continuer ? (y/n) " user_input
-        if [[ "$user_input" != "y" ]]; then
-            printf "\033[1;31mIl n'est pas possible de rebase une feature dont la PR a été cloturée. Peut-être faut-il la restart avant ?\033[0m\n"
-            exit_safe 1
-        fi
-
-        commits_in_advance_on_PR=()
-        # FIN DE Partie à supprimer une fois qu'il n'y aura plus de vieille feature.
     fi
    
     ###################################
@@ -187,7 +151,7 @@ feature_rebase() {
     # rebase de la branche PR par application des commits déjà présents sur l'ancienne branche PR en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
     checkout_or_create_branch $branch_PR_rebase
-    cherry_pick_commits "${commits_in_advance_on_PR[@]}"
+    cherry_pick_commits "${commits_on_PR[@]}"
 
     # rebase de la branche principal par application de tous les commits en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
@@ -205,7 +169,11 @@ feature_rebase() {
 
     read -p "Confirmez-vous que le rebase s'est bien passé, les branches vont être push --force ? (y/n) " user_input
     if [[ "$user_input" != "y" ]]; then
-        echo "Opération annulée."
+        echo "les branches locales ne sont plus correctes, elles vont etre supprimées en local."
+        git checkout $reference_branch --quiet
+        git branch -D $branch
+        git branch -D $branch_PR
+        echo "Pensez à re-pull vos branches depuis Github."
         exit_safe 0
     fi
 
