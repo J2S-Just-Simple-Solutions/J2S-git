@@ -55,8 +55,6 @@ feature_rebase() {
     fi
 
     git checkout $branch --quiet
-
-    git checkout $branch --quiet
     # Lister les commits sur la branche feature en avance de la branche PR (dans l'ordre du plus ancien au plus récent)
     local commits=($(git rev-list "$branch_PR..$branch" | tail -r))
 
@@ -144,7 +142,7 @@ feature_rebase() {
     fi
 
     # On met à jour la branche de référence par rapport au remote pour être bien à jour
-    echo "Checkout and reset $reference_branch branch"
+    echo "Checkout and pull $reference_branch branch"
     git checkout $reference_branch --quiet
     git pull $j2s_remote $reference_branch --quiet
 
@@ -180,10 +178,10 @@ feature_rebase() {
 
     # on push force les nouvelles branches fraichement rebasée.
     git checkout $branch_PR
-    git push --force --set-upstream origin "$branch_PR"
+    git push --force --set-upstream $j2s_remote "$branch_PR"
 
     git checkout $branch
-    git push --force --set-upstream origin "$branch"
+    git push --force --set-upstream $j2s_remote "$branch"
 
     git checkout $branch
     clean_branches

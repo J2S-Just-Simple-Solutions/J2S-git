@@ -45,7 +45,7 @@ verify_stash() {
 # Les paramètre du fichier .jgit/conf_local.sh seront pris en 2nd
 # Sinon le script prendra la première branche qui existe parmis les fallback_branches
 #
-#Si la branche de référence n'existe pas une erreur est lancée.
+# Si la branche de référence n'existe pas une erreur est lancée.
 get_reference_branch() {
     local feature_type=$1
     local fallback_branches=("develop2" "master2" "develop" "master" "main")
