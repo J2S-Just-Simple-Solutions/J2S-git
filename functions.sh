@@ -12,12 +12,11 @@ exit_safe() {
         git stash pop
     fi
 
-    if [[ $1 == 0 ]]; then
+    if [[ $1 != 0 ]]; then
         echo "/!\ Script finished in error! Be careful about your branch management on local."
-
-        exit $1
     fi
 
+    checkout_if_exists $current_branch
     exit $1
 }
 
@@ -34,7 +33,7 @@ verify_stash() {
         read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
         echo
         if [[ ! $yn =~ ^[Yy]$ ]]; then
-            exit_safe 0
+            exit_safe 1
         fi
         git stash save "[jGIT]"
         stash=true;
@@ -53,7 +52,7 @@ get_reference_branch() {
 
     if [ -z "$feature_type" ]; then
         echo "Erreur: Aucun feature_type fourni."
-        exit_safe 0
+        exit_safe 1
     fi
 
     # Vérifier la branche en fonction du type de feature
@@ -131,7 +130,7 @@ cherry_pick() {
         if [[ "$user_input" != "y" ]]; then
             echo "Opération annulée."
             git cherry-pick --abort
-            exit_safe 0
+            exit_safe 1
         fi
     fi
 }

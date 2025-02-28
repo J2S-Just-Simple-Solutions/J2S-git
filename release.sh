@@ -8,7 +8,7 @@ source "$(dirname "$0")/functions.sh"
 release_start() {
     if [[ $(git status --porcelain) ]]; then
         echo "/!\ Local changes, cannot start release"
-        exit_safe 0;
+        exit_safe 1;
     fi
 
     git checkout $branch_prod
@@ -27,7 +27,7 @@ release_start() {
     else
         echo "A tag must already exists (x.x.x format)"
 
-        exit_safe 0
+        exit_safe 1
     fi
     feature=$(echo $feature + 1 | bc)
     future_tag="${major}.${feature}.${minor}"
@@ -81,7 +81,7 @@ release_merge() {
     if [[ $existed == 0 ]]; then
         echo "/!\ Feature branch was not found!"
 
-        exit_safe 0
+        exit_safe 1
     fi
 
    git push $j2s_remote ${release_branch}
@@ -118,7 +118,7 @@ release_finish() {
     if [[ $last_commit_message == "$prefix_init_commit release ${branch}. $suffix_init_commit" ]]; then
         echo "It seems that the release is empty..."
 
-        exit_safe 0;
+        exit_safe 1;
     fi
 
     if [[ $branch =~ $regex_branch ]]; then
@@ -128,7 +128,7 @@ release_finish() {
     else
         echo "Release branch seems to have a wrong format..."
 
-        exit_safe 0
+        exit_safe 1
     fi
 
     future_tag="${major}.${feature}.${minor}"

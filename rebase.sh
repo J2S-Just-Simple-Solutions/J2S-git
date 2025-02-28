@@ -38,10 +38,10 @@ feature_rebase() {
 
     if [[ -z ${branch_in_remote} ]]; then
         echo "Something get wrong, $branch doesn't exist on remote"
-        exit_safe 0
+        exit_safe 1
     elif [[ -z ${branch_PR_in_remote} ]] ; then
         echo "Something get wrong, the branch $branch_PR doesn't exist on remote"
-        exit_safe 0
+        exit_safe 1
     fi
 
     if [[ -z ${branch_in_local} ]]; then

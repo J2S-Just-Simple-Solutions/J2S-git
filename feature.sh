@@ -64,7 +64,7 @@ feature_start() {
         echo "On est dans la Matrix"
     fi
 
-    exit_safe 1
+    exit_safe 0
 }
 
 feature_restart() {
@@ -91,7 +91,7 @@ feature_restart() {
         echo "🚨 ATTENTION : Le code de '$branch' et '$branch_PR' est différent !"
         printf "\033[1;31mLe restart ne peut se faire que sur deux branches identiques d'un point de vue code\033[0m\n"
 
-        exit_safe 0
+        exit_safe 1
     else
         echo "✅ Les deux branches contiennent exactement le même code."
     fi
