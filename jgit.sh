@@ -29,8 +29,8 @@ prefix_PR="__PR__"
 prefix_commit="[jgit]"
 prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit="[empty_commit]"
-stash=false;
 
+stash=false;
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
 ################################################################################

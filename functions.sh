@@ -8,6 +8,7 @@
 
 # fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
 exit_safe() {
+    echo "checkout on $current_branch"
     checkout_if_exists $current_branch
 
     if $stash; then

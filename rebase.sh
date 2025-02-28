@@ -91,7 +91,7 @@ feature_rebase() {
     for commit in "${commits_on_PR[@]}"; do
         if is_merge_commit "$commit"; then
             printf "\033[1;31mLe commit \033[1;32m%s\033[1;31m est un commit de fusion. On ne peut pas rebase automatiquement un commit de fusion.\033[0m\n" "$commit"  
-            printf "Il ne faut pas mélanger rebase et merge, la prochaine fois merci de ne faire que des rebases ;). Pensez à toujours squash and merge vos PRs"
+            printf "Il ne faut pas mélanger rebase et merge, la prochaine fois merci de ne faire que des rebases ;).\nPensez à toujours squash and merge vos PRs\n"
 
             exit_safe 1
         fi
@@ -100,7 +100,7 @@ feature_rebase() {
     for commit in "${commits[@]}"; do
         if is_merge_commit "$commit"; then
             printf "\033[1;31mLe commit \033[1;32m%s\033[1;31m est un commit de fusion. On ne peut pas rebase automatiquement un commit de fusion.\033[0m\n" "$commit"  
-            printf "Il ne faut pas mélanger rebase et merge, la prochaine fois merci de ne faire que des rebases ;). Pensez à toujours squash and merge vos PRs"
+            printf "Il ne faut pas mélanger rebase et merge, la prochaine fois merci de ne faire que des rebases ;).\nPensez à toujours squash and merge vos PRs\n"
 
             exit_safe 1
         fi
@@ -183,8 +183,7 @@ feature_rebase() {
     git checkout $branch
     git push --force --set-upstream $j2s_remote "$branch"
 
-    git checkout $branch
+    current_branch="$branch"
     clean_branches
-
     printf "%sRebase terminé avec succès%s\n" "$(tput setaf 2)" "$(tput sgr0)"
 }
