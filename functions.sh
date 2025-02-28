@@ -8,6 +8,8 @@
 
 # fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
 exit_safe() {
+    checkout_if_exists $current_branch
+
     if $stash; then
         git stash pop
     fi
@@ -16,7 +18,6 @@ exit_safe() {
         echo "/!\ Script finished in error! Be careful about your branch management on local."
     fi
 
-    checkout_if_exists $current_branch
     exit $1
 }
 
