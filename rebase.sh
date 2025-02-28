@@ -173,8 +173,9 @@ feature_rebase() {
         git checkout $reference_branch --quiet
         git branch -D $branch
         git branch -D $branch_PR
+        checkout_if_exists  $branch
         echo "Pensez à re-pull vos branches depuis Github."
-        exit_safe 0
+        exit_safe 1
     fi
 
     # on push force les nouvelles branches fraichement rebasée.
