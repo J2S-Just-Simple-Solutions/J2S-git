@@ -58,6 +58,12 @@ feature_rebase() {
     # Lister les commits sur la branche feature en avance de la branche PR (dans l'ordre du plus ancien au plus récent)
     local commits=($(git rev-list "$branch_PR..$branch" | tail -r))
 
+    #############################################################################
+    # Cette partie permet de gérer le cas où la PR avait déjà été validée et mergée
+    # puis réouverte par la suite, en effet dans ce cas là il y a déjà des commits 
+    # présents sur la branche PR qui ne doivent pas être oubliés
+    ##############################################################################
+
     git checkout $branch_PR --quiet
     # Récupérer le dernier commit avec le pattern jgit de démarrage de feature
     last_init_commit=$(get_last_commit_with_pattern "$prefix_init_commit $feature_type")
@@ -65,10 +71,8 @@ feature_rebase() {
         echo "Aucun commit trouvé avec le pattern jgit"
         exit_safe 1
     fi
-
     # Récupérer la liste des commits sur la branch_PR depuis le dernier commit d'init
     local commits_on_PR=($(list_commits_since "$last_init_commit"))
-    local commits_in_advance_on_PR=($(git rev-list "$reference_branch..$branch_PR" | tail -r))
 
     # On vérifie si la PR n'est pas fermée.
     if is_fast_forward "$branch_PR" "$branch"; then
@@ -79,11 +83,6 @@ feature_rebase() {
         echo "Ce cas n'est pas encore géré par JGIT. Il va falloir rebase $branch_PR à la mano :) ou la restart"
         exit_safe 1
     fi
-    #############################################################################
-    # Cette partie permet de gérer le cas où la PR avait déjà été validée et mergée
-    # puis réouverte par la suite, en effet dans ce cas là il y a déjà des commits 
-    # présents sur la branche PR qui ne doivent pas être oubliés
-    ##############################################################################
     
     git checkout $branch_PR --quiet
 
@@ -105,6 +104,10 @@ feature_rebase() {
             exit_safe 1
         fi
     done
+   
+    ##################################################
+    # Validation visuelle + confirmation utilisateur
+    ##################################################
 
     if [[ ${#commits_on_PR[@]} -gt 1 ]]; then
         # On est dans le cas d'une PR qui déjà été mergée puis réouverte, on affiche la liste complète pour bien la valider visuellement.
@@ -119,10 +122,6 @@ feature_rebase() {
             get_commit_info "$commit"
         done
     fi
-   
-    ###################################
-    # Gestion du rebase en cherrypick
-    ###################################
 
     git checkout $branch --quiet
     printf "%sjgit va reprendre, dans l'ordre, tous les commits ci-dessous qui existe dans la branche locale %s%s%s\n" "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"
@@ -141,6 +140,9 @@ feature_rebase() {
         exit_safe 1
     fi
 
+    ###################################
+    # Gestion du rebase en cherrypick
+    ###################################
     # On met à jour la branche de référence par rapport au remote pour être bien à jour
     echo "Checkout and pull $reference_branch branch"
     git checkout $reference_branch --quiet
@@ -167,12 +169,12 @@ feature_rebase() {
 
     read -p "Confirmez-vous que le rebase s'est bien passé, les branches vont être push --force ? (y/n) " user_input
     if [[ "$user_input" != "y" ]]; then
-        echo "les branches locales ne sont plus correctes, elles vont etre supprimées en local."
+        echo "les branches locales ne sont plus correctes ($branch et $branch_PR), elles vont être supprimées en local."
         git checkout $reference_branch --quiet
         git branch -D $branch
         git branch -D $branch_PR
+        echo "Pull de la branche $branch en local depuis Github."
         checkout_if_exists  $branch
-        echo "Pensez à re-pull vos branches depuis Github."
         exit_safe 1
     fi
 

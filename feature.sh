@@ -71,7 +71,6 @@ feature_start() {
 feature_restart() {
     local feature_type=$1
     local feature_name=$2
-    local BASED_ON=$3
     local branch=$1/$feature_name
     local branch_PR=$prefix_PR$branch
 
