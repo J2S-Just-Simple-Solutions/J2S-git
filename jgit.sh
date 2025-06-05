@@ -29,7 +29,9 @@ prefix_PR="__PR__"
 prefix_commit="[jgit]"
 prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit="[empty_commit]"
+
 stash=false;
+current_branch=$(git rev-parse --abbrev-ref HEAD)
 
 ################################################################################
 # Help                                                                         #
@@ -82,7 +84,7 @@ while [[ $# -gt 0 ]]; do
         shift 2         # Passer à l'argument suivant
       else
         echo "Erreur : L'option --based-on nécessite un argument." >&2
-        exit 1
+        exit_safe 1
       fi
       ;;
     *)
@@ -102,14 +104,14 @@ remotes=$( git remote -v )
 
 if [[ $remotes != *$j2s_remote* ]]; then
   echo "Please configure J2S remote as "$j2s_remote
-  exit_safe 0
+  exit_safe 1
 fi
 
 # Manage syntax
 if [[ $JGIT_TYPE == "feature" ]] || [[ $JGIT_TYPE == "hotfix" ]]; then
     if [[ -z $JGIT_NAME ]]; then
         echo "Please set a $JGIT_TYPE name as third argument"
-        exit_safe 0;
+        exit_safe 1;
     fi
     
     if [[ -z $JGIT_ACTION ]]; then
@@ -118,12 +120,15 @@ if [[ $JGIT_TYPE == "feature" ]] || [[ $JGIT_TYPE == "hotfix" ]]; then
     if [[ $JGIT_ACTION == "start" ]]; then
         verify_stash
         feature_start $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON;
+    elif [[ $JGIT_ACTION == "restart" ]]; then
+        verify_stash
+        feature_restart $JGIT_TYPE $JGIT_NAME
     elif [[ $JGIT_ACTION == "rebase" ]]; then
         verify_stash
         feature_rebase $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON
     else
         echo "argument $JGIT_ACTION note supported"
-        exit_safe 0
+        exit_safe 1
     fi
 elif [[ $JGIT_TYPE == "release" ]]; then
     if [[ -z $JGIT_ACTION ]]; then
@@ -137,21 +142,21 @@ elif [[ $JGIT_TYPE == "release" ]]; then
     elif [[ $JGIT_ACTION == "merge" ]]; then 
         if [[ -z $JGIT_NAME ]]; then
             echo "Please set a branch name as third argument"
-            exit_safe 0;
+            exit_safe 1;
         fi
         branch_PR=$prefix_PR$JGIT_NAME
         release_merge;
     else
         echo "argument $JGIT_ACTION not supported"
-        exit_safe 0
+        exit_safe 1
     fi
 elif [[ $JGIT_TYPE == "help" ]] || [[ $JGIT_TYPE == "-h" ]]; then
     help
-    exit_safe 1;
+    exit_safe 0;
 elif [[ $JGIT_TYPE == "clean" ]]; then
     clean_branches
 else
     echo "argument $JGIT_TYPE not supported"
-    exit_safe 0
+    exit_safe 1
 fi
-exit_safe 1
+exit_safe 0
