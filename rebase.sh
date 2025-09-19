@@ -134,8 +134,7 @@ feature_rebase() {
     "$(tput setaf 2)" "$(tput setaf 1)" "$reference_branch" "$(tput sgr0)"
     
     # Demander confirmation à l'utilisateur
-    read -p "Souhaitez-vous continuer ? (y/n) " user_input
-    if [[ "$user_input" != "y" ]]; then
+    if ! confirm_action "Souhaitez-vous continuer ?" "y"; then
         echo "Opération annulée."
         exit_safe 1
     fi
@@ -167,8 +166,7 @@ feature_rebase() {
     git checkout $branch
     git_history_with_merges "$branch" "$reference_branch"
 
-    read -p "Confirmez-vous que le rebase s'est bien passé, les branches vont être push --force ? (y/n) " user_input
-    if [[ "$user_input" != "y" ]]; then
+    if ! confirm_action "Confirmez-vous que le rebase s'est bien passé, les branches vont être push --force ?" "y"; then
         echo "les branches locales ne sont plus correctes ($branch et $branch_PR), elles vont être supprimées en local."
         git checkout $reference_branch --quiet
         git branch -D $branch

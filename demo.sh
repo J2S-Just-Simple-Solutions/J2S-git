@@ -16,6 +16,7 @@ is_demo_branch() {
 demo_start() {
     local requested_name="$1"
     local based_on="$2"
+    local _unused_into="$3"
     local current_local_branch=$(git rev-parse --abbrev-ref HEAD)
 
     local base_branch
@@ -77,8 +78,7 @@ demo_start() {
     printf "%sJGit va créer la branche de démo %s%s%s%s qui se basera sur la branche %s%s%s\n" \
     "$(tput setaf 2)" "$(tput setaf 1)" "$demo_branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$base_branch" "$(tput sgr0)"
     # Demander confirmation à l'utilisateur
-    read -p "Souhaitez-vous continuer ? (y/n) " user_input
-    if [[ "$user_input" != "y" ]]; then
+    if ! confirm_action "Souhaitez-vous continuer ?" "y"; then
         echo "Opération annulée."
         exit_safe 1
     fi
@@ -93,27 +93,36 @@ demo_start() {
     exit_safe 0
 }
 
-demo_merge_feature() {
-    local feature_name="$1"
-    if [[ -z "$feature_name" ]]; then
-        echo "Veuillez indiquer le nom de la feature à merger."
+resolve_demo_source_branch() {
+    local source="$1"
+    if [[ "$source" == feature/* || "$source" == hotfix/* ]]; then
+        echo "$source"
+    else
+        printf "\033[1;31mLe format attendu est feature/<ticket> ou hotfix/<ticket>.\033[0m\n"
         exit_safe 1
     fi
+}
 
-    local feature_branch="feature/$feature_name"
-    local demo_branch=$(git rev-parse --abbrev-ref HEAD)
+demo_merge_branch() {
+    local source_branch
+    source_branch=$(resolve_demo_source_branch "$1")
+    local demo_branch="$2"
+
+    local source_remote="$j2s_remote/$source_branch"
 
     if ! is_demo_branch "$demo_branch"; then
-        printf "\033[1;31mCette commande doit être exécutée depuis une branche demo_*.\033[0m\n"
+        printf "\033[1;31mCette commande doit être exécutée sur une branche demo_* (branche actuelle : %s).\033[0m\n" "$demo_branch"
         exit_safe 1
     fi
 
     git fetch "$j2s_remote" --quiet
 
-    if ! git ls-remote --exit-code --heads "$j2s_remote" "$feature_branch" >/dev/null 2>&1; then
-        printf "\033[1;31mLa branche %s n'existe pas sur %s.\033[0m\n" "$feature_branch" "$j2s_remote"
+    if ! git ls-remote --exit-code --heads "$j2s_remote" "$source_branch" >/dev/null 2>&1; then
+        printf "\033[1;31mLa branche %s n'existe pas sur %s.\033[0m\n" "$source_branch" "$j2s_remote"
         exit_safe 1
     fi
+
+    git checkout "$demo_branch" --quiet
 
     if ! git pull --ff-only "$j2s_remote" "$demo_branch"; then
         printf "\033[1;31mImpossible de mettre à jour %s depuis %s/%s.\033[0m\n" "$demo_branch" "$j2s_remote" "$demo_branch"
@@ -121,29 +130,52 @@ demo_merge_feature() {
         exit_safe 1
     fi
 
-    if git merge-base --is-ancestor "$j2s_remote/$feature_branch" HEAD; then
-        printf "La feature %s est déjà présente dans %s.\n" "$feature_branch" "$demo_branch"
-        exit_safe 0
+    if git merge-base --is-ancestor "$source_remote" HEAD; then
+        printf "La branche %s est déjà présente dans %s.\n" "$source_branch" "$demo_branch"
+        return 0
     fi
 
-    local marker_message="$prefix_commit DEMO feature $feature_branch $suffix_init_commit"
+    local branch_type="${source_branch%%/*}"
+    local marker_message="$prefix_commit DEMO merge $branch_type $source_branch $suffix_init_commit"
 
     if git log --pretty=format:"%s" | grep -Fq "$marker_message"; then
-        printf "Un marqueur pour %s existe déjà.\n" "$feature_branch"
+        printf "Un marqueur pour %s existe déjà.\n" "$source_branch"
     else
         git commit --allow-empty -m "$marker_message" --quiet
     fi
 
-    if ! git rebase "$j2s_remote/$feature_branch"; then
-        printf "\033[1;31mRebase interrompu pour %s. Résolvez les conflits puis terminez le rebase manuellement.\033[0m\n" "$feature_branch"
+    if ! git rebase "$source_remote"; then
+        printf "\033[1;31mRebase interrompu pour %s. Résolvez les conflits puis terminez le rebase manuellement.\033[0m\n" "$source_branch"
         printf "Utilisez 'git rebase --continue' après résolution ou 'git rebase --abort' pour annuler.\n"
         exit_safe 1
     fi
 
-
     git push --force-with-lease "$j2s_remote" "$demo_branch"
-    printf "Feature %s rebase avec succès dans %s.\n" "$feature_branch" "$demo_branch"
-    exit_safe 0
+    printf "Branche %s rebasée avec succès dans %s.\n" "$source_branch" "$demo_branch"
+}
+
+demo_merge() {
+    local target_branch="$1"
+    shift || true
+    local sources=("$@")
+
+    if [[ -z "$target_branch" ]]; then
+        target_branch=$(git rev-parse --abbrev-ref HEAD)
+    else
+        if [[ "$target_branch" != ${DemoBranchPrefix}* ]]; then
+            target_branch=$(get_demo_branch_name "$target_branch")
+        fi
+        checkout_if_exists "$target_branch"
+    fi
+
+    if [[ ${#sources[@]} -eq 0 ]]; then
+        echo "Veuillez préciser au moins une source avec --from." >&2
+        exit_safe 1
+    fi
+
+    for source in "${sources[@]}"; do
+        demo_merge_branch "$source" "$target_branch"
+    done
 }
 
 demo_list() {
@@ -170,17 +202,14 @@ demo_list() {
     log_output=$(git log --reverse --pretty=format:"%H%-_-_-%s" "$init_commit^..HEAD")
 
     while IFS=$'-_-_-' read -r commit_hash commit_subject; do
-        if [[ "$commit_subject" == *"DEMO feature "* ]]; then
-            local feature_branch
-            feature_branch=$(echo "$commit_subject" | awk '{print $4}')
-            if [[ -n "$feature_branch" ]]; then
-                entries+=("$feature_branch")
-            fi
+        read -r first_word second_word branch_type branch_name _ <<< "$commit_subject"
+        if [[ "$second_word" == "DEMO" && -n "$branch_type" && -n "$branch_name" ]]; then
+            entries+=("$branch_type:$branch_name")
         fi
     done <<< "$log_output"
 
     if [[ ${#entries[@]} -eq 0 ]]; then
-        printf "Aucune feature mergée détectée pour %s.\n" "$demo_branch"
+        printf "Aucune branche mergée détectée pour %s.\n" "$demo_branch"
         exit_safe 0
     fi
 
@@ -189,14 +218,17 @@ demo_list() {
     local color_marker=$(tput setaf 4)
     local color_reset=$(tput sgr0)
 
-    printf "%sFeatures mergées dans %s :%s\n" "$color_title" "$demo_branch" "$color_reset"
-    for feature_branch in "${entries[@]}"; do
-        local feature_name=${feature_branch#feature/}
-        printf "  %s-%s %s (%s%s%s)\n" "$color_feature" "$color_reset" "$feature_name" "$color_marker" "$feature_branch" "$color_reset"
+    printf "%sBranches mergées dans %s :%s\n" "$color_title" "$demo_branch" "$color_reset"
+    for entry in "${entries[@]}"; do
+        local branch_type=${entry%%:*}
+        local branch_name=${entry#*:}
+        local short_name=${branch_name#${branch_type}/}
+        printf "  %s-%s %s (%s%s%s)\n" "$color_feature" "$color_reset" "$short_name" "$color_marker" "$branch_name" "$color_reset"
     done
-    printf "\n%sCommandes release à exécuter :%s\n" "$color_title" "$color_reset"
-    for feature_branch in "${entries[@]}"; do
-        printf "jgit release merge %s\n" "$feature_branch"
+    printf "\n%sCommandes release suggérées :%s\n" "$color_title" "$color_reset"
+    for entry in "${entries[@]}"; do
+        local branch_name=${entry#*:}
+        printf "jgit release merge --from %s\n" "$branch_name"
     done
     printf "\n"
 
@@ -226,8 +258,7 @@ demo_remove() {
     printf "%sElle sera retirée du remote %s%s%s et supprimée en local.%s\n" \
         "$color_text" "$color_branch" "$j2s_remote" "$color_text" "$color_reset"
 
-    read -p "Confirmez-vous la suppression ? (y/n) " user_input
-    if [[ "$user_input" != "y" ]]; then
+    if ! confirm_action "Confirmez-vous la suppression ?" "y"; then
         echo "Opération annulée."
         exit_safe 1
     fi

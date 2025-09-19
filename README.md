@@ -36,7 +36,7 @@ gh repo set-default
 
 By default jgit use the following parameters
 ```
-2s_remote="origin"
+j2s_remote="origin"
 branch_prod="main"
 branch_preprod="develop"
 ```
@@ -57,36 +57,49 @@ branch_preprod="develop2"
 PS : you can add `.jgit/*` in the .gitignore of your git project.
 
 ## Usage
-jgit will be used in command line directly from your project folder.
+jgit se pilote directement depuis le dossier de votre projet :
 
-Example
 ```
-toto@MacBook-Pro ~ % cd Projets/My-project 
-toto@MacBook-Pro % jgit feature start TESTDEV-1111
+cd /chemin/vers/mon-projet
+jgit <scope> <action> [<target>] [options…]
 ```
 
-Please read the documentation with `jgit -h` or `jgit help`
+### Scopes disponibles
 
-### Feature & Hotfix commands
+- `feature` / `hotfix`
+- `release`
+- `demo`
+- `util`
 
-- `jgit feature start <ticket> [--based-on <branch>]` — creates (or resumes) the working branch `feature/<ticket>` and its PR branch `__PR__feature/<ticket>`. When the branches do not exist yet, the reference branch is checked out (`--based-on` or default), a commit is added to seed the PR, everything is pushed, and a GitHub PR is opened. Replace `feature` with `hotfix` for an identical workflow on hotfix branches.
-- `jgit feature restart <ticket>` — resets the working branch from the existing PR branch after verifying that both hold the same code. The script deletes the old `feature/<ticket>` locally/remotely, recreates it with a restart marker commit, pushes it, and reopens the PR. Also available as `jgit hotfix restart`.
-- `jgit feature rebase <ticket> [--based-on <branch>]` — orchestrates a clean rebase: fetches the remote branches, ensures no merge commits slip in, displays the commits to replay, cherry-picks them onto temporary `jgit_rebase_*` branches, renames them back, and force-pushes. Works the same for `jgit hotfix rebase`.
+### Options communes
 
-### Release commands
+- `--based-on <branch>` : branche de référence lors d'un `start` ou d'un `rebase`.
+- `--from <branch>` : source d'un merge (option répétable).
+- `--into <branch>` : destination explicite du merge (sinon la branche courante est utilisée quand pertinent).
+- `--yes` : valide automatiquement toutes les confirmations.
+- `--dry-run` : affiche les actions prévues sans modifier votre dépôt ni contacter GitHub.
+- `--no-open` : n'ouvre pas automatiquement la PR lors d'un `feature/hotfix start` ou `restart`.
+- `jgit help` ou `jgit -h` : affiche l'aide détaillée.
 
-- `jgit release start` — inspects the latest `x.y.z` tag, increments the middle number, and creates or resumes the corresponding `release/x.y.z` branch with an init commit.
-- `jgit release merge <branch>` — ensures the release branch is ready (creating it if needed) then merges the provided branch (usually `__PR__feature/<ticket>`) into the release, preferring a local branch if present otherwise the remote one.
-- `jgit release finish` — validates the current release branch, merges it into `main` (`branch_prod`), tags the release, deletes the release branch locally/remotely, pushes, and creates a GitHub release.
+### Feature & Hotfix
 
-### Demo commands
+- `jgit feature start <ticket> [--based-on <branch>] [--no-open]` — crée ou reprend `feature/<ticket>` ainsi que la branche PR `__PR__feature/<ticket>`. Une PR GitHub est ouverte sauf si `--no-open` est présent. Le comportement est identique avec `hotfix`.
+- `jgit feature restart <ticket> [--no-open]` — recrée `feature/<ticket>` depuis la branche PR après vérification du code. Supprime et repousse la branche de travail avant de rouvrir la PR (optionnellement sans l'ouvrir grâce à `--no-open`).
+- `jgit feature rebase <ticket> [--based-on <branch>]` — gère le rebase complet : vérifications, cherry-pick sur des branches temporaires `jgit_rebase_*`, renommage et force-push final. Disponible également pour `hotfix`.
 
-- `jgit demo start [demo_name] [--based-on <branch>]` — creates or resumes a `demo_<base>` branch. Existing branches are checked out and fast-forwarded; otherwise the branch is created from the chosen reference branch after confirmation and pushed with a marker commit.
-- `jgit demo merge feature <feature_name>` — run from a demo branch. Checks that `feature/<feature_name>` exists on the remote, adds a marker commit if missing, applies the feature commits onto the demo branch, and pushes with `--force-with-lease` to keep the history linear.
-- `jgit demo list` — scans the history since the demo init commit, finds all `[jgit] DEMO feature …` markers, and prints both the merged features and the `jgit release merge` commands to replay them during a release.
-- `jgit demo remove` — from a demo branch, asks for confirmation, switches back to the reference branch, deletes the demo branch on the remote then locally, and leaves you on the safe branch.
+### Release
+
+- `jgit release start [<x.y.z>]` — sans cible, calcule le prochain numéro de version (`x.y.z`) à partir du dernier tag, crée ou reprend la branche `release/x.y.z` et pousse le commit d'initialisation. Avec une cible explicite, la branche `release/<x.y.z>` correspondante est préparée.
+- `jgit release merge [<x.y.z>] --from <branch> [--into <branch>]` — garantit que la branche de release est prête (création ou simple checkout) puis fusionne chaque branche listée avec `--from` dans la release. Les noms avec ou sans préfixe `__PR__` sont acceptés.
+- `jgit release finish [--into <release/x.y.z>]` — vérifie la cohérence de la release courante (ou de celle indiquée), fusionne dans `branch_prod`, crée le tag, supprime la branche de release localement/distante et génère la release GitHub.
+
+### Demo
+
+- `jgit demo start [<demo_name>] [--based-on <branch>]` — prépare une branche `demo_<nom>` existante (checkout + fast-forward) ou en crée une nouvelle basée sur la branche fournie, après confirmation.
+- `jgit demo merge [--into <demo_branch>] --from feature/<ticket> [--from hotfix/<ticket>]…` — merge en série chaque branche fournie dans la démo cible (branche courante par défaut). La branche est tenue linéaire via rebase et `--force-with-lease`.
+- `jgit demo list` — liste les marqueurs `[jgit] DEMO …` depuis le commit d'initialisation, affiche les branches fusionnées et suggère les commandes `jgit release merge --from …` correspondantes.
+- `jgit demo remove [--yes]` — après confirmation, supprime la branche de démo sur le remote puis en local et vous replace sur la branche de référence.
 
 ### Utility
 
-- `jgit clean` — removes local helper branches created by jgit (`jgit_rebase_*`, `__PR__*`).
-- `jgit help` ou `jgit -h` — displays the in-terminal help with every command and option.
+- `jgit util clean` — supprime les branches locales temporaires utilisées par jgit (`jgit_rebase_*`, `__PR__*`).
