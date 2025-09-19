@@ -1,52 +1,53 @@
-## Project setup
+# J2S Git (`jgit`)
 
-### Installation
-First clone the repo
-```
-cd /path-to-your-j2sgit-project/
-git clone 
-```
+## Présentation
 
-### Add a jgit shortcut in your terminal
-Edit your zprofile
-```
-nano ~/.zprofile
-```
+`jgit` est un ensemble de scripts Bash destiné à automatiser les opérations Git quotidiennes au sein des projets J2S : création de branches, ouverture de pull requests, préparation de releases ou encore gestion de branches de démonstration. L'objectif est d'appliquer les conventions de l'équipe tout en limitant les erreurs manuelles.
 
-Add the line
-```
-alias jgit='/path-to-your-j2sgit-project/J2S-Git/jgit.sh'
-```
+## Installation
 
-Restart your terminal.
+1. Clonez ce dépôt dans le répertoire de votre choix :
+   ```bash
+   cd /chemin/vers/votre/espace-de-travail
+   git clone <url-du-repo-j2s-git>
+   ```
+2. Ajoutez un alias dans votre shell afin d'appeler `jgit` depuis n'importe quel projet.
+   - Sous macOS avec `zsh`, éditez `~/.zprofile` :
+     ```bash
+     nano ~/.zprofile
+     ```
+   - Ajoutez la ligne suivante en adaptant le chemin d'installation :
+     ```bash
+     alias jgit='/chemin/vers/J2S-git/jgit.sh'
+     ```
+   - Rechargez votre terminal ou exécutez `source ~/.zprofile`.
 
-### prerequisites
-You should have 1 remote named `origin` that head to a J2S github repository on all your local projects.
-You must have your reference branch existing on local (`develop2` or `master`)
+## Prérequis
 
-You must have git install on your local.
+- Un dépôt Git avec un remote nommé `origin` pointant vers GitHub (organisation J2S).
+- Git installé en local (`git --version` doit répondre).
+- Le client GitHub CLI (`gh`) installé et configuré : https://cli.github.com/
+- Un remote de référence (`develop`, `develop2`, `master`, `main`…) disponible en local.
 
-You must have github client install on your local https://cli.github.com/
+Configurez ensuite GitHub CLI sur chaque dépôt projet :
 
-Configure you gh envrionment
-
-```
+```bash
 gh repo set-default
 ```
 
-By default jgit use the following parameters
-```
+## Paramètres par défaut et surcharge locale
+
+Après installation, `jgit` utilise automatiquement :
+
+```bash
 j2s_remote="origin"
 branch_prod="main"
 branch_preprod="develop"
 ```
 
-You can ovveride those variable for each git projects by creating a specific configuration file.
+Pour adapter ces réglages à un projet précis, créez un fichier `.jgit/conf_local.sh` à la racine du dépôt (le dossier `.jgit` peut être ajouté à votre `.gitignore`). Exemple :
 
-In your git project, create a file `.jgit/conf_local.sh` (create the `.jgit` folder if needed)
-
-With the content (update with your needs)
-```
+```bash
 #!/bin/bash
 
 j2s_remote="origin"
@@ -54,14 +55,15 @@ branch_prod="master2"
 branch_preprod="develop2"
 ```
 
-PS : you can add `.jgit/*` in the .gitignore of your git project.
+Ce fichier sera automatiquement chargé par `jgit.sh` et aura priorité sur les valeurs par défaut.
 
-## Usage
-jgit se pilote directement depuis le dossier de votre projet :
+## Utilisation générale
 
-```
+Positionnez-vous dans un dépôt Git de projet :
+
+```bash
 cd /chemin/vers/mon-projet
-jgit <scope> <action> [<target>] [options…]
+jgit <scope> <action> [<cible>] [options...]
 ```
 
 ### Scopes disponibles
@@ -71,34 +73,36 @@ jgit <scope> <action> [<target>] [options…]
 - `demo`
 - `util`
 
-### Options communes
+### Options globales
 
-- `--based-on <branch>` : branche de référence lors d'un `start` ou d'un `rebase`.
-- `--from <branch>` : source d'un merge (option répétable).
-- `--into <branch>` : destination explicite du merge (sinon la branche courante est utilisée quand pertinent).
-- `--yes` : valide automatiquement toutes les confirmations.
-- `--no-open` : n'ouvre pas automatiquement la PR lors d'un `feature/hotfix start` ou `restart`.
-- `jgit help` ou `jgit -h` : affiche l'aide détaillée.
+- `--based-on <branche>` : force la branche de référence lors d'un `start` ou d'un `rebase`.
+- `--from <branche>` : ajoute une source à fusionner (option répétable).
+- `--into <branche>` : définit explicitement la branche de destination.
+- `--yes` (`-y`) : accepte toutes les confirmations.
+- `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
+- `jgit help` / `jgit -h` : affiche l'aide complète.
+
+## Commandes par scope
 
 ### Feature & Hotfix
 
-- `jgit feature start <ticket> [--based-on <branch>] [--no-open]` — crée ou reprend `feature/<ticket>` ainsi que la branche PR `__PR__feature/<ticket>`. Une PR GitHub est ouverte sauf si `--no-open` est présent. Le comportement est identique avec `hotfix`.
-- `jgit feature restart <ticket> [--no-open]` — recrée `feature/<ticket>` depuis la branche PR après vérification du code. Supprime et repousse la branche de travail avant de rouvrir la PR (optionnellement sans l'ouvrir grâce à `--no-open`).
-- `jgit feature rebase <ticket> [--based-on <branch>]` — gère le rebase complet : vérifications, cherry-pick sur des branches temporaires `jgit_rebase_*`, renommage et force-push final. Disponible également pour `hotfix`.
+- `jgit feature start <ticket> [--based-on <branche>] [--no-open]` : crée ou reprend la branche `feature/<ticket>` et sa branche PR `__PR__feature/<ticket>`, pousse les commits d'initialisation et ouvre la PR (sauf `--no-open`). Identique avec `hotfix`.
+- `jgit feature restart <ticket> [--no-open]` : recrée la branche de travail depuis la branche PR après vérification de l'alignement du code, supprime l'ancienne branche distante et ré-ouvre la PR si nécessaire.
+- `jgit feature rebase <ticket> [--based-on <branche>]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`.
 
 ### Release
 
-- `jgit release start [<x.y.z>]` — sans cible, calcule le prochain numéro de version (`x.y.z`) à partir du dernier tag, crée ou reprend la branche `release/x.y.z` et pousse le commit d'initialisation. Avec une cible explicite, la branche `release/<x.y.z>` correspondante est préparée.
-- `jgit release merge [<x.y.z>] --from <branch> [--into <branch>]` — garantit que la branche de release est prête (création ou simple checkout) puis fusionne chaque branche listée avec `--from` dans la release. Les noms avec ou sans préfixe `__PR__` sont acceptés.
-- `jgit release finish [--into <release/x.y.z>]` — vérifie la cohérence de la release courante (ou de celle indiquée), fusionne dans `branch_prod`, crée le tag, supprime la branche de release localement/distante et génère la release GitHub.
+- `jgit release start [<x.y.z>]` : sans argument, calcule la prochaine version à partir du dernier tag, crée ou reprend `release/x.y.z` et pousse le commit initial. Avec `x.y.z`, prépare la branche correspondante.
+- `jgit release merge [<x.y.z>] --from <branche> [--into <branche>]` : s'assure que la branche de release est prête, puis fusionne en série chaque branche fournie avec `--from`. Les noms avec ou sans préfixe `__PR__` sont pris en charge.
+- `jgit release finish [--into <release/x.y.z>]` : vérifie la cohérence, fusionne sur la branche de production (`branch_prod`), crée le tag, supprime la branche de release en local/distante et génère la release GitHub.
 
 ### Demo
 
-- `jgit demo start [<demo_name>] [--based-on <branch>]` — prépare une branche `demo_<nom>` existante (checkout + fast-forward) ou en crée une nouvelle basée sur la branche fournie, après confirmation.
-- `jgit demo merge [--into <demo_branch>] --from feature/<ticket> [--from hotfix/<ticket>]…` — merge en série chaque branche fournie dans la démo cible (branche courante par défaut). La branche est tenue linéaire via rebase et `--force-with-lease`.
-- `jgit demo list` — liste les marqueurs `[jgit] DEMO …` depuis le commit d'initialisation, affiche les branches fusionnées et suggère les commandes `jgit release merge --from …` correspondantes.
-- `jgit demo remove [--yes]` — après confirmation, supprime la branche de démo sur le remote puis en local et vous replace sur la branche de référence.
+- `jgit demo start [<nom_demo>] [--based-on <branche>]` : prépare une branche `demo_<nom>` existante (checkout + fast-forward) ou en crée une nouvelle à partir de la branche fournie après confirmation.
+- `jgit demo merge [--into <branche_demo>] --from feature/<ticket> [--from hotfix/<ticket>]...` : fusionne successivement chaque branche listée dans la démo cible (branche courante par défaut) en conservant un historique linéaire.
+- `jgit demo list` : parcourt les commits `[jgit] DEMO …`, affiche les branches déjà fusionnées et suggère les commandes `jgit release merge --from ...` correspondantes.
+- `jgit demo remove [--yes]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
 
-### Utility
+### Utilitaires
 
-- `jgit util clean` — supprime les branches locales temporaires utilisées par jgit (`jgit_rebase_*`, `__PR__*`).
+- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `__PR__*`).
