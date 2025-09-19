@@ -35,7 +35,6 @@ prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit="[empty_commit]"
 
 JGIT_AUTO_YES=false
-JGIT_DRY_RUN=false
 JGIT_NO_OPEN=false
 JGIT_BASED_ON_OVERRIDE=""
 JGIT_INTO_TARGET=""
@@ -58,7 +57,6 @@ help() {
     printf "  --from <branch>       Source d'un merge (répétable).\n"
     printf "  --into <branch>       Destination explicite d'un merge.\n"
     printf "  --yes                 Valide automatiquement les confirmations.\n"
-    printf "  --dry-run             Affiche les actions sans les exécuter.\n"
     printf "  --no-open             N'ouvre pas automatiquement la PR.\n"
     printf "  -h | --help           Affiche cette aide.\n\n"
 
@@ -139,10 +137,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --yes|-y)
             JGIT_AUTO_YES=true
-            shift
-            ;;
-        --dry-run)
-            JGIT_DRY_RUN=true
             shift
             ;;
         --no-open)

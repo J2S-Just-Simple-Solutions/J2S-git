@@ -77,7 +77,6 @@ jgit <scope> <action> [<target>] [options…]
 - `--from <branch>` : source d'un merge (option répétable).
 - `--into <branch>` : destination explicite du merge (sinon la branche courante est utilisée quand pertinent).
 - `--yes` : valide automatiquement toutes les confirmations.
-- `--dry-run` : affiche les actions prévues sans modifier votre dépôt ni contacter GitHub.
 - `--no-open` : n'ouvre pas automatiquement la PR lors d'un `feature/hotfix start` ou `restart`.
 - `jgit help` ou `jgit -h` : affiche l'aide détaillée.
 

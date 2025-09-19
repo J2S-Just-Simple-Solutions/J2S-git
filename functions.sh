@@ -12,10 +12,6 @@ if [[ -z "${JGIT_AUTO_YES+x}" ]]; then
   JGIT_AUTO_YES=false
 fi
 
-if [[ -z "${JGIT_DRY_RUN+x}" ]]; then
-  JGIT_DRY_RUN=false
-fi
-
 if [[ -z "${JGIT_NO_OPEN+x}" ]]; then
   JGIT_NO_OPEN=false
 fi
@@ -29,50 +25,6 @@ declare -a JGIT_FROM_SOURCES
 ###############################################
 #            Helpers génériques
 ###############################################
-
-# Wrapper git permettant de simuler les commandes en mode dry-run.
-__jgit_git_mutating() {
-  local subcmd="$1"
-  case "$subcmd" in
-    add|branch|checkout|cherry-pick|commit|fetch|merge|pull|push|rebase|reset|stash|switch|tag)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-git() {
-  if [[ $# -eq 0 ]]; then
-    command git
-    return $?
-  fi
-
-  local subcmd="$1"
-  shift || true
-
-  if [[ "$subcmd" == "--version" ]]; then
-    command git --version "$@"
-    return $?
-  fi
-
-  if [[ $JGIT_DRY_RUN == true ]] && __jgit_git_mutating "$subcmd"; then
-    echo "[dry-run] git $subcmd $*"
-    return 0
-  fi
-
-  command git "$subcmd" "$@"
-}
-
-gh() {
-  if [[ $JGIT_DRY_RUN == true ]]; then
-    echo "[dry-run] gh $*"
-    return 0
-  fi
-
-  command gh "$@"
-}
 
 confirm_action() {
   local prompt="$1"
@@ -112,19 +64,11 @@ exit_safe() {
 
     if [[ $exit_code -ne 0 ]]; then
         echo "checkout on $current_branch"
-        if [[ $JGIT_DRY_RUN == true ]]; then
-            echo "[dry-run] would restore working branch $current_branch"
-        else
-            checkout_if_exists "$current_branch"
-        fi
+        checkout_if_exists "$current_branch"
     fi
 
     if [[ $stash == true ]]; then
-        if [[ $JGIT_DRY_RUN == true ]]; then
-            echo "[dry-run] git stash pop"
-        else
-            git stash pop
-        fi
+        git stash pop
     fi
 
     if [[ $exit_code -ne 0 ]]; then
@@ -147,13 +91,8 @@ verify_stash() {
         if ! confirm_action "Do you want to stash and unstash changes at the end of process ?" "y"; then
             exit_safe 1
         fi
-        if [[ $JGIT_DRY_RUN == true ]]; then
-            echo "[dry-run] git stash save \"[jGIT]\""
-            stash=false
-        else
-            git stash save "[jGIT]"
-            stash=true
-        fi
+        git stash save "[jGIT]"
+        stash=true
     fi
 }
 
