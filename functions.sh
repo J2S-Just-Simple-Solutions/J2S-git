@@ -6,20 +6,76 @@
 ###############################################
 ###############################################
 
+# Valeurs par défaut pour les options globales lorsque le script est
+# exécuté directement (les variables sont normalement définies dans jgit.sh).
+if [[ -z "${JGIT_AUTO_YES+x}" ]]; then
+  JGIT_AUTO_YES=false
+fi
+
+if [[ -z "${JGIT_NO_OPEN+x}" ]]; then
+  JGIT_NO_OPEN=false
+fi
+
+if [[ -z "${JGIT_BASED_ON_OVERRIDE+x}" ]]; then
+  JGIT_BASED_ON_OVERRIDE=""
+fi
+
+declare -a JGIT_FROM_SOURCES
+
+###############################################
+#            Helpers génériques
+###############################################
+
+confirm_action() {
+  local prompt="$1"
+  local default_response=${2:-"y"}
+
+  if [[ $JGIT_AUTO_YES == true ]]; then
+    echo "[auto-confirm] $prompt"
+    return 0
+  fi
+
+  local suffix="(y/n)"
+  local expected="y"
+
+  if [[ "$default_response" == "n" ]]; then
+    suffix="(n/y)"
+    expected="n"
+  fi
+
+  local user_input
+  read -p "$prompt $suffix " user_input
+  echo
+
+  if [[ -z "$user_input" ]]; then
+    user_input="$default_response"
+  fi
+
+  if [[ "$user_input" == "$expected" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 # fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
 exit_safe() {
-    echo "checkout on $current_branch"
-    checkout_if_exists $current_branch
+    local exit_code=${1:-0}
 
-    if $stash; then
+    if [[ $exit_code -ne 0 ]]; then
+        echo "checkout on $current_branch"
+        checkout_if_exists "$current_branch"
+    fi
+
+    if [[ $stash == true ]]; then
         git stash pop
     fi
 
-    if [[ $1 != 0 ]]; then
+    if [[ $exit_code -ne 0 ]]; then
         echo "/!\ Script finished in error! Be careful about your branch management on local."
     fi
 
-    exit $1
+    exit $exit_code
 }
 
 ###############################################
@@ -32,13 +88,11 @@ exit_safe() {
 verify_stash() {
     if [[ $(git status --porcelain) ]]; then
         echo "You have uncommited modifications."
-        read -p "Do you want to stash and unstash changes at the end of process ? [y/n] " yn
-        echo
-        if [[ ! $yn =~ ^[Yy]$ ]]; then
+        if ! confirm_action "Do you want to stash and unstash changes at the end of process ?" "y"; then
             exit_safe 1
         fi
         git stash save "[jGIT]"
-        stash=true;
+        stash=true
     fi
 }
 
@@ -49,13 +103,8 @@ verify_stash() {
 #
 # Si la branche de référence n'existe pas une erreur est lancée.
 get_reference_branch() {
-    local feature_type=$1
+    local feature_type=${1:-feature}
     local fallback_branches=("develop2" "master2" "develop" "master" "main")
-
-    if [ -z "$feature_type" ]; then
-        echo "Erreur: Aucun feature_type fourni."
-        exit_safe 1
-    fi
 
     # Vérifier la branche en fonction du type de feature
     if [ "$feature_type" == "hotfix" ] && git rev-parse --verify "$branch_prod" >/dev/null 2>&1; then
@@ -128,8 +177,7 @@ cherry_pick() {
         "$(tput setaf 1)" "$(tput sgr0)"
     
         # Demander confirmation à l'utilisateur
-        read -p "Avez vous résolu et commité la résolution de conflit ? (y/n) " user_input
-        if [[ "$user_input" != "y" ]]; then
+        if ! confirm_action "Avez vous résolu et commité la résolution de conflit ?" "y"; then
             echo "Opération annulée."
             git cherry-pick --abort
             exit_safe 1
@@ -218,12 +266,12 @@ checkout_or_create_branch() {
   if git show-ref --verify --quiet "refs/heads/$branch"; then
       # La branche existe en local
       git checkout "$branch" --quiet
-      git pull --ff-only origin "$branch" --quiet
+      git pull --ff-only "$j2s_remote" "$branch" --quiet
 
-  elif git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
-      # La branche existe sur origin mais pas en local
-      git fetch origin --quiet
-      git checkout -b "$branch" "origin/$branch" --quiet
+  elif git ls-remote --exit-code --heads "$j2s_remote" "$branch" > /dev/null; then
+      # La branche existe sur le remote mais pas en local
+      git fetch "$j2s_remote" "$branch:$branch" --quiet
+      git checkout "$branch" --quiet
   else
     echo "Bascule vers '$branch' (Création depuis la branche courante)"
     git checkout -b "$branch"
@@ -241,12 +289,12 @@ checkout_if_exists() {
   if git show-ref --verify --quiet "refs/heads/$branch"; then
       # La branche existe en local
       git checkout "$branch" --quiet
-      git pull --ff-only origin "$branch" --quiet
+      git pull --ff-only "$j2s_remote" "$branch" --quiet
 
-  elif git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
-      # La branche existe sur origin mais pas en local
-      git fetch origin --quiet
-      git checkout -b "$branch" "origin/$branch" --quiet
+  elif git ls-remote --exit-code --heads "$j2s_remote" "$branch" > /dev/null; then
+      # La branche existe sur le remote mais pas en local
+      git fetch "$j2s_remote" "$branch:$branch" --quiet
+      git checkout "$branch" --quiet
   else
     echo "La branche n'existe pas"
     exit_safe 1
