@@ -50,7 +50,7 @@ verify_stash() {
 # Si la branche de référence n'existe pas une erreur est lancée.
 get_reference_branch() {
     local feature_type=$1
-    local fallback_branches=("develop2" "master2" "develop" "master" "main")
+    local fallback_branches=("develop" "master" "main")
 
     if [ -z "$feature_type" ]; then
         echo "Erreur: Aucun feature_type fourni."
