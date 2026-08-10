@@ -6,7 +6,7 @@ First clone the repo
 
 ```sh
 cd /path-to-your-j2sgit-project/
-git clone 
+git clone git@github.com:J2S-Just-Simple-Solutions/J2S-git.git
 ```
 
 ### Add a jgit shortcut in your terminal
