@@ -8,8 +8,8 @@
 
 # Valeurs par défaut pour les options globales lorsque le script est
 # exécuté directement (les variables sont normalement définies dans jgit.sh).
-if [[ -z "${JGIT_AUTO_YES+x}" ]]; then
-  JGIT_AUTO_YES=false
+if [[ -z "${JGIT_NO_INTERACTION+x}" ]]; then
+  JGIT_NO_INTERACTION=false
 fi
 
 if [[ -z "${JGIT_NO_OPEN+x}" ]]; then
@@ -18,6 +18,14 @@ fi
 
 if [[ -z "${JGIT_BASED_ON_OVERRIDE+x}" ]]; then
   JGIT_BASED_ON_OVERRIDE=""
+fi
+
+if [[ -z "${JGIT_SQUASH+x}" ]]; then
+  JGIT_SQUASH=false
+fi
+
+if [[ -z "${JGIT_SQUASH_THRESHOLD+x}" ]]; then
+  JGIT_SQUASH_THRESHOLD=8
 fi
 
 declare -a JGIT_FROM_SOURCES
@@ -30,17 +38,21 @@ confirm_action() {
   local prompt="$1"
   local default_response=${2:-"y"}
 
-  if [[ $JGIT_AUTO_YES == true ]]; then
-    echo "[auto-confirm] $prompt"
-    return 0
+  # En mode non interactif on applique la réponse par défaut de la question,
+  # qui n'est pas forcément "oui".
+  if [[ $JGIT_NO_INTERACTION == true ]]; then
+    echo "[no-interaction] $prompt -> $default_response"
+    if [[ "$default_response" == "y" ]]; then
+      return 0
+    fi
+    return 1
   fi
 
+  # La réponse par défaut (celle appliquée si l'utilisateur valide sans rien saisir)
+  # est signalée par la majuscule dans le suffixe.
   local suffix="(y/n)"
-  local expected="y"
-
   if [[ "$default_response" == "n" ]]; then
-    suffix="(n/y)"
-    expected="n"
+    suffix="(y/N)"
   fi
 
   local user_input
@@ -51,7 +63,7 @@ confirm_action() {
     user_input="$default_response"
   fi
 
-  if [[ "$user_input" == "$expected" ]]; then
+  if [[ "$user_input" == "y" ]]; then
     return 0
   fi
 
@@ -146,43 +158,130 @@ list_commits_since() {
   git log --reverse --pretty=format:"%H" "$start_commit^..HEAD"
 }
 
+###############################################
+#            Squash des commits
+###############################################
+
+# Renvoie l'index (base 0) du dernier commit d'init jgit (commit vide) trouvé dans la
+# liste de commits fournie (ordonnée du plus ancien au plus récent).
+# Renvoie -1 si aucun commit d'init n'est présent dans la liste.
+find_last_init_commit_index() {
+  local commits=("$@")
+  local index=-1
+  local i
+
+  for i in "${!commits[@]}"; do
+    local subject
+    subject=$(git log -n 1 --pretty=format:"%s" "${commits[$i]}" 2>/dev/null)
+    if [[ "$subject" == *"$suffix_init_commit"* ]]; then
+      index=$i
+    fi
+  done
+
+  echo "$index"
+}
+
+# Squash en un seul commit tous les commits de la branche courante postérieurs à
+# $base_commit. Le message est demandé à l'utilisateur, le message de $first_commit
+# (le premier commit squashé) servant de valeur par défaut.
+squash_commits_after() {
+  local base_commit="$1"
+  local first_commit="$2"
+
+  if [[ -z "$base_commit" || -z "$first_commit" ]]; then
+    printf "\033[1;31mErreur : squash impossible, commit de base ou premier commit manquant.\033[0m\n" >&2
+    return 1
+  fi
+
+  local default_message
+  default_message=$(git log -n 1 --pretty=format:"%s" "$first_commit" 2>/dev/null)
+
+  local message=""
+  if [[ $JGIT_NO_INTERACTION == true ]]; then
+    echo "[no-interaction] Message du commit squashé : $default_message"
+  else
+    printf "%sMessage du commit squashé (Entrée pour conserver « %s ») :%s\n" \
+      "$(tput setaf 2)" "$default_message" "$(tput sgr0)"
+    read -r -p "> " message
+  fi
+
+  if [[ -z "$message" ]]; then
+    message="$default_message"
+  fi
+
+  # reset --soft : on conserve l'intégralité du code, seul l'historique est réécrit.
+  if ! git reset --soft "$base_commit" --quiet; then
+    printf "\033[1;31mErreur : impossible de repositionner la branche sur %s.\033[0m\n" "$base_commit" >&2
+    return 1
+  fi
+
+  if ! git commit --allow-empty -m "$message" --quiet; then
+    printf "\033[1;31mErreur : le squash des commits a échoué.\033[0m\n" >&2
+    return 1
+  fi
+
+  printf "%sCommits squashés dans un unique commit : %s%s\n" "$(tput setaf 2)" "$message" "$(tput sgr0)"
+  return 0
+}
+
 # Fonction pour effectuer un cherry-pick sur chaque commit du tableau
+# Renvoie 1 dès qu'un cherry-pick n'a pas pu aboutir, à charge de l'appelant
+# de restaurer l'état local.
 cherry_pick_commits() {
   local commits=("$@")
 
   for commit in "${commits[@]}"; do
-    cherry_pick "$commit"
+    if ! cherry_pick "$commit"; then
+      return 1
+    fi
   done
+
+  return 0
 }
 
 # Fonction pour effectuer un cherry-pick sur le hash passé en argument si celui n'existe pas déjà.
+# Renvoie 0 si le commit a bien été appliqué, 1 si le cherry-pick a été abandonné.
 cherry_pick() {
     local commit=$1
-    
+
     # Vérifier si le commit est déjà dans l'historique de la branche courante
     if git merge-base --is-ancestor "$commit" HEAD; then
       echo "Commit $commit déjà appliqué, passage au suivant..."
-      continue
+      return 0
     fi
 
     echo "Cherry-picking commit: $commit"
-    git cherry-pick "$commit" --allow-empty
-    
-    # Vérifier si le cherry-pick a échoué (en cas de conflit)
-    if [ $? -ne 0 ]; then
-      echo ""
-      printf "%sErreur lors du cherry-pick du commit %s. Conflit détecté.%s\n" \
-        "$(tput setaf 1)" "$commit" "$(tput sgr0)"
-      printf "%sMerci de ne rien faire ici tant que le conflit n'est pas résolu et commité%s\n" \
-        "$(tput setaf 1)" "$(tput sgr0)"
-    
-        # Demander confirmation à l'utilisateur
-        if ! confirm_action "Avez vous résolu et commité la résolution de conflit ?" "y"; then
-            echo "Opération annulée."
-            git cherry-pick --abort
-            exit_safe 1
-        fi
+    if git cherry-pick "$commit" --allow-empty; then
+      return 0
     fi
+
+    # Le cherry-pick a échoué : un conflit doit être résolu.
+    echo ""
+    printf "%sErreur lors du cherry-pick du commit %s. Conflit détecté.%s\n" \
+      "$(tput setaf 1)" "$commit" "$(tput sgr0)"
+
+    # Un conflit réclame une intervention humaine : il est hors de question de
+    # le "valider" tout seul en mode non interactif.
+    if [[ $JGIT_NO_INTERACTION == true ]]; then
+      printf "%sLe mode --no-interaction ne permet pas de résoudre un conflit.%s\n" \
+        "$(tput setaf 1)" "$(tput sgr0)"
+      printf "%sRelancez la même commande sans --no-interaction pour traiter ce conflit à la main.%s\n" \
+        "$(tput setaf 1)" "$(tput sgr0)"
+      git cherry-pick --abort >/dev/null 2>&1
+      return 1
+    fi
+
+    printf "%sMerci de ne rien faire ici tant que le conflit n'est pas résolu et commité%s\n" \
+      "$(tput setaf 1)" "$(tput sgr0)"
+
+    # Demander confirmation à l'utilisateur
+    if ! confirm_action "Avez vous résolu et commité la résolution de conflit ?" "y"; then
+        echo "Opération annulée."
+        git cherry-pick --abort >/dev/null 2>&1
+        return 1
+    fi
+
+    return 0
 }
 
 # Permet d'afficher le git log bien présenté depuis le dernier noeud en commun avec la $reference_branch et avec les couleurs et l'arbres des commits

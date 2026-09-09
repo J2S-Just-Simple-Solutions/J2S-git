@@ -53,6 +53,7 @@ Pour adapter ces réglages à un projet précis, créez un fichier `.jgit/conf_l
 j2s_remote="origin"
 branch_prod="master2"
 branch_preprod="develop2"
+squash_threshold=8
 ```
 
 Ce fichier sera automatiquement chargé par `jgit.sh` et aura priorité sur les valeurs par défaut.
@@ -78,8 +79,9 @@ jgit <scope> <action> [<cible>] [options...]
 - `--based-on <branche>` : force la branche de référence lors d'un `start` ou d'un `rebase`.
 - `--from <branche>` : ajoute une source à fusionner (option répétable).
 - `--into <branche>` : définit explicitement la branche de destination.
-- `--yes` (`-y`) : accepte toutes les confirmations.
+- `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune (celle signalée par la majuscule dans le suffixe `(y/N)`). Un conflit de rebase, qui exige une intervention humaine, n'est jamais validé automatiquement : la commande s'arrête proprement (voir ci-dessous).
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
+- `--squash` : lors d'un `rebase`, squash tous les commits de la branche de travail en un seul avant de rejouer l'historique.
 - `jgit help` / `jgit -h` : affiche l'aide complète.
 
 ## Commandes par scope
@@ -88,7 +90,31 @@ jgit <scope> <action> [<cible>] [options...]
 
 - `jgit feature start <ticket> [--based-on <branche>] [--no-open]` : crée ou reprend la branche `feature/<ticket>` et sa branche PR `__PR__feature/<ticket>`, pousse les commits d'initialisation et ouvre la PR (sauf `--no-open`). Identique avec `hotfix`.
 - `jgit feature restart <ticket> [--no-open]` : recrée la branche de travail depuis la branche PR après vérification de l'alignement du code, supprime l'ancienne branche distante et ré-ouvre la PR si nécessaire.
-- `jgit feature rebase <ticket> [--based-on <branche>]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`.
+- `jgit feature rebase <ticket> [--based-on <branche>] [--squash]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`.
+
+#### Squash avant rebase
+
+Le rebase rejoue les commits un par un : chaque commit peut donc générer son propre conflit. Sur une PR volumineuse, cela devient vite fastidieux.
+
+L'option `--squash` regroupe, avant le rebase, tous les commits de la branche de travail postérieurs au commit d'initialisation `jgit` en un unique commit : il ne reste alors **qu'un seul conflit à résoudre**. Le code n'est jamais modifié (`git reset --soft`), seul l'historique de la branche est réécrit.
+
+```bash
+jgit feature rebase MONPROJET-123 --squash
+```
+
+Le message du nouveau commit est demandé de façon interactive ; laisser la saisie vide reprend le message du premier commit squashé (le message est repris automatiquement avec `--no-interaction`).
+
+Sans l'option, si la branche contient plus de 8 commits, `jgit` vous le rappelle et propose le squash. La réponse par défaut est **non** : le squash reste une décision explicite, valider sans rien saisir conserve l'historique complet. Le seuil est modifiable via `squash_threshold` dans `.jgit/conf_local.sh`.
+
+Pour la même raison, `--no-interaction` ne déclenche jamais le squash : il applique la réponse par défaut, donc conserve tous les commits.
+
+Le squash n'est appliqué localement qu'après votre validation, et l'historique initial est restauré si vous interrompez le rebase à l'écran de confirmation.
+
+#### Conflits pendant un rebase
+
+Le rebase rejoue les commits par cherry-pick : en cas de conflit, `jgit` s'interrompt et vous laisse le résoudre puis le commiter dans un autre terminal avant de reprendre.
+
+Avec `--no-interaction`, un conflit ne peut pas être résolu : la commande s'arrête sur un message d'erreur explicite après avoir remis l'environnement en ordre — cherry-pick abandonné, branches temporaires `jgit_rebase_*` supprimées, historique de la branche de travail restauré si un squash avait été appliqué. Le remote n'étant poussé qu'en toute fin de rebase, il reste intact. Relancez alors la commande sans `--no-interaction` pour traiter le conflit à la main.
 
 ### Release
 
@@ -101,7 +127,7 @@ jgit <scope> <action> [<cible>] [options...]
 - `jgit demo start [<nom_demo>] [--based-on <branche>]` : prépare une branche `demo_<nom>` existante (checkout + fast-forward) ou en crée une nouvelle à partir de la branche fournie après confirmation.
 - `jgit demo merge [--into <branche_demo>] --from feature/<ticket> [--from hotfix/<ticket>]...` : fusionne successivement chaque branche listée dans la démo cible (branche courante par défaut) en conservant un historique linéaire.
 - `jgit demo list` : parcourt les commits `[jgit] DEMO …`, affiche les branches déjà fusionnées et suggère les commandes `jgit release merge --from ...` correspondantes.
-- `jgit demo remove [--yes]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
+- `jgit demo remove [--no-interaction]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
 
 ### Utilitaires
 
