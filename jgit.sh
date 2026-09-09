@@ -1,6 +1,7 @@
 source "$(dirname "$0")/feature.sh"
 source "$(dirname "$0")/release.sh"
 source "$(dirname "$0")/rebase.sh"
+source "$(dirname "$0")/demo.sh"
 
 ####################################
 #
@@ -55,6 +56,18 @@ help() {
     printf "    → Ferme la release en cours : fusion de la branche release,\n"
     printf "      création du tag et publication sur GitHub.\n\n"
 
+    printf "  jgit \033[1;32mdemo\033[0m start \033[1;36m[demo_name]\033[0m \033[38;5;214m[OPTIONAL]\033[0m --based-on \033[1;36m<branch_name>\033[0m\n"
+    printf "    → Crée ou reprend une branche de démo (prefixée demo_).\n\n"
+
+    printf "  jgit \033[1;32mdemo\033[0m merge \033[1;36m<branch_name>\033[0m\n"
+    printf "    → Injecte la branche indiquée dans la démo courante.\n\n"
+
+    printf "  jgit \033[1;32mdemo\033[0m list\n"
+    printf "    → Liste les features mergées dans la démo.\n\n"
+
+    printf "  jgit \033[1;32mdemo\033[0m remove\n"
+    printf "    → Supprime la branche de démo courante en local et sur le remote.\n\n"
+
     printf "  jgit \033[1;32mclean\033[0m\n"
     printf "    → Nettoie les branches locales temporaires comme les branches de rebase et __PR__.\n\n"
 
@@ -72,6 +85,7 @@ help() {
 JGIT_TYPE=$1
 JGIT_ACTION=$2
 JGIT_NAME=$3
+JGIT_TARGET=$4
 JGIT_BASED_ON=""  # Valeur par défaut
 
 
@@ -146,6 +160,35 @@ elif [[ $JGIT_TYPE == "release" ]]; then
         fi
         branch_PR=$prefix_PR$JGIT_NAME
         release_merge;
+    else
+        echo "argument $JGIT_ACTION not supported"
+        exit_safe 1
+    fi
+elif [[ $JGIT_TYPE == "demo" ]]; then
+    if [[ -z $JGIT_ACTION ]]; then
+        help
+    fi
+
+    if [[ $JGIT_ACTION == "start" ]]; then
+        verify_stash
+        demo_start "$JGIT_NAME" "$JGIT_BASED_ON"
+    elif [[ $JGIT_ACTION == "merge" ]]; then
+        if [[ $JGIT_NAME == "feature" ]]; then
+            if [[ -z $JGIT_TARGET ]]; then
+                echo "Please set a feature name as fourth argument"
+                exit_safe 1
+            fi
+            verify_stash
+            demo_merge_feature "$JGIT_TARGET"
+        else
+            echo "argument $JGIT_NAME not supported"
+            exit_safe 1
+        fi
+    elif [[ $JGIT_ACTION == "list" ]]; then
+        demo_list
+    elif [[ $JGIT_ACTION == "remove" ]]; then
+        verify_stash
+        demo_remove
     else
         echo "argument $JGIT_ACTION not supported"
         exit_safe 1

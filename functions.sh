@@ -49,13 +49,8 @@ verify_stash() {
 #
 # Si la branche de référence n'existe pas une erreur est lancée.
 get_reference_branch() {
-    local feature_type=$1
+    local feature_type=${1:-feature}
     local fallback_branches=("develop" "master" "main")
-
-    if [ -z "$feature_type" ]; then
-        echo "Erreur: Aucun feature_type fourni."
-        exit_safe 1
-    fi
 
     # Vérifier la branche en fonction du type de feature
     if [ "$feature_type" == "hotfix" ] && git rev-parse --verify "$branch_prod" >/dev/null 2>&1; then
