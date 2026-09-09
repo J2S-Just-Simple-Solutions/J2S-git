@@ -15,6 +15,8 @@ source "$(dirname "$0")/demo.sh"
 j2s_remote="origin"
 branch_prod="main"
 branch_preprod="develop"
+# Nombre de commits de travail au delà duquel un rebase propose spontanément le squash.
+squash_threshold=8
 
 FILE=.jgit/conf_local.sh
 if test -f "$FILE"; then
@@ -34,8 +36,10 @@ prefix_commit="[jgit]"
 prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit="[empty_commit]"
 
-JGIT_AUTO_YES=false
+JGIT_NO_INTERACTION=false
 JGIT_NO_OPEN=false
+JGIT_SQUASH=false
+JGIT_SQUASH_THRESHOLD=$squash_threshold
 JGIT_BASED_ON_OVERRIDE=""
 JGIT_INTO_TARGET=""
 declare -a JGIT_FROM_SOURCES=()
@@ -56,14 +60,15 @@ help() {
     printf "  --based-on <branch>   Branche de référence pour les créations / rebase.\n"
     printf "  --from <branch>       Source d'un merge (répétable).\n"
     printf "  --into <branch>       Destination explicite d'un merge.\n"
-    printf "  --yes                 Valide automatiquement les confirmations.\n"
+    printf "  --no-interaction      Ne pose aucune question et applique les réponses par défaut.\n"
     printf "  --no-open             N'ouvre pas automatiquement la PR.\n"
+    printf "  --squash              Squash les commits de la branche en un seul avant le rebase.\n"
     printf "  -h | --help           Affiche cette aide.\n\n"
 
     printf "\033[1;34mFeature & Hotfix:\033[0m\n"
     printf "  jgit feature start <ticket> [--based-on <branch>] [--no-open]\n"
     printf "  jgit feature restart <ticket>\n"
-    printf "  jgit feature rebase <ticket> [--based-on <branch>]\n"
+    printf "  jgit feature rebase <ticket> [--based-on <branch>] [--squash]\n"
     printf "  (idem avec hotfix)\n\n"
 
     printf "\033[1;34mRelease:\033[0m\n"
@@ -75,7 +80,7 @@ help() {
     printf "  jgit demo start [<demo_name>] [--based-on <branch>]\n"
     printf "  jgit demo merge [--from feature/<ticket>]... [--into <branch>]\n"
     printf "  jgit demo list\n"
-    printf "  jgit demo remove [--yes]\n\n"
+    printf "  jgit demo remove [--no-interaction]\n\n"
 
     printf "\033[1;34mUtility:\033[0m\n"
     printf "  jgit util clean\n\n"
@@ -135,12 +140,16 @@ while [[ $# -gt 0 ]]; do
             JGIT_INTO_TARGET="$2"
             shift 2
             ;;
-        --yes|-y)
-            JGIT_AUTO_YES=true
+        --no-interaction)
+            JGIT_NO_INTERACTION=true
             shift
             ;;
         --no-open)
             JGIT_NO_OPEN=true
+            shift
+            ;;
+        --squash)
+            JGIT_SQUASH=true
             shift
             ;;
         --help)

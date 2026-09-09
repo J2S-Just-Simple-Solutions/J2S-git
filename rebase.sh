@@ -1,6 +1,35 @@
 #!/bin/bash
 source "$(dirname "$0")/functions.sh"
 
+# Annule un rebase interrompu et restaure l'état local d'avant la commande :
+# abandon du cherry-pick, suppression des branches temporaires et retour à
+# l'historique initial de la branche de travail si un squash avait été appliqué.
+# Le remote n'ayant pas encore été poussé à ce stade, il reste intact.
+abort_rebase() {
+    local branch="$1"
+    local reference_branch="$2"
+    local branch_rebase="$3"
+    local branch_PR_rebase="$4"
+    local original_head="$5"
+    local squash_done="$6"
+
+    git cherry-pick --abort >/dev/null 2>&1
+    git checkout -f "$reference_branch" --quiet 2>/dev/null
+
+    if [[ "$squash_done" == true ]]; then
+        echo "Restauration de l'historique initial de $branch (annulation du squash)."
+        git checkout -f "$branch" --quiet
+        git reset --hard "$original_head" --quiet
+        git checkout -f "$reference_branch" --quiet
+    fi
+
+    git branch -D "$branch_rebase" --quiet 2>/dev/null
+    git branch -D "$branch_PR_rebase" --quiet 2>/dev/null
+
+    printf "%sLe rebase a été annulé, l'état local est restauré et le remote n'a pas été modifié.%s\n" \
+        "$(tput setaf 1)" "$(tput sgr0)"
+}
+
 feature_rebase() {
     local feature_type=$1
     local feature_name=$2
@@ -124,6 +153,53 @@ feature_rebase() {
     fi
 
     git checkout $branch --quiet
+
+    ##################################################
+    # Squash optionnel des commits de la branche de travail
+    # Un seul commit à rebaser = un seul conflit à résoudre.
+    ##################################################
+    local original_head
+    original_head=$(git rev-parse HEAD)
+    local squash_done=false
+
+    local squash_base_index
+    squash_base_index=$(find_last_init_commit_index "${commits[@]}")
+
+    if [[ $squash_base_index -ge 0 ]]; then
+        local squashable_count=$(( ${#commits[@]} - squash_base_index - 1 ))
+
+        if [[ $squashable_count -le 1 ]]; then
+            if [[ $JGIT_SQUASH == true ]]; then
+                echo "Rien à squasher : la branche $branch ne contient qu'un seul commit de travail."
+            fi
+        else
+            local do_squash=$JGIT_SQUASH
+
+            if [[ $do_squash == false && $squashable_count -gt $JGIT_SQUASH_THRESHOLD ]]; then
+                # Simple rappel de l'existence de --squash : sans demande explicite,
+                # le rebase reprend l'historique complet.
+                printf "%sLa branche %s%s%s%s contient %s commits de travail.%s\n" \
+                    "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)" "$(tput setaf 2)" "$squashable_count" "$(tput sgr0)"
+                printf "%sLes squasher en un seul commit (option %s--squash%s%s) limiterait les conflits à résoudre à un seul.%s\n" \
+                    "$(tput setaf 2)" "$(tput setaf 1)" "$(tput sgr0)" "$(tput setaf 2)" "$(tput sgr0)"
+
+                if confirm_action "Souhaitez-vous squasher ces commits avant le rebase ?" "n"; then
+                    do_squash=true
+                fi
+            fi
+
+            if [[ $do_squash == true ]]; then
+                if ! squash_commits_after "${commits[$squash_base_index]}" "${commits[$((squash_base_index + 1))]}"; then
+                    git reset --hard "$original_head" --quiet
+                    exit_safe 1
+                fi
+                squash_done=true
+                # L'historique local vient d'être réécrit, on recalcule la liste des commits à reprendre.
+                commits=($(git rev-list "$branch_PR..$branch" | tail -r))
+            fi
+        fi
+    fi
+
     printf "%sjgit va reprendre, dans l'ordre, tous les commits ci-dessous qui existe dans la branche locale %s%s%s\n" "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"
     
     for commit in "${commits[@]}"; do
@@ -136,6 +212,10 @@ feature_rebase() {
     # Demander confirmation à l'utilisateur
     if ! confirm_action "Souhaitez-vous continuer ?" "y"; then
         echo "Opération annulée."
+        if [[ $squash_done == true ]]; then
+            echo "Annulation du squash : restauration de l'historique initial de $branch."
+            git reset --hard "$original_head" --quiet
+        fi
         exit_safe 1
     fi
 
@@ -150,12 +230,18 @@ feature_rebase() {
     # rebase de la branche PR par application des commits déjà présents sur l'ancienne branche PR en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
     checkout_or_create_branch $branch_PR_rebase
-    cherry_pick_commits "${commits_on_PR[@]}"
+    if ! cherry_pick_commits "${commits_on_PR[@]}"; then
+        abort_rebase "$branch" "$reference_branch" "$branch_rebase" "$branch_PR_rebase" "$original_head" "$squash_done"
+        exit_safe 1
+    fi
 
     # rebase de la branche principal par application de tous les commits en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
     checkout_or_create_branch $branch_rebase
-    cherry_pick_commits "${commits[@]}"
+    if ! cherry_pick_commits "${commits[@]}"; then
+        abort_rebase "$branch" "$reference_branch" "$branch_rebase" "$branch_PR_rebase" "$original_head" "$squash_done"
+        exit_safe 1
+    fi
 
     # On vient écraser les branches historiques par les branches que l'on vient de rebase
     git checkout $reference_branch
