@@ -58,6 +58,32 @@ confirm_action() {
   return 1
 }
 
+# Résout un nom de branche/réf en une référence git exploitable.
+resolve_git_ref() {
+  local ref="$1"
+
+  if [[ -z "$ref" ]]; then
+    return 1
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/$ref"; then
+    echo "$ref"
+    return 0
+  fi
+
+  if git show-ref --verify --quiet "refs/remotes/$ref"; then
+    echo "$ref"
+    return 0
+  fi
+
+  if git show-ref --verify --quiet "$ref"; then
+    echo "$ref"
+    return 0
+  fi
+
+  return 1
+}
+
 # fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
 exit_safe() {
     local exit_code=${1:-0}
@@ -305,7 +331,7 @@ checkout_if_exists() {
 clean_branches() {
   # Récupérer toutes les branches locales correspondant aux préfixes
   local branches_to_delete
-  branches_to_delete=$(git branch | grep -E "^\s*(jgit_rebase_|__PR__)")
+  branches_to_delete=$(git branch | grep -E "^\s*(jgit_rebase_|__PR__|jgit_verify_rebase)")
 
   # Vérifier si des branches correspondent
   if [[ -z "$branches_to_delete" ]]; then
@@ -323,6 +349,97 @@ clean_branches() {
   done <<< "$branches_to_delete"
 
   echo "Suppression terminée."
+}
+
+util_verify_rebase() {
+  local target_branch="$1"
+  shift || true
+  local sources=("$@")
+
+  if [[ -z "$target_branch" ]]; then
+    echo "Erreur : veuillez préciser la branche cible avec --into." >&2
+    echo "false"
+    return 1
+  fi
+
+  if [[ ${#sources[@]} -ne 1 ]]; then
+    echo "Erreur : veuillez fournir exactement une branche source via --from." >&2
+    echo "false"
+    return 1
+  fi
+
+  if [[ -n $(git status --porcelain) ]]; then
+    echo "Erreur : l'espace de travail contient des modifications. Nettoyez-le avant de lancer la vérification." >&2
+    echo "false"
+    return 1
+  fi
+
+  local source_branch="${sources[0]}"
+  local source_ref
+  local target_ref
+
+  source_ref=$(resolve_git_ref "$source_branch") || {
+    echo "Erreur : la branche source '$source_branch' est introuvable." >&2
+    echo "false"
+    return 1
+  }
+
+  target_ref=$(resolve_git_ref "$target_branch") || {
+    echo "Erreur : la branche cible '$target_branch' est introuvable." >&2
+    echo "false"
+    return 1
+  }
+
+  if [[ "$source_ref" == "$target_ref" ]]; then
+    echo "true"
+    return 0
+  fi
+
+  local start_branch
+  start_branch=$(git rev-parse --abbrev-ref HEAD)
+
+  local sanitized_source sanitized_target
+  sanitized_source=$(echo "$source_branch" | sed 's/[^A-Za-z0-9._-]/_/g')
+  sanitized_target=$(echo "$target_branch" | sed 's/[^A-Za-z0-9._-]/_/g')
+  local temp_branch="jgit_verify_rebase_${sanitized_source}_onto_${sanitized_target}_$$"
+
+  if git show-ref --verify --quiet "refs/heads/$temp_branch"; then
+    git branch -D "$temp_branch" >/dev/null 2>&1 || {
+      echo "Erreur : impossible de nettoyer la branche temporaire existante '$temp_branch'." >&2
+      echo "false"
+      return 1
+    }
+  fi
+
+  if ! git branch "$temp_branch" "$source_ref" >/dev/null 2>&1; then
+    echo "Erreur : impossible de créer la branche temporaire '$temp_branch'." >&2
+    echo "false"
+    return 1
+  fi
+
+  if ! git checkout --quiet "$temp_branch"; then
+    git branch -D "$temp_branch" >/dev/null 2>&1 || true
+    echo "Erreur : impossible de basculer sur la branche temporaire." >&2
+    echo "false"
+    return 1
+  fi
+
+  local rebase_ok=true
+  if ! git rebase --quiet "$target_ref"; then
+    rebase_ok=false
+    git rebase --abort >/dev/null 2>&1 || true
+  fi
+
+  git checkout --quiet "$start_branch" >/dev/null 2>&1 || true
+  git branch -D "$temp_branch" >/dev/null 2>&1 || true
+
+  if [[ "$rebase_ok" == true ]]; then
+    echo "true"
+    return 0
+  else
+    echo "false"
+    return 1
+  fi
 }
 
 branches_have_same_code() {

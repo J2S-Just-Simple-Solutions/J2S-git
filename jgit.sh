@@ -78,7 +78,8 @@ help() {
     printf "  jgit demo remove [--yes]\n\n"
 
     printf "\033[1;34mUtility:\033[0m\n"
-    printf "  jgit util clean\n\n"
+    printf "  jgit util clean\n"
+    printf "  jgit util verify_rebase --from <branche_source> --into <branche_cible>\n\n"
 }
 
 require_argument() {
@@ -298,12 +299,19 @@ case "$JGIT_TYPE" in
         esac
         ;;
     util)
-        if [[ "$JGIT_ACTION" == "clean" ]]; then
-            clean_branches
-        else
-            printf "\033[1;31mAction '%s' non supportée pour util.\033[0m\n" "$JGIT_ACTION" >&2
-            exit_safe 1
-        fi
+        case "$JGIT_ACTION" in
+            clean)
+                clean_branches
+                ;;
+            verify_rebase)
+                util_verify_rebase "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
+                exit $?
+                ;;
+            *)
+                printf "\033[1;31mAction '%s' non supportée pour util.\033[0m\n" "$JGIT_ACTION" >&2
+                exit_safe 1
+                ;;
+        esac
         ;;
     *)
         printf "\033[1;31mScope '%s' non supporté.\033[0m\n" "$JGIT_TYPE" >&2

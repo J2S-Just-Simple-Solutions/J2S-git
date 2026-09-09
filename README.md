@@ -106,3 +106,4 @@ jgit <scope> <action> [<cible>] [options...]
 ### Utilitaires
 
 - `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `__PR__*`).
+- `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
