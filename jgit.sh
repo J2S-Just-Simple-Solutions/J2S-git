@@ -34,7 +34,7 @@ prefix_commit="[jgit]"
 prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit="[empty_commit]"
 
-JGIT_AUTO_YES=false
+JGIT_NO_INTERACTION=false
 JGIT_NO_OPEN=false
 JGIT_BASED_ON_OVERRIDE=""
 JGIT_INTO_TARGET=""
@@ -56,7 +56,7 @@ help() {
     printf "  --based-on <branch>   Branche de référence pour les créations / rebase.\n"
     printf "  --from <branch>       Source d'un merge (répétable).\n"
     printf "  --into <branch>       Destination explicite d'un merge.\n"
-    printf "  --yes                 Valide automatiquement les confirmations.\n"
+    printf "  --no-interaction      Ne pose aucune question et applique les réponses par défaut.\n"
     printf "  --no-open             N'ouvre pas automatiquement la PR.\n"
     printf "  -h | --help           Affiche cette aide.\n\n"
 
@@ -75,7 +75,7 @@ help() {
     printf "  jgit demo start [<demo_name>] [--based-on <branch>]\n"
     printf "  jgit demo merge [--from feature/<ticket>]... [--into <branch>]\n"
     printf "  jgit demo list\n"
-    printf "  jgit demo remove [--yes]\n\n"
+    printf "  jgit demo remove [--no-interaction]\n\n"
 
     printf "\033[1;34mUtility:\033[0m\n"
     printf "  jgit util clean\n"
@@ -136,8 +136,8 @@ while [[ $# -gt 0 ]]; do
             JGIT_INTO_TARGET="$2"
             shift 2
             ;;
-        --yes|-y)
-            JGIT_AUTO_YES=true
+        --no-interaction)
+            JGIT_NO_INTERACTION=true
             shift
             ;;
         --no-open)

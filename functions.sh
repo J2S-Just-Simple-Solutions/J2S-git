@@ -8,8 +8,8 @@
 
 # Valeurs par défaut pour les options globales lorsque le script est
 # exécuté directement (les variables sont normalement définies dans jgit.sh).
-if [[ -z "${JGIT_AUTO_YES+x}" ]]; then
-  JGIT_AUTO_YES=false
+if [[ -z "${JGIT_NO_INTERACTION+x}" ]]; then
+  JGIT_NO_INTERACTION=false
 fi
 
 if [[ -z "${JGIT_NO_OPEN+x}" ]]; then
@@ -30,17 +30,21 @@ confirm_action() {
   local prompt="$1"
   local default_response=${2:-"y"}
 
-  if [[ $JGIT_AUTO_YES == true ]]; then
-    echo "[auto-confirm] $prompt"
-    return 0
+  # En mode non interactif on applique la réponse par défaut de la question,
+  # qui n'est pas forcément "oui".
+  if [[ $JGIT_NO_INTERACTION == true ]]; then
+    echo "[no-interaction] $prompt -> $default_response"
+    if [[ "$default_response" == "y" ]]; then
+      return 0
+    fi
+    return 1
   fi
 
+  # La réponse par défaut (celle appliquée si l'utilisateur valide sans rien saisir)
+  # est signalée par la majuscule dans le suffixe.
   local suffix="(y/n)"
-  local expected="y"
-
   if [[ "$default_response" == "n" ]]; then
-    suffix="(n/y)"
-    expected="n"
+    suffix="(y/N)"
   fi
 
   local user_input
@@ -51,7 +55,7 @@ confirm_action() {
     user_input="$default_response"
   fi
 
-  if [[ "$user_input" == "$expected" ]]; then
+  if [[ "$user_input" == "y" ]]; then
     return 0
   fi
 

@@ -78,7 +78,7 @@ jgit <scope> <action> [<cible>] [options...]
 - `--based-on <branche>` : force la branche de référence lors d'un `start` ou d'un `rebase`.
 - `--from <branche>` : ajoute une source à fusionner (option répétable).
 - `--into <branche>` : définit explicitement la branche de destination.
-- `--yes` (`-y`) : accepte toutes les confirmations.
+- `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune (celle signalée par la majuscule dans le suffixe `(y/N)`).
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
 - `jgit help` / `jgit -h` : affiche l'aide complète.
 
@@ -101,7 +101,7 @@ jgit <scope> <action> [<cible>] [options...]
 - `jgit demo start [<nom_demo>] [--based-on <branche>]` : prépare une branche `demo_<nom>` existante (checkout + fast-forward) ou en crée une nouvelle à partir de la branche fournie après confirmation.
 - `jgit demo merge [--into <branche_demo>] --from feature/<ticket> [--from hotfix/<ticket>]...` : fusionne successivement chaque branche listée dans la démo cible (branche courante par défaut) en conservant un historique linéaire.
 - `jgit demo list` : parcourt les commits `[jgit] DEMO …`, affiche les branches déjà fusionnées et suggère les commandes `jgit release merge --from ...` correspondantes.
-- `jgit demo remove [--yes]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
+- `jgit demo remove [--no-interaction]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
 
 ### Utilitaires
 
