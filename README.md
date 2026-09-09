@@ -53,6 +53,7 @@ Pour adapter ces réglages à un projet précis, créez un fichier `.jgit/conf_l
 j2s_remote="origin"
 branch_prod="master2"
 branch_preprod="develop2"
+squash_threshold=8
 ```
 
 Ce fichier sera automatiquement chargé par `jgit.sh` et aura priorité sur les valeurs par défaut.
@@ -80,6 +81,7 @@ jgit <scope> <action> [<cible>] [options...]
 - `--into <branche>` : définit explicitement la branche de destination.
 - `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune (celle signalée par la majuscule dans le suffixe `(y/N)`).
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
+- `--squash` : lors d'un `rebase`, squash tous les commits de la branche de travail en un seul avant de rejouer l'historique.
 - `jgit help` / `jgit -h` : affiche l'aide complète.
 
 ## Commandes par scope
@@ -88,7 +90,25 @@ jgit <scope> <action> [<cible>] [options...]
 
 - `jgit feature start <ticket> [--based-on <branche>] [--no-open]` : crée ou reprend la branche `feature/<ticket>` et sa branche PR `__PR__feature/<ticket>`, pousse les commits d'initialisation et ouvre la PR (sauf `--no-open`). Identique avec `hotfix`.
 - `jgit feature restart <ticket> [--no-open]` : recrée la branche de travail depuis la branche PR après vérification de l'alignement du code, supprime l'ancienne branche distante et ré-ouvre la PR si nécessaire.
-- `jgit feature rebase <ticket> [--based-on <branche>]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`.
+- `jgit feature rebase <ticket> [--based-on <branche>] [--squash]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`.
+
+#### Squash avant rebase
+
+Le rebase rejoue les commits un par un : chaque commit peut donc générer son propre conflit. Sur une PR volumineuse, cela devient vite fastidieux.
+
+L'option `--squash` regroupe, avant le rebase, tous les commits de la branche de travail postérieurs au commit d'initialisation `jgit` en un unique commit : il ne reste alors **qu'un seul conflit à résoudre**. Le code n'est jamais modifié (`git reset --soft`), seul l'historique de la branche est réécrit.
+
+```bash
+jgit feature rebase MONPROJET-123 --squash
+```
+
+Le message du nouveau commit est demandé de façon interactive ; laisser la saisie vide reprend le message du premier commit squashé (le message est repris automatiquement avec `--no-interaction`).
+
+Sans l'option, si la branche contient plus de 8 commits, `jgit` vous le rappelle et propose le squash. La réponse par défaut est **non** : le squash reste une décision explicite, valider sans rien saisir conserve l'historique complet. Le seuil est modifiable via `squash_threshold` dans `.jgit/conf_local.sh`.
+
+Pour la même raison, `--no-interaction` ne déclenche jamais le squash : il applique la réponse par défaut, donc conserve tous les commits.
+
+Le squash n'est appliqué localement qu'après votre validation, et l'historique initial est restauré si vous interrompez le rebase à l'écran de confirmation.
 
 ### Release
 

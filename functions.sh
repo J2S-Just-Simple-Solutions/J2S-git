@@ -20,6 +20,14 @@ if [[ -z "${JGIT_BASED_ON_OVERRIDE+x}" ]]; then
   JGIT_BASED_ON_OVERRIDE=""
 fi
 
+if [[ -z "${JGIT_SQUASH+x}" ]]; then
+  JGIT_SQUASH=false
+fi
+
+if [[ -z "${JGIT_SQUASH_THRESHOLD+x}" ]]; then
+  JGIT_SQUASH_THRESHOLD=8
+fi
+
 declare -a JGIT_FROM_SOURCES
 
 ###############################################
@@ -176,6 +184,73 @@ list_commits_since() {
   git log --reverse --pretty=format:"%H" "$start_commit^..HEAD"
 }
 
+###############################################
+#            Squash des commits
+###############################################
+
+# Renvoie l'index (base 0) du dernier commit d'init jgit (commit vide) trouvé dans la
+# liste de commits fournie (ordonnée du plus ancien au plus récent).
+# Renvoie -1 si aucun commit d'init n'est présent dans la liste.
+find_last_init_commit_index() {
+  local commits=("$@")
+  local index=-1
+  local i
+
+  for i in "${!commits[@]}"; do
+    local subject
+    subject=$(git log -n 1 --pretty=format:"%s" "${commits[$i]}" 2>/dev/null)
+    if [[ "$subject" == *"$suffix_init_commit"* ]]; then
+      index=$i
+    fi
+  done
+
+  echo "$index"
+}
+
+# Squash en un seul commit tous les commits de la branche courante postérieurs à
+# $base_commit. Le message est demandé à l'utilisateur, le message de $first_commit
+# (le premier commit squashé) servant de valeur par défaut.
+squash_commits_after() {
+  local base_commit="$1"
+  local first_commit="$2"
+
+  if [[ -z "$base_commit" || -z "$first_commit" ]]; then
+    printf "\033[1;31mErreur : squash impossible, commit de base ou premier commit manquant.\033[0m\n" >&2
+    return 1
+  fi
+
+  local default_message
+  default_message=$(git log -n 1 --pretty=format:"%s" "$first_commit" 2>/dev/null)
+
+  local message=""
+  if [[ $JGIT_NO_INTERACTION == true ]]; then
+    echo "[no-interaction] Message du commit squashé : $default_message"
+  else
+    printf "%sMessage du commit squashé (Entrée pour conserver « %s ») :%s\n" \
+      "$(tput setaf 2)" "$default_message" "$(tput sgr0)"
+    read -r -p "> " message
+  fi
+
+  if [[ -z "$message" ]]; then
+    message="$default_message"
+  fi
+
+  # reset --soft : on conserve l'intégralité du code, seul l'historique est réécrit.
+  if ! git reset --soft "$base_commit" --quiet; then
+    printf "\033[1;31mErreur : impossible de repositionner la branche sur %s.\033[0m\n" "$base_commit" >&2
+    return 1
+  fi
+
+  if ! git commit --allow-empty -m "$message" --quiet; then
+    printf "\033[1;31mErreur : le squash des commits a échoué.\033[0m\n" >&2
+    return 1
+  fi
+
+  printf "%sCommits squashés dans un unique commit : %s%s\n" "$(tput setaf 2)" "$message" "$(tput sgr0)"
+  return 0
+}
+
+# Fonction pour effectuer un cherry-pick sur chaque commit du tableau
 # Fonction pour effectuer un cherry-pick sur chaque commit du tableau
 cherry_pick_commits() {
   local commits=("$@")

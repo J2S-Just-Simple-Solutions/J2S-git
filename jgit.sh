@@ -15,6 +15,8 @@ source "$(dirname "$0")/demo.sh"
 j2s_remote="origin"
 branch_prod="main"
 branch_preprod="develop"
+# Nombre de commits de travail au delà duquel un rebase propose spontanément le squash.
+squash_threshold=8
 
 FILE=.jgit/conf_local.sh
 if test -f "$FILE"; then
@@ -35,6 +37,8 @@ prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit="[empty_commit]"
 
 JGIT_NO_INTERACTION=false
+JGIT_SQUASH=false
+JGIT_SQUASH_THRESHOLD=$squash_threshold
 JGIT_NO_OPEN=false
 JGIT_BASED_ON_OVERRIDE=""
 JGIT_INTO_TARGET=""
@@ -58,12 +62,13 @@ help() {
     printf "  --into <branch>       Destination explicite d'un merge.\n"
     printf "  --no-interaction      Ne pose aucune question et applique les réponses par défaut.\n"
     printf "  --no-open             N'ouvre pas automatiquement la PR.\n"
+    printf "  --squash              Squash les commits de la branche en un seul avant le rebase.\n"
     printf "  -h | --help           Affiche cette aide.\n\n"
 
     printf "\033[1;34mFeature & Hotfix:\033[0m\n"
     printf "  jgit feature start <ticket> [--based-on <branch>] [--no-open]\n"
     printf "  jgit feature restart <ticket>\n"
-    printf "  jgit feature rebase <ticket> [--based-on <branch>]\n"
+    printf "  jgit feature rebase <ticket> [--based-on <branch>] [--squash]\n"
     printf "  (idem avec hotfix)\n\n"
 
     printf "\033[1;34mRelease:\033[0m\n"
@@ -142,6 +147,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-open)
             JGIT_NO_OPEN=true
+            shift
+            ;;
+        --squash)
+            JGIT_SQUASH=true
             shift
             ;;
         --help)
