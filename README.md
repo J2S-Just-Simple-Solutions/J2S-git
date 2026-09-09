@@ -79,7 +79,7 @@ jgit <scope> <action> [<cible>] [options...]
 - `--based-on <branche>` : force la branche de référence lors d'un `start` ou d'un `rebase`.
 - `--from <branche>` : ajoute une source à fusionner (option répétable).
 - `--into <branche>` : définit explicitement la branche de destination.
-- `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune (celle signalée par la majuscule dans le suffixe `(y/N)`).
+- `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune (celle signalée par la majuscule dans le suffixe `(y/N)`). Un conflit de rebase, qui exige une intervention humaine, n'est jamais validé automatiquement : la commande s'arrête proprement (voir ci-dessous).
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
 - `--squash` : lors d'un `rebase`, squash tous les commits de la branche de travail en un seul avant de rejouer l'historique.
 - `jgit help` / `jgit -h` : affiche l'aide complète.
@@ -109,6 +109,12 @@ Sans l'option, si la branche contient plus de 8 commits, `jgit` vous le rappelle
 Pour la même raison, `--no-interaction` ne déclenche jamais le squash : il applique la réponse par défaut, donc conserve tous les commits.
 
 Le squash n'est appliqué localement qu'après votre validation, et l'historique initial est restauré si vous interrompez le rebase à l'écran de confirmation.
+
+#### Conflits pendant un rebase
+
+Le rebase rejoue les commits par cherry-pick : en cas de conflit, `jgit` s'interrompt et vous laisse le résoudre puis le commiter dans un autre terminal avant de reprendre.
+
+Avec `--no-interaction`, un conflit ne peut pas être résolu : la commande s'arrête sur un message d'erreur explicite après avoir remis l'environnement en ordre — cherry-pick abandonné, branches temporaires `jgit_rebase_*` supprimées, historique de la branche de travail restauré si un squash avait été appliqué. Le remote n'étant poussé qu'en toute fin de rebase, il reste intact. Relancez alors la commande sans `--no-interaction` pour traiter le conflit à la main.
 
 ### Release
 

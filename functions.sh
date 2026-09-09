@@ -251,43 +251,63 @@ squash_commits_after() {
 }
 
 # Fonction pour effectuer un cherry-pick sur chaque commit du tableau
-# Fonction pour effectuer un cherry-pick sur chaque commit du tableau
+# Renvoie 1 dès qu'un cherry-pick n'a pas pu aboutir, à charge de l'appelant
+# de restaurer l'état local.
 cherry_pick_commits() {
   local commits=("$@")
 
   for commit in "${commits[@]}"; do
-    cherry_pick "$commit"
+    if ! cherry_pick "$commit"; then
+      return 1
+    fi
   done
+
+  return 0
 }
 
 # Fonction pour effectuer un cherry-pick sur le hash passé en argument si celui n'existe pas déjà.
+# Renvoie 0 si le commit a bien été appliqué, 1 si le cherry-pick a été abandonné.
 cherry_pick() {
     local commit=$1
-    
+
     # Vérifier si le commit est déjà dans l'historique de la branche courante
     if git merge-base --is-ancestor "$commit" HEAD; then
       echo "Commit $commit déjà appliqué, passage au suivant..."
-      continue
+      return 0
     fi
 
     echo "Cherry-picking commit: $commit"
-    git cherry-pick "$commit" --allow-empty
-    
-    # Vérifier si le cherry-pick a échoué (en cas de conflit)
-    if [ $? -ne 0 ]; then
-      echo ""
-      printf "%sErreur lors du cherry-pick du commit %s. Conflit détecté.%s\n" \
-        "$(tput setaf 1)" "$commit" "$(tput sgr0)"
-      printf "%sMerci de ne rien faire ici tant que le conflit n'est pas résolu et commité%s\n" \
-        "$(tput setaf 1)" "$(tput sgr0)"
-    
-        # Demander confirmation à l'utilisateur
-        if ! confirm_action "Avez vous résolu et commité la résolution de conflit ?" "y"; then
-            echo "Opération annulée."
-            git cherry-pick --abort
-            exit_safe 1
-        fi
+    if git cherry-pick "$commit" --allow-empty; then
+      return 0
     fi
+
+    # Le cherry-pick a échoué : un conflit doit être résolu.
+    echo ""
+    printf "%sErreur lors du cherry-pick du commit %s. Conflit détecté.%s\n" \
+      "$(tput setaf 1)" "$commit" "$(tput sgr0)"
+
+    # Un conflit réclame une intervention humaine : il est hors de question de
+    # le "valider" tout seul en mode non interactif.
+    if [[ $JGIT_NO_INTERACTION == true ]]; then
+      printf "%sLe mode --no-interaction ne permet pas de résoudre un conflit.%s\n" \
+        "$(tput setaf 1)" "$(tput sgr0)"
+      printf "%sRelancez la même commande sans --no-interaction pour traiter ce conflit à la main.%s\n" \
+        "$(tput setaf 1)" "$(tput sgr0)"
+      git cherry-pick --abort >/dev/null 2>&1
+      return 1
+    fi
+
+    printf "%sMerci de ne rien faire ici tant que le conflit n'est pas résolu et commité%s\n" \
+      "$(tput setaf 1)" "$(tput sgr0)"
+
+    # Demander confirmation à l'utilisateur
+    if ! confirm_action "Avez vous résolu et commité la résolution de conflit ?" "y"; then
+        echo "Opération annulée."
+        git cherry-pick --abort >/dev/null 2>&1
+        return 1
+    fi
+
+    return 0
 }
 
 # Permet d'afficher le git log bien présenté depuis le dernier noeud en commun avec la $reference_branch et avec les couleurs et l'arbres des commits
