@@ -1,3 +1,5 @@
+#!/bin/bash
+
 source "$(dirname "$0")/feature.sh"
 source "$(dirname "$0")/release.sh"
 source "$(dirname "$0")/rebase.sh"
@@ -16,7 +18,8 @@ branch_preprod="develop"
 
 FILE=.jgit/conf_local.sh
 if test -f "$FILE"; then
-    source $FILE
+    # shellcheck disable=SC1090
+    source "$FILE"
 fi
 
 ####################################
@@ -31,7 +34,13 @@ prefix_commit="[jgit]"
 prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit="[empty_commit]"
 
-stash=false;
+JGIT_AUTO_YES=false
+JGIT_NO_OPEN=false
+JGIT_BASED_ON_OVERRIDE=""
+JGIT_INTO_TARGET=""
+declare -a JGIT_FROM_SOURCES=()
+
+stash=false
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
 ################################################################################
@@ -39,73 +48,150 @@ current_branch=$(git rev-parse --abbrev-ref HEAD)
 ################################################################################
 help() {
     printf "\n\033[1;34mUsage:\033[0m\n"
-    printf "  jgit \033[1;32m[feature|hotfix]\033[0m start \033[1;36m<feature_name>\033[0m \033[38;5;214m[OPTIONAL]\033[0m --based-on \033[1;36m<branch_name>\033[0m\n"
-    printf "    → Crée une nouvelle feature ou hotfix ou permet de s'y positionner.\n"
-    printf "    → --based-on permet de choisir la branche sur laquelle se baser.\n\n"
+    printf "  jgit \033[1;32m<scope>\033[0m \033[1;36m<action>\033[0m \033[38;5;214m[<target>]\033[0m \033[38;5;214m[options…]\033[0m\n\n"
 
-    printf "  jgit \033[1;32m[feature|hotfix]\033[0m rebase \033[1;36m<feature_name>\033[0m \033[38;5;214m[OPTIONAL]\033[0m --based-on \033[1;36m<branch_name>\033[0m\n"
-    printf "    → Rebase la feature ou le hotfix sur la branche principale.\n"
-    printf "      En cas de conflits, suivez les commandes git avant de relancer ce script.\n\n"
-    printf "    → --based-on permet de choisir la branche sur laquelle se baser.\n"
+    printf "\033[1;34mScopes:\033[0m feature | hotfix | release | demo | util\n\n"
 
-    printf "  jgit \033[1;32mrelease\033[0m merge \033[1;36m<branch_name>\033[0m\n"
-    printf "    → Fusionne une branche dans la release en cours.\n"
-    printf "    → La release est créée à la volée au besoin.\n\n"
+    printf "\033[1;34mOptions communes:\033[0m\n"
+    printf "  --based-on <branch>   Branche de référence pour les créations / rebase.\n"
+    printf "  --from <branch>       Source d'un merge (répétable).\n"
+    printf "  --into <branch>       Destination explicite d'un merge.\n"
+    printf "  --yes                 Valide automatiquement les confirmations.\n"
+    printf "  --no-open             N'ouvre pas automatiquement la PR.\n"
+    printf "  -h | --help           Affiche cette aide.\n\n"
 
-    printf "  jgit \033[1;32mrelease\033[0m finish\n"
-    printf "    → Ferme la release en cours : fusion de la branche release,\n"
-    printf "      création du tag et publication sur GitHub.\n\n"
+    printf "\033[1;34mFeature & Hotfix:\033[0m\n"
+    printf "  jgit feature start <ticket> [--based-on <branch>] [--no-open]\n"
+    printf "  jgit feature restart <ticket>\n"
+    printf "  jgit feature rebase <ticket> [--based-on <branch>]\n"
+    printf "  (idem avec hotfix)\n\n"
 
-    printf "  jgit \033[1;32mdemo\033[0m start \033[1;36m[demo_name]\033[0m \033[38;5;214m[OPTIONAL]\033[0m --based-on \033[1;36m<branch_name>\033[0m\n"
-    printf "    → Crée ou reprend une branche de démo (prefixée demo_).\n\n"
+    printf "\033[1;34mRelease:\033[0m\n"
+    printf "  jgit release start [<x.y.z>]\n"
+    printf "  jgit release merge [<x.y.z>] --from <branch> [--into <branch>]\n"
+    printf "  jgit release finish\n\n"
 
-    printf "  jgit \033[1;32mdemo\033[0m merge \033[1;36m<branch_name>\033[0m\n"
-    printf "    → Injecte la branche indiquée dans la démo courante.\n\n"
+    printf "\033[1;34mDemo:\033[0m\n"
+    printf "  jgit demo start [<demo_name>] [--based-on <branch>]\n"
+    printf "  jgit demo merge [--from feature/<ticket>]... [--into <branch>]\n"
+    printf "  jgit demo list\n"
+    printf "  jgit demo remove [--yes]\n\n"
 
-    printf "  jgit \033[1;32mdemo\033[0m list\n"
-    printf "    → Liste les features mergées dans la démo.\n\n"
-
-    printf "  jgit \033[1;32mdemo\033[0m remove\n"
-    printf "    → Supprime la branche de démo courante en local et sur le remote.\n\n"
-
-    printf "  jgit \033[1;32mclean\033[0m\n"
-    printf "    → Nettoie les branches locales temporaires comme les branches de rebase et __PR__.\n\n"
-
-    printf "\033[1;34mOptions:\033[0m\n"
-    printf "  -h    Affiche cette aide.\n\n"
+    printf "\033[1;34mUtility:\033[0m\n"
+    printf "  jgit util clean\n\n"
 }
 
+require_argument() {
+    local option="$1"
+    local value="$2"
+    if [[ -z "$value" || "$value" == -* ]]; then
+        printf "\033[1;31mErreur : l'option %s requiert une valeur.\033[0m\n" "$option" >&2
+        exit_safe 1
+    fi
+}
+
+ensure_remote() {
+    local remotes
+    remotes=$(git remote -v)
+
+    if [[ $remotes != *"$j2s_remote"* ]]; then
+        echo "Please configure J2S remote as $j2s_remote"
+        exit_safe 1
+    fi
+}
 
 ####################################
 #
 #      Manage parameters
 #
 ####################################
-# Définition des variables
-JGIT_TYPE=$1
-JGIT_ACTION=$2
-JGIT_NAME=$3
-JGIT_TARGET=$4
-JGIT_BASED_ON=""  # Valeur par défaut
 
+if [[ $# -eq 0 ]]; then
+    help
+    exit_safe 0
+fi
 
-# Parcourir tous les arguments
+if [[ $1 == "-h" || $1 == "--help" ]]; then
+    help
+    exit_safe 0
+fi
+
+positional=()
+
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --based-on)
-      if [[ -n "$2" && "$2" != -* ]]; then
-        JGIT_BASED_ON="$2"  # Récupérer la valeur suivante
-        shift 2         # Passer à l'argument suivant
-      else
-        echo "Erreur : L'option --based-on nécessite un argument." >&2
-        exit_safe 1
-      fi
-      ;;
-    *)
-      shift
-      ;;
-  esac
+    case "$1" in
+        --based-on)
+            require_argument "--based-on" "$2"
+            JGIT_BASED_ON_OVERRIDE="$2"
+            shift 2
+            ;;
+        --from)
+            require_argument "--from" "$2"
+            JGIT_FROM_SOURCES+=("$2")
+            shift 2
+            ;;
+        --into)
+            require_argument "--into" "$2"
+            JGIT_INTO_TARGET="$2"
+            shift 2
+            ;;
+        --yes|-y)
+            JGIT_AUTO_YES=true
+            shift
+            ;;
+        --no-open)
+            JGIT_NO_OPEN=true
+            shift
+            ;;
+        --help)
+            help
+            exit_safe 0
+            ;;
+        --)
+            shift
+            while [[ $# -gt 0 ]]; do
+                positional+=("$1")
+                shift
+            done
+            ;;
+        -* )
+            printf "\033[1;31mOption inconnue : %s\033[0m\n" "$1" >&2
+            exit_safe 1
+            ;;
+        *)
+            positional+=("$1")
+            shift
+            ;;
+    esac
 done
+
+JGIT_TYPE="${positional[0]}"
+JGIT_ACTION="${positional[1]}"
+JGIT_TARGET="${positional[2]}"
+extra_positionals=()
+if [[ ${#positional[@]} -gt 3 ]]; then
+    extra_positionals=("${positional[@]:3}")
+fi
+
+if [[ -z "$JGIT_TYPE" ]]; then
+    help
+    exit_safe 0
+fi
+
+if [[ "$JGIT_TYPE" == "help" ]]; then
+    help
+    exit_safe 0
+fi
+
+if [[ "$JGIT_TYPE" == "-h" ]]; then
+    help
+    exit_safe 0
+fi
+
+if [[ ${#extra_positionals[@]} -gt 0 ]]; then
+    printf "\033[1;31mArguments supplémentaires non reconnus : %s\033[0m\n" "${extra_positionals[*]}" >&2
+    exit_safe 1
+fi
 
 ####################################
 #
@@ -113,93 +199,116 @@ done
 #
 ####################################
 
-# GLOBAL VERIFICATIONS
-remotes=$( git remote -v )
+ensure_remote
 
-if [[ $remotes != *$j2s_remote* ]]; then
-  echo "Please configure J2S remote as "$j2s_remote
-  exit_safe 1
-fi
-
-# Manage syntax
-if [[ $JGIT_TYPE == "feature" ]] || [[ $JGIT_TYPE == "hotfix" ]]; then
-    if [[ -z $JGIT_NAME ]]; then
-        echo "Please set a $JGIT_TYPE name as third argument"
-        exit_safe 1;
-    fi
-    
-    if [[ -z $JGIT_ACTION ]]; then
-        help
-    fi
-    if [[ $JGIT_ACTION == "start" ]]; then
-        verify_stash
-        feature_start $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON;
-    elif [[ $JGIT_ACTION == "restart" ]]; then
-        verify_stash
-        feature_restart $JGIT_TYPE $JGIT_NAME
-    elif [[ $JGIT_ACTION == "rebase" ]]; then
-        verify_stash
-        feature_rebase $JGIT_TYPE $JGIT_NAME $JGIT_BASED_ON
-    else
-        echo "argument $JGIT_ACTION note supported"
-        exit_safe 1
-    fi
-elif [[ $JGIT_TYPE == "release" ]]; then
-    if [[ -z $JGIT_ACTION ]]; then
-        help
-    fi
-    verify_stash
-    if [[ $JGIT_ACTION == "start" ]]; then 
-        release_start;
-    elif [[ $JGIT_ACTION == "finish" ]]; then 
-        release_finish;
-    elif [[ $JGIT_ACTION == "merge" ]]; then 
-        if [[ -z $JGIT_NAME ]]; then
-            echo "Please set a branch name as third argument"
-            exit_safe 1;
-        fi
-        branch_PR=$prefix_PR$JGIT_NAME
-        release_merge;
-    else
-        echo "argument $JGIT_ACTION not supported"
-        exit_safe 1
-    fi
-elif [[ $JGIT_TYPE == "demo" ]]; then
-    if [[ -z $JGIT_ACTION ]]; then
-        help
-    fi
-
-    if [[ $JGIT_ACTION == "start" ]]; then
-        verify_stash
-        demo_start "$JGIT_NAME" "$JGIT_BASED_ON"
-    elif [[ $JGIT_ACTION == "merge" ]]; then
-        if [[ $JGIT_NAME == "feature" ]]; then
-            if [[ -z $JGIT_TARGET ]]; then
-                echo "Please set a feature name as fourth argument"
-                exit_safe 1
-            fi
-            verify_stash
-            demo_merge_feature "$JGIT_TARGET"
-        else
-            echo "argument $JGIT_NAME not supported"
+case "$JGIT_TYPE" in
+    feature|hotfix)
+        if [[ -z "$JGIT_ACTION" ]]; then
+            help
             exit_safe 1
         fi
-    elif [[ $JGIT_ACTION == "list" ]]; then
-        demo_list
-    elif [[ $JGIT_ACTION == "remove" ]]; then
-        verify_stash
-        demo_remove
-    else
-        echo "argument $JGIT_ACTION not supported"
+        case "$JGIT_ACTION" in
+            start)
+                if [[ -z "$JGIT_TARGET" ]]; then
+                    echo "Please set a $JGIT_TYPE identifier." >&2
+                    exit_safe 1
+                fi
+                verify_stash
+                feature_start "$JGIT_TYPE" "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
+                ;;
+            restart)
+                if [[ -z "$JGIT_TARGET" ]]; then
+                    echo "Please set a $JGIT_TYPE identifier." >&2
+                    exit_safe 1
+                fi
+                verify_stash
+                feature_restart "$JGIT_TYPE" "$JGIT_TARGET"
+                ;;
+            rebase)
+                if [[ -z "$JGIT_TARGET" ]]; then
+                    echo "Please set a $JGIT_TYPE identifier." >&2
+                    exit_safe 1
+                fi
+                verify_stash
+                feature_rebase "$JGIT_TYPE" "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
+                ;;
+            *)
+                printf "\033[1;31mAction '%s' non supportée pour %s.\033[0m\n" "$JGIT_ACTION" "$JGIT_TYPE" >&2
+                exit_safe 1
+                ;;
+        esac
+        ;;
+    release)
+        if [[ -z "$JGIT_ACTION" ]]; then
+            help
+            exit_safe 1
+        fi
+        case "$JGIT_ACTION" in
+            start)
+                verify_stash
+                release_start "$JGIT_TARGET"
+                ;;
+            merge)
+                if [[ ${#JGIT_FROM_SOURCES[@]} -eq 0 ]]; then
+                    echo "Veuillez spécifier au moins une source avec --from." >&2
+                    exit_safe 1
+                fi
+                verify_stash
+                release_merge "$JGIT_TARGET" "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
+                ;;
+            finish)
+                verify_stash
+                release_finish "$JGIT_INTO_TARGET"
+                ;;
+            *)
+                printf "\033[1;31mAction '%s' non supportée pour release.\033[0m\n" "$JGIT_ACTION" >&2
+                exit_safe 1
+                ;;
+        esac
+        ;;
+    demo)
+        if [[ -z "$JGIT_ACTION" ]]; then
+            help
+            exit_safe 1
+        fi
+        case "$JGIT_ACTION" in
+            start)
+                verify_stash
+                demo_start "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
+                ;;
+            merge)
+                if [[ ${#JGIT_FROM_SOURCES[@]} -eq 0 ]]; then
+                    echo "Veuillez préciser au moins une source avec --from." >&2
+                    exit_safe 1
+                fi
+                verify_stash
+                demo_merge "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
+                ;;
+            list)
+                demo_list
+                ;;
+            remove)
+                verify_stash
+                demo_remove
+                ;;
+            *)
+                printf "\033[1;31mAction '%s' non supportée pour demo.\033[0m\n" "$JGIT_ACTION" >&2
+                exit_safe 1
+                ;;
+        esac
+        ;;
+    util)
+        if [[ "$JGIT_ACTION" == "clean" ]]; then
+            clean_branches
+        else
+            printf "\033[1;31mAction '%s' non supportée pour util.\033[0m\n" "$JGIT_ACTION" >&2
+            exit_safe 1
+        fi
+        ;;
+    *)
+        printf "\033[1;31mScope '%s' non supporté.\033[0m\n" "$JGIT_TYPE" >&2
         exit_safe 1
-    fi
-elif [[ $JGIT_TYPE == "help" ]] || [[ $JGIT_TYPE == "-h" ]]; then
-    help
-    exit_safe 0;
-elif [[ $JGIT_TYPE == "clean" ]]; then
-    clean_branches
-else
-    echo "argument $JGIT_TYPE not supported"
-    exit_safe 1
-fi
+        ;;
+ esac
+
 exit_safe 0
