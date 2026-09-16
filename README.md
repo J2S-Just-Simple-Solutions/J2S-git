@@ -134,6 +134,22 @@ Avec `--no-interaction`, un conflit ne peut pas être résolu : la commande s'ar
 - `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `__PR__*`).
 - `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
 
+### Syntaxes dépréciées
+
+Deux commandes ont changé de forme. Les anciennes restent acceptées et
+fonctionnent à l'identique, mais affichent un avertissement et seront retirées
+dans une prochaine version.
+
+| Ancienne forme | Forme actuelle |
+| --- | --- |
+| `jgit release merge <branche>` | `jgit release merge --from <branche>` |
+| `jgit clean` | `jgit util clean` |
+
+La distinction entre les deux formes de `release merge` se fait sur le format de
+l'argument : `1.2.0` ou `release/1.2.0` est une version cible, tout le reste est
+traité comme une branche source. Mélanger les deux — `jgit release merge
+feature/X --from feature/Y` — est refusé explicitement.
+
 ## Tests
 
 `jgit` est couvert par une suite de tests « grandeur nature ». Les scénarios sont

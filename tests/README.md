@@ -293,7 +293,7 @@ test_passed
 
 ## Scénarios existants
 
-116 scénarios répartis par domaine fonctionnel.
+129 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -306,6 +306,7 @@ test_passed
 | `07_demo.feature` | `demo start` (nom par défaut, `--based-on`, reprise, refus), `demo merge` (sources multiples, doublon, formats invalides, `--into`), `demo list`, `demo remove` |
 | `08_util_et_stash.feature` | `util clean`, `util verify_rebase` (tous les refus, true/false, absence de trace), stash automatique accepté et refusé |
 | `09_parcours_complets.feature` | hotfix de bout en bout, feature rebasée puis redémarrée puis livrée, démo servant de répétition, deux releases successives |
+| `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
 
 ### Anomalies figées par les tests
 

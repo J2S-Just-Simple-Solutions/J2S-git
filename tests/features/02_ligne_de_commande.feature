@@ -24,6 +24,36 @@ Fonctionnalité: Analyse de la ligne de commande
     Alors jgit se termine sans erreur
     Et la sortie contient "jgit util verify_rebase --from <branche_source> --into <branche_cible>"
 
+  # L'aide se désynchronise du code sans que rien ne le signale. Ce scénario
+  # liste chaque commande et chaque option réellement acceptée : ajouter une
+  # option sans documenter son usage fait échouer le test.
+  Scénario: L'aide décrit exactement les commandes et options acceptées
+    Quand je lance "jgit --help"
+    Alors jgit se termine sans erreur
+    # Options globales
+    Et la sortie contient "--based-on <branch>"
+    Et la sortie contient "--from <branch>"
+    Et la sortie contient "--into <branch>"
+    Et la sortie contient "--no-interaction"
+    Et la sortie contient "--no-open"
+    Et la sortie contient "--squash"
+    # Feature & hotfix : chaque action avec les options qu'elle lit vraiment
+    Et la sortie contient "jgit feature start <ticket> [--based-on <branch>] [--no-open]"
+    Et la sortie contient "jgit feature restart <ticket> [--no-open]"
+    Et la sortie contient "jgit feature rebase <ticket> [--based-on <branch>] [--squash]"
+    # Release : finish accepte --into, au même titre que merge
+    Et la sortie contient "jgit release start [<x.y.z>]"
+    Et la sortie contient "jgit release merge [<x.y.z>] --from <branch> [--into <branch>]"
+    Et la sortie contient "jgit release finish [--into <x.y.z>]"
+    # Demo
+    Et la sortie contient "jgit demo start [<demo_name>] [--based-on <branch>]"
+    Et la sortie contient "jgit demo merge [--from feature/<ticket>]... [--into <branch>]"
+    Et la sortie contient "jgit demo list"
+    Et la sortie contient "jgit demo remove [--no-interaction]"
+    # Util
+    Et la sortie contient "jgit util clean"
+    Et la sortie contient "jgit util verify_rebase --from <branche_source> --into <branche_cible>"
+
   Scénario: Un scope inconnu est refusé
     Quand je lance "jgit bidule"
     Alors jgit se termine en erreur

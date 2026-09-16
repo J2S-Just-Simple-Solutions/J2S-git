@@ -67,14 +67,14 @@ help() {
 
     printf "\033[1;34mFeature & Hotfix:\033[0m\n"
     printf "  jgit feature start <ticket> [--based-on <branch>] [--no-open]\n"
-    printf "  jgit feature restart <ticket>\n"
+    printf "  jgit feature restart <ticket> [--no-open]\n"
     printf "  jgit feature rebase <ticket> [--based-on <branch>] [--squash]\n"
     printf "  (idem avec hotfix)\n\n"
 
     printf "\033[1;34mRelease:\033[0m\n"
     printf "  jgit release start [<x.y.z>]\n"
     printf "  jgit release merge [<x.y.z>] --from <branch> [--into <branch>]\n"
-    printf "  jgit release finish\n\n"
+    printf "  jgit release finish [--into <x.y.z>]\n\n"
 
     printf "\033[1;34mDemo:\033[0m\n"
     printf "  jgit demo start [<demo_name>] [--based-on <branch>]\n"
@@ -85,6 +85,10 @@ help() {
     printf "\033[1;34mUtility:\033[0m\n"
     printf "  jgit util clean\n"
     printf "  jgit util verify_rebase --from <branche_source> --into <branche_cible>\n\n"
+
+    printf "\033[1;34mSyntaxes dépréciées\033[0m (encore acceptées, retirées à terme) :\n"
+    printf "  jgit release merge <branche>   → jgit release merge --from <branche>\n"
+    printf "  jgit clean                     → jgit util clean\n\n"
 }
 
 require_argument() {
@@ -259,6 +263,22 @@ case "$JGIT_TYPE" in
                 release_start "$JGIT_TARGET"
                 ;;
             merge)
+                # Rétrocompatibilité : « jgit release merge <branche> » désignait la
+                # source à intégrer. La cible positionnelle est aujourd'hui une version
+                # (x.y.z), ce qui permet de distinguer les deux sans ambiguïté.
+                if [[ ${#JGIT_FROM_SOURCES[@]} -eq 0 && -n "$JGIT_TARGET" ]] \
+                   && ! is_release_version "$JGIT_TARGET"; then
+                    warn_deprecated_syntax \
+                        "jgit release merge $JGIT_TARGET" \
+                        "jgit release merge --from $JGIT_TARGET"
+                    JGIT_FROM_SOURCES+=("$JGIT_TARGET")
+                    JGIT_TARGET=""
+                fi
+                if [[ -n "$JGIT_TARGET" ]] && ! is_release_version "$JGIT_TARGET"; then
+                    printf "\033[1;31mVersion de release attendue au format x.y.z, reçu '%s'.\033[0m\n" "$JGIT_TARGET" >&2
+                    printf "Pour désigner une branche source, utilisez --from %s.\n" "$JGIT_TARGET" >&2
+                    exit_safe 1
+                fi
                 if [[ ${#JGIT_FROM_SOURCES[@]} -eq 0 ]]; then
                     echo "Veuillez spécifier au moins une source avec --from." >&2
                     exit_safe 1
@@ -321,6 +341,11 @@ case "$JGIT_TYPE" in
                 exit_safe 1
                 ;;
         esac
+        ;;
+    clean)
+        # Rétrocompatibilité : « jgit clean » est devenu « jgit util clean ».
+        warn_deprecated_syntax "jgit clean" "jgit util clean"
+        clean_branches
         ;;
     *)
         printf "\033[1;31mScope '%s' non supporté.\033[0m\n" "$JGIT_TYPE" >&2

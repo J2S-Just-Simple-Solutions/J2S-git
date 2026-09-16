@@ -34,6 +34,28 @@ declare -a JGIT_FROM_SOURCES
 #            Helpers génériques
 ###############################################
 
+# Signale l'usage d'une syntaxe dépréciée sans interrompre la commande : elle
+# continue de fonctionner, le temps que les habitudes et les scripts de chacun
+# rattrapent la nouvelle forme.
+warn_deprecated_syntax() {
+  local old_form="$1"
+  local new_form="$2"
+
+  printf "%s[déprécié] « %s » : utilisez désormais « %s ».%s\n" \
+    "$(tput setaf 3)" "$old_form" "$new_form" "$(tput sgr0)" >&2
+  printf "%sL'ancienne forme fonctionne encore mais sera retirée dans une prochaine version.%s\n" \
+    "$(tput setaf 3)" "$(tput sgr0)" >&2
+}
+
+# Vrai si la valeur est un numéro de version de release (x.y.z), que le préfixe
+# release/ soit présent ou non. Sert à distinguer, en position de cible,
+# une version d'un nom de branche.
+is_release_version() {
+  local value="${1#release/}"
+
+  [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
 confirm_action() {
   local prompt="$1"
   local default_response=${2:-"y"}
