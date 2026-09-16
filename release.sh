@@ -52,6 +52,8 @@ release_start() {
     local future_tag=""
     local prod_branch
 
+    jgit_fetch_once || exit_safe 1
+
     if ! prod_branch=$(get_reference_branch "hotfix"); then
         exit_safe 1
     fi
@@ -194,6 +196,8 @@ release_finish() {
     local requested_target="$1"
     local branch="$requested_target"
     local prod_branch
+
+    jgit_fetch_once || exit_safe 1
 
     if ! prod_branch=$(get_reference_branch "hotfix"); then
         exit_safe 1

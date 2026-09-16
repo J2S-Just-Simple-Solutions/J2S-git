@@ -180,18 +180,20 @@ get_reference_branch() {
     local feature_type=${1:-feature}
     local fallback_branches=("develop" "master" "main")
 
-    # Vérifier la branche en fonction du type de feature
-    if [ "$feature_type" == "hotfix" ] && git rev-parse --verify "$branch_prod" >/dev/null 2>&1; then
+    # branch_exists regarde en local ET sur le serveur. Chercher seulement en
+    # local ferait basculer tout clone frais sur le repli : develop n'y est pas
+    # encore une branche locale, et une feature serait partie de main.
+    if [ "$feature_type" == "hotfix" ] && branch_exists "$branch_prod"; then
         echo "$branch_prod"
         return 0  # Succès
-    elif [ "$feature_type" == "feature" ] && git rev-parse --verify "$branch_preprod" >/dev/null 2>&1; then
+    elif [ "$feature_type" == "feature" ] && branch_exists "$branch_preprod"; then
         echo "$branch_preprod"
         return 0  # Succès
     fi
 
-    # Vérifier la première branche existante parmi la liste de fallback
+    # Le repli ne concerne que les projets qui n'ont pas la branche attendue.
     for branch in "${fallback_branches[@]}"; do
-        if git rev-parse --verify "$branch" >/dev/null 2>&1; then
+        if branch_exists "$branch"; then
         echo "$branch"
         return 0  # Succès
         fi
@@ -438,7 +440,9 @@ jgit_fetch_once() {
     return 0
   fi
 
-  if ! git fetch "$j2s_remote" --quiet; then
+  # --prune : une branche supprimée sur le serveur doit disparaître du miroir
+  # local, sinon jgit continue de la croire disponible.
+  if ! git fetch "$j2s_remote" --prune --quiet; then
     printf "\033[1;31mImpossible de contacter %s.\033[0m\n" "$j2s_remote" >&2
     printf "jgit travaille toujours sur les dernières versions du serveur : vérifiez votre connexion.\n" >&2
     return 1

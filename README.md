@@ -27,7 +27,7 @@
 - Un dépôt Git avec un remote nommé `origin` pointant vers GitHub (organisation J2S).
 - Git installé en local (`git --version` doit répondre).
 - Le client GitHub CLI (`gh`) installé et configuré : https://cli.github.com/
-- Un remote de référence (`develop`, `develop2`, `master`, `main`…) disponible en local.
+- Une branche de référence (`develop`, `develop2`, `master`, `main`…) présente sur le remote. Elle n'a pas besoin d'exister en local : `jgit` la récupère au besoin, y compris sur un clone tout neuf.
 
 Configurez ensuite GitHub CLI sur chaque dépôt projet :
 

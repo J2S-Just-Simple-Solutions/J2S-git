@@ -19,6 +19,8 @@ demo_start() {
     local _unused_into="$3"
     local current_local_branch=$(git rev-parse --abbrev-ref HEAD)
 
+    jgit_fetch_once || exit_safe 1
+
     local base_branch
     if [[ -n "$based_on" ]]; then
         base_branch="$based_on"
@@ -37,8 +39,6 @@ demo_start() {
 
     local demo_branch
     demo_branch=$(get_demo_branch_name "$requested_name")
-
-    jgit_fetch_once || exit_safe 1
 
     local remote_exists
     remote_exists=$(git ls-remote --heads "$j2s_remote" "$demo_branch")

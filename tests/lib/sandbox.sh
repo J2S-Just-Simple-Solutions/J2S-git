@@ -169,6 +169,25 @@ github_squash_merge_pr() {
 }
 
 # Simule la suppression d'une branche cote GitHub (case "delete branch").
+# Remplace develop et main par une branche au nom non standard, cote serveur et
+# cote developpeur. C'est la seule facon realiste de n'avoir aucune branche de
+# reference : un depot GitHub a toujours une branche par defaut, et on ne peut
+# pas la supprimer — le bare repo la refuse, exactement comme GitHub.
+repo_use_non_standard_branches() {
+    local trunk="$1"
+
+    origin_git branch "$trunk" main
+    origin_git symbolic-ref HEAD "refs/heads/$trunk"
+    origin_git branch -D main
+    origin_git branch -D develop
+
+    repo_git fetch --quiet --prune origin
+    repo_git checkout --quiet -B "$trunk" "origin/$trunk"
+    repo_git branch -D main >/dev/null 2>&1
+    repo_git branch -D develop >/dev/null 2>&1
+    info "le projet n'a plus que la branche $trunk"
+}
+
 github_delete_branch() {
     local branch="$1"
     github_git push --quiet origin --delete "$branch"

@@ -99,6 +99,11 @@ step_squash_merge_pr() {
 }
 step_def "la PR de {chaine} est squash-mergée sur GitHub avec le message {chaine}" step_squash_merge_pr
 
+step_branches_non_standard() {
+    repo_use_non_standard_branches "$1"
+}
+step_def "le projet utilise {chaine} au lieu de develop, master ou main" step_branches_non_standard
+
 step_github_supprime_branche() {
     github_delete_branch "$1"
 }
