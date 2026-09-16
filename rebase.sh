@@ -30,9 +30,13 @@ feature_rebase() {
         reference_branch=$(get_reference_branch "$feature_type")
     fi
 
-    # Vérifier si la branche référence existe
-    if ! git rev-parse --verify "$reference_branch" >/dev/null 2>&1; then
-        echo "Erreur : La branche référence '$reference_branch' n'existe pas."
+    # On rebase sur l'état distant de la branche de référence pour ne jamais se baser
+    # sur une branche locale en retard par rapport au remote.
+    remote_reference_branch=$(get_remote_reference_branch "$reference_branch")
+
+    # Vérifier si la branche référence existe sur le remote
+    if [[ -z "$remote_reference_branch" ]]; then
+        echo "Erreur : La branche référence '$reference_branch' n'existe pas sur $j2s_remote."
         exit_safe 1
     fi
 
@@ -114,7 +118,7 @@ feature_rebase() {
         printf "%sLes commits suivants sont présents sur la branche %s%s%s actuelle mais pas sur la branche %s%s%s. Il seront repris sur la future branche %s%s%s%s\n" \
         "$(tput setaf 2)"  \
         "$(tput setaf 1)" "$branch_PR" "$(tput setaf 2)" \
-        "$(tput setaf 1)" "$reference_branch" "$(tput setaf 2)" \
+        "$(tput setaf 1)" "$remote_reference_branch" "$(tput setaf 2)" \
         "$(tput setaf 1)" "$branch_PR" "$(tput setaf 2)" \
         "$(tput sgr0)"
         printf "Liste des commits repris :\n"
@@ -131,7 +135,7 @@ feature_rebase() {
     done
 
     printf "%sEn se basant sur la branche de référence distante %s%s%s\n" \
-    "$(tput setaf 2)" "$(tput setaf 1)" "$reference_branch" "$(tput sgr0)"
+    "$(tput setaf 2)" "$(tput setaf 1)" "$remote_reference_branch" "$(tput sgr0)"
     
     # Demander confirmation à l'utilisateur
     read -p "Souhaitez-vous continuer ? (y/n) " user_input
@@ -143,14 +147,10 @@ feature_rebase() {
     ###################################
     # Gestion du rebase en cherrypick
     ###################################
-    # On met à jour la branche de référence par rapport au remote pour être bien à jour
-    echo "Checkout and pull $reference_branch branch"
-    git checkout $reference_branch --quiet
-    git pull $j2s_remote $reference_branch --quiet
-
     # rebase de la branche PR par application des commits déjà présents sur l'ancienne branche PR en cherry pick
-    echo "Starting cherry picking on $branch_PR_rebase branch"
-    checkout_or_create_branch $branch_PR_rebase
+    # La branche de rebase part directement de l'état distant de la branche de référence.
+    echo "Starting cherry picking on $branch_PR_rebase branch from $remote_reference_branch"
+    git checkout -B $branch_PR_rebase "$remote_reference_branch" --quiet
     cherry_pick_commits "${commits_on_PR[@]}"
 
     # rebase de la branche principal par application de tous les commits en cherry pick
@@ -159,18 +159,18 @@ feature_rebase() {
     cherry_pick_commits "${commits[@]}"
 
     # On vient écraser les branches historiques par les branches que l'on vient de rebase
-    git checkout $reference_branch
+    git checkout "$remote_reference_branch" --quiet
     rename_branch $branch_PR_rebase $branch_PR
     rename_branch $branch_rebase $branch
     
     # On propose à l'utlisateur de vérifier son arbre GIT avant de pusher en force sur le remote.
     git checkout $branch
-    git_history_with_merges "$branch" "$reference_branch"
+    git_history_with_merges "$branch" "$remote_reference_branch"
 
     read -p "Confirmez-vous que le rebase s'est bien passé, les branches vont être push --force ? (y/n) " user_input
     if [[ "$user_input" != "y" ]]; then
         echo "les branches locales ne sont plus correctes ($branch et $branch_PR), elles vont être supprimées en local."
-        git checkout $reference_branch --quiet
+        git checkout "$remote_reference_branch" --quiet
         git branch -D $branch
         git branch -D $branch_PR
         echo "Pull de la branche $branch en local depuis Github."

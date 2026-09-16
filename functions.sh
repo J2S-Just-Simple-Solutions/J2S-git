@@ -42,7 +42,33 @@ verify_stash() {
     fi
 }
 
-# Renvoie la branche de référence et vérifie son existence.
+# Vérifie qu'une branche existe sur le remote J2S.
+# Un git fetch doit avoir été fait au préalable pour que les références distantes soient à jour.
+remote_branch_exists() {
+    local branch="$1"
+
+    if [[ -z "$branch" ]]; then
+        return 1
+    fi
+
+    git rev-parse --verify --quiet "refs/remotes/$j2s_remote/$branch" >/dev/null
+}
+
+# Renvoie la référence distante ($j2s_remote/<branche>) à utiliser comme base de travail.
+# jgit se base toujours sur l'état du remote et jamais sur la branche locale, qui peut être en retard.
+#
+# Renvoie une chaine vide si la branche n'existe pas sur le remote.
+get_remote_reference_branch() {
+    local reference_branch="$1"
+
+    if ! remote_branch_exists "$reference_branch"; then
+        return 1
+    fi
+
+    echo "$j2s_remote/$reference_branch"
+}
+
+# Renvoie la branche de référence et vérifie son existence sur le remote.
 # La paramètre --based-on sera pris en priorité.
 # Les paramètre du fichier .jgit/conf_local.sh seront pris en 2nd
 # Sinon le script prendra la première branche qui existe parmis les fallback_branches
@@ -58,23 +84,23 @@ get_reference_branch() {
     fi
 
     # Vérifier la branche en fonction du type de feature
-    if [ "$feature_type" == "hotfix" ] && git rev-parse --verify "$branch_prod" >/dev/null 2>&1; then
+    if [ "$feature_type" == "hotfix" ] && remote_branch_exists "$branch_prod"; then
         echo "$branch_prod"
         return 0  # Succès
-    elif [ "$feature_type" == "feature" ] && git rev-parse --verify "$branch_preprod" >/dev/null 2>&1; then
+    elif [ "$feature_type" == "feature" ] && remote_branch_exists "$branch_preprod"; then
         echo "$branch_preprod"
         return 0  # Succès
     fi
 
     # Vérifier la première branche existante parmi la liste de fallback
     for branch in "${fallback_branches[@]}"; do
-        if git rev-parse --verify "$branch" >/dev/null 2>&1; then
+        if remote_branch_exists "$branch"; then
         echo "$branch"
         return 0  # Succès
         fi
     done
 
-    echo "Erreur: Aucune branche valide trouvée."
+    echo "Erreur: Aucune branche valide trouvée sur $j2s_remote."
     exit_safe 1
 }
 

@@ -32,14 +32,18 @@ feature_start() {
             reference_branch=$(get_reference_branch "$feature_type")
         fi
 
-        # Vérifier si la branche référence existe
-        if ! git rev-parse --verify "$reference_branch" >/dev/null 2>&1; then
-            echo "Erreur : La branche référence '$reference_branch' n'existe pas."
+        # On se base sur l'état distant de la branche de référence pour ne jamais partir
+        # d'une branche locale en retard par rapport au remote.
+        remote_reference_branch=$(get_remote_reference_branch "$reference_branch")
+
+        # Vérifier si la branche référence existe sur le remote
+        if [[ -z "$remote_reference_branch" ]]; then
+            echo "Erreur : La branche référence '$reference_branch' n'existe pas sur $j2s_remote."
             exit_safe 1
         fi
 
-        printf "%sJGit va créer la branche %s%s%s%s et sa PR associée qui se basera sur la branche %s%s%s\n" \
-        "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$reference_branch" "$(tput sgr0)"
+        printf "%sJGit va créer la branche %s%s%s%s et sa PR associée qui se basera sur la branche distante %s%s%s\n" \
+        "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$remote_reference_branch" "$(tput sgr0)"
         # Demander confirmation à l'utilisateur
         read -p "Souhaitez-vous continuer ? (y/n) " user_input
         if [[ "$user_input" != "y" ]]; then
@@ -47,10 +51,8 @@ feature_start() {
             exit_safe 1
         fi
 
-        echo "Checkout and reset $reference_branch branch"
-        git checkout $reference_branch --quiet
-        echo "Create pull request branch $branch_PR branch"
-        git checkout -b $branch_PR --quiet
+        echo "Create pull request branch $branch_PR branch from $remote_reference_branch"
+        git checkout -b $branch_PR "$remote_reference_branch" --quiet
         git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
