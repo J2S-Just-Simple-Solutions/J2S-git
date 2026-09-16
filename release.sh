@@ -175,6 +175,12 @@ release_merge() {
         exit_safe 1
     fi
 
+    # Sans --into, release_start fait déjà ce fetch. Avec --into, on passe par
+    # checkout_release_branch qui ne rafraîchit que la branche de release : les
+    # références __PR__ resteraient périmées et une PR mergée serait vue comme
+    # non mergée.
+    git fetch "$j2s_remote" --quiet
+
     local release_branch
     if [[ -n "$explicit_into" ]]; then
         release_branch=$(normalize_release_branch_name "$explicit_into")

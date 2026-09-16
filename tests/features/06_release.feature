@@ -126,21 +126,19 @@ Fonctionnalité: Cycle de vie d'une release
     Et je suis sur la branche "release/5.0.0"
     Et le fichier "src/feature6.txt" existe sur la branche distante "release/5.0.0"
 
-  # ANOMALIE CONNUE (cf. release.sh, release_merge) : avec --into, jgit passe
-  # par checkout_release_branch, qui ne rafraîchit que la branche de release.
-  # Les références distantes des branches __PR__ restent périmées et jgit croit
-  # à tort que la PR n'a pas été mergée. Sans --into, release_start fait un
-  # « git fetch » complet et le cas ne se produit pas.
-  Scénario: --into sans fetch préalable croit à tort que la PR n'est pas mergée
+  # Avec --into, jgit passe par checkout_release_branch, qui ne rafraîchit que
+  # la branche de release : sans un fetch complet en tête de release_merge, les
+  # références __PR__ restent périmées et la PR mergée est vue comme non mergée.
+  Scénario: --into rafraîchit les références sans fetch préalable
     Étant donné je lance "jgit release start 6.0.0"
     Et je lance "jgit feature start TEST-13 --no-interaction --no-open"
     Et je commite le fichier "src/feature13.txt" contenant "feature 13" avec le message "Ajoute la feature 13"
     Et je pousse la branche courante
     Et la PR de "feature/TEST-13" est squash-mergée sur GitHub avec le message "TEST-13 (#13)"
     Quand je lance "jgit release merge --from feature/TEST-13 --into 6.0.0"
-    Alors jgit se termine en erreur
-    Et la sortie contient "ne contient que le commit d'initialisation."
-    Et le fichier "src/feature13.txt" n'existe pas sur la branche distante "release/6.0.0"
+    Alors jgit se termine sans erreur
+    Et je suis sur la branche "release/6.0.0"
+    Et le fichier "src/feature13.txt" existe sur la branche distante "release/6.0.0"
 
   Scénario: --into sur une release inexistante est refusé
     Étant donné je lance "jgit feature start TEST-7 --no-interaction --no-open"
