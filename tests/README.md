@@ -309,6 +309,46 @@ test_passed
 | `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
 | `11_synchronisation.feature` | fraîcheur des branches : mise à jour d'une branche en retard, acceptation sans push d'une branche en avance, arrêt sur divergence, départ d'une feature/hotfix/démo sur la version serveur de la branche de référence |
 
+### Écrire une fixture : reproduire un état réel, jamais le fabriquer
+
+Un scénario doit partir d'un état que le dépôt peut réellement atteindre. La
+tentation est de créer directement les branches dont on a besoin :
+
+```gherkin
+# NON : cette branche ne peut pas exister
+Étant donné je crée la branche locale "__PR__feature/TEST-14" depuis "develop"
+```
+
+Une branche `__PR__` est toujours créée **par jgit**, porte son commit
+d'initialisation et vit sur le serveur. Fabriquée à la main depuis `develop`,
+elle n'a rien de tout cela : le scénario valide alors un comportement face à un
+état impossible, et ne prouve rien sur la vraie vie.
+
+La même situation se reproduit en passant par jgit et par le serveur :
+
+```gherkin
+# OUI : la branche vient du serveur, avec son historique
+Étant donné je lance "jgit feature start TEST-14 --no-interaction --no-open"
+Et je récupère la branche distante "__PR__feature/TEST-14" en local
+Et la PR de "feature/TEST-14" est squash-mergée sur GitHub avec le message "TEST-14 (#14)"
+```
+
+Trois réflexes :
+
+| Pour obtenir… | Passer par… | Plutôt que… |
+| --- | --- | --- |
+| une branche `feature/`, `__PR__`, `release/` ou `demo_` | la commande jgit qui la crée | `je crée la branche locale` |
+| une branche `__PR__` en local | `je récupère la branche distante … en local` | une création depuis `develop` |
+| une branche absente du serveur | `la branche … est supprimée sur GitHub` | ne jamais la pousser |
+
+Seules les branches **purement techniques** (`jgit_rebase_*`,
+`jgit_verify_rebase_*`) se créent encore à la main : elles n'ont pas de contenu
+signifiant, seul leur nom compte pour le nettoyage par motif.
+
+Corollaire utile : quand un état s'avère impossible à reproduire, c'est souvent
+que le code défend contre un cas qui ne se produit pas. La branche
+correspondante mérite alors d'être supprimée plutôt que testée.
+
 ### Les anomalies figées, et ce qu'elles sont devenues
 
 La première version de la suite portait cinq scénarios `# ANOMALIE CONNUE` :

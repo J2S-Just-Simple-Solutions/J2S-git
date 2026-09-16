@@ -249,9 +249,13 @@ Fonctionnalité: Rebase d'une feature sur sa branche de référence
     Et la sortie contient "La branche feature/INCONNUE n'existe pas (ni en local ni sur origin)."
     Et la branche distante "feature/INCONNUE" n'existe pas
 
-  Scénario: Une paire de branches jamais publiée est refusée
-    Étant donné je crée la branche locale "feature/ORPHELINE"
-    Et je crée la branche locale "__PR__feature/ORPHELINE"
+  # Les deux branches sont de vraies branches jgit, avec leurs commits d'init ;
+  # c'est le serveur qui ne les a plus, parce qu'elles y ont été supprimées.
+  Scénario: Une paire de branches absente du serveur est refusée
+    Étant donné je lance "jgit feature start ORPHELINE --no-interaction --no-open"
+    Et je récupère la branche distante "__PR__feature/ORPHELINE" en local
+    Et la branche "feature/ORPHELINE" est supprimée sur GitHub
+    Et la branche "__PR__feature/ORPHELINE" est supprimée sur GitHub
     Quand je lance "jgit feature rebase ORPHELINE --no-interaction"
     Alors jgit se termine en erreur
     Et la sortie contient "Something get wrong, feature/ORPHELINE doesn't exist on remote"

@@ -333,6 +333,16 @@ step_fetch() {
 }
 step_def "je récupère les nouveautés du remote" step_fetch
 
+# Rapatrie une branche du serveur en local, telle qu'elle est a cet instant.
+# C'est la seule facon realiste d'avoir une branche __PR__ en local : on la
+# recupere depuis origin, avec son commit d'initialisation et son historique.
+# On ne la recree jamais a la main.
+step_recupere_branche_en_local() {
+    repo_git fetch --quiet origin "$1:$1"
+    info "branche $1 rapatriee depuis origin"
+}
+step_def "je récupère la branche distante {chaine} en local" step_recupere_branche_en_local
+
 step_tag_absent() {
     assert_remote_tag_missing "$1"
 }

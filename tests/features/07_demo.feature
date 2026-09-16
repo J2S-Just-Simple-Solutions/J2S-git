@@ -40,8 +40,12 @@ Fonctionnalité: Branches de démonstration
     Et la sortie contient "Branche demo_sprint12 prête pour la démo."
     Et je suis sur la branche "demo_sprint12"
 
-  Scénario: Une démo locale jamais publiée doit être traitée à la main
-    Étant donné je crée la branche locale "demo_orpheline"
+  # Une démo est toujours créée et poussée par jgit : l'état « en local mais
+  # pas sur le serveur » vient d'une suppression côté GitHub, pas d'une branche
+  # fabriquée à la main.
+  Scénario: Une démo absente du serveur doit être traitée à la main
+    Étant donné je lance "jgit demo start orpheline --no-interaction"
+    Et la branche "demo_orpheline" est supprimée sur GitHub
     Quand je lance "jgit demo start orpheline --no-interaction"
     Alors jgit se termine en erreur
     Et la sortie contient "La branche demo_orpheline existe en local mais pas sur origin."

@@ -131,10 +131,6 @@ release_merge_single() {
     if git show-ref --verify --quiet "refs/remotes/$j2s_remote/$resolved_branch"; then
         echo "Remote branch exists, use it..."
         merge_source="$j2s_remote/$resolved_branch"
-    elif git show-ref --verify --quiet "refs/heads/$resolved_branch"; then
-        printf "\033[1;31mLa branche '%s' n'existe qu'en local : elle n'a jamais été publiée, donc jamais validée.\033[0m\n" "$resolved_branch" >&2
-        printf "Une release n'intègre que du code validé sur %s.\n" "$j2s_remote" >&2
-        exit_safe 1
     else
         printf "\033[1;31m/!\\ Feature branch '%s' was not found!\033[0m\n" "$resolved_branch"
         exit_safe 1

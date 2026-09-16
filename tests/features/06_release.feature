@@ -178,25 +178,22 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "Feature branch '__PR__feature/INCONNUE' was not found!"
 
   # La branche __PR__ porte le code validé par la revue : c'est la version du
-  # serveur qui est intégrée, jamais une copie locale qui peut dater d'avant le
-  # squash-merge de la PR.
+  # serveur qui est intégrée, jamais une copie locale.
+  #
+  # Le développeur rapatrie ici la branche de PR AVANT le squash-merge : sa
+  # copie locale ne contient donc que le commit d'initialisation, alors que le
+  # serveur porte le code validé. C'est exactement la situation qui faisait
+  # livrer une release amputée de la feature.
   Scénario: Une copie locale périmée de la branche de PR est ignorée
     Étant donné je lance "jgit feature start TEST-14 --no-interaction --no-open"
     Et je commite le fichier "src/feature14.txt" contenant "feature 14" avec le message "Ajoute la feature 14"
     Et je pousse la branche courante
+    Et je récupère la branche distante "__PR__feature/TEST-14" en local
     Et la PR de "feature/TEST-14" est squash-mergée sur GitHub avec le message "TEST-14 (#14)"
-    Et je crée la branche locale "__PR__feature/TEST-14" depuis "develop"
     Quand je lance "jgit release merge --from feature/TEST-14"
     Alors jgit se termine sans erreur
     Et la sortie contient "Remote branch exists, use it..."
     Et le fichier "src/feature14.txt" existe sur la branche distante "release/1.1.0"
-
-  Scénario: Une source qui n'existe qu'en local est refusée
-    Étant donné je crée la branche locale "__PR__feature/JAMAIS-POUSSEE" depuis "develop"
-    Quand je lance "jgit release merge --from feature/JAMAIS-POUSSEE"
-    Alors jgit se termine en erreur
-    Et la sortie contient "n'existe qu'en local : elle n'a jamais été publiée, donc jamais validée."
-    Et l'historique de "release/1.1.0" ne contient pas "Release merge feature branch : __PR__feature/JAMAIS-POUSSEE"
 
   # --- release finish -------------------------------------------------------
 
@@ -257,8 +254,7 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "It seems that the release is empty..."
 
   Scénario: Une release plus ancienne que le dernier tag est remplacée
-    Étant donné je crée la branche locale "release/1.0.0" depuis "main"
-    Et je me place sur la branche "release/1.0.0"
+    Étant donné je lance "jgit release start 1.0.0"
     Quand je lance "jgit release finish"
     Alors jgit se termine en erreur
     Et la sortie contient "Local release does not have the right tag, switching to new branch"
