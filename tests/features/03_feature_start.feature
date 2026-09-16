@@ -95,8 +95,11 @@ Fonctionnalité: Création d'une feature ou d'un hotfix
     Et la branche locale "feature/TEST-8" existe
     Et je suis sur la branche "feature/TEST-8"
 
+  # La situation réelle : la feature a été livrée et sa branche nettoyée sur le
+  # serveur, mais la copie locale du développeur est restée.
   Scénario: Une branche locale sans équivalent distant fait suspecter un merge
-    Étant donné je crée la branche locale "feature/TEST-9"
+    Étant donné je lance "jgit feature start TEST-9 --no-interaction --no-open"
+    Et la branche "feature/TEST-9" est supprimée sur GitHub
     Quand je lance "jgit feature start TEST-9 --no-interaction --no-open"
     Alors jgit se termine sans erreur
     Et la sortie contient "Exists in local and not in remote"
@@ -104,28 +107,44 @@ Fonctionnalité: Création d'une feature ou d'un hotfix
     Et la branche distante "feature/TEST-9" n'existe pas
     Et GitHub a reçu exactement 0 appels
 
-  Scénario: Sans develop en local, jgit retombe sur la première branche disponible
+  # C'est l'état de tout clone frais : seule la branche par défaut est une
+  # branche locale, develop n'existe que sous forme de origin/develop. Se
+  # rabattre sur main ici ferait partir la feature de la production.
+  Scénario: Sans develop en local, jgit utilise quand même la préprod du serveur
     Étant donné je me place sur la branche "main"
     Et je supprime la branche locale "develop"
     Quand je lance "jgit feature start TEST-10 --no-interaction --no-open"
     Alors jgit se termine sans erreur
-    Et la sortie contient "qui se basera sur la branche main"
+    Et la sortie contient "qui se basera sur la branche develop"
     Et la branche distante "feature/TEST-10" existe
-    Et le fichier "src/preprod.txt" n'existe pas sur la branche distante "feature/TEST-10"
+    Et le fichier "src/preprod.txt" existe sur la branche distante "feature/TEST-10"
 
-  # ANOMALIE CONNUE (cf. functions.sh, get_reference_branch) : la fonction est
-  # appelée dans une substitution de commande, donc son `exit_safe 1` ne quitte
-  # que le sous-shell. Son message d'erreur est renvoyé comme s'il s'agissait
-  # d'un nom de branche, d'où le message final imbriqué. jgit sort bien en
-  # erreur et ne crée rien, mais le diagnostic affiché est illisible.
-  Scénario: Sans aucune branche de référence, le message d'erreur est confus
-    Étant donné je crée la branche locale "autre" depuis "main"
-    Et je me place sur la branche "autre"
+  # Le repli sur master/main ne concerne que les projets qui n'ont pas de
+  # préprod du tout, nulle part.
+  Scénario: Sans préprod nulle part, jgit se replie sur la production
+    Étant donné je me place sur la branche "main"
     Et je supprime la branche locale "develop"
-    Et je supprime la branche locale "main"
+    Et la branche "develop" est supprimée sur GitHub
+    Quand je lance "jgit feature start TEST-17 --no-interaction --no-open"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "qui se basera sur la branche main"
+    Et la branche distante "feature/TEST-17" existe
+    Et le fichier "src/preprod.txt" n'existe pas sur la branche distante "feature/TEST-17"
+
+  # Supprimer develop et main en local ne suffit plus : jgit les retrouve sur le
+  # serveur, et c'est voulu. Le seul cas réel où aucune référence n'existe est un
+  # projet dont les branches portent d'autres noms, sans .jgit/conf_local.sh pour
+  # le lui dire.
+  #
+  # get_reference_branch est appelée en substitution de commande : son message
+  # doit partir sur stderr et l'échec passer par le code de retour, sinon il est
+  # capturé comme un nom de branche et le diagnostic devient illisible.
+  Scénario: Sans aucune branche de référence, le refus est explicite
+    Étant donné le projet utilise "trunk" au lieu de develop, master ou main
     Quand je lance "jgit feature start TEST-11 --no-interaction --no-open"
     Alors jgit se termine en erreur
-    Et la sortie contient "Aucune branche valide trouvée."
+    Et la sortie contient "Erreur : aucune branche de référence valide trouvée."
+    Et la sortie ne contient pas "La branche référence"
     Et la branche distante "feature/TEST-11" n'existe pas
 
   Scénario: Valider sans rien saisir applique la réponse par défaut
@@ -140,3 +159,14 @@ Fonctionnalité: Création d'une feature ou d'un hotfix
     Alors jgit se termine en erreur
     Et la sortie contient "Opération annulée."
     Et la branche distante "feature/TEST-13" n'existe pas
+
+  # Les deux branches sont déjà poussées quand gh échoue : jgit doit le dire
+  # sans laisser croire qu'il faut tout recommencer.
+  Scénario: Un échec de gh pr create est signalé
+    Étant donné le client gh échoue pour les commandes "pr create"
+    Quand je lance "jgit feature start TEST-14 --no-interaction"
+    Alors jgit se termine en erreur
+    Et la sortie contient "La pull request n'a pas pu être créée sur GitHub."
+    Et la sortie contient "il ne reste que la PR à ouvrir."
+    Et la branche distante "feature/TEST-14" existe
+    Et la branche distante "__PR__feature/TEST-14" existe

@@ -27,7 +27,7 @@
 - Un dépôt Git avec un remote nommé `origin` pointant vers GitHub (organisation J2S).
 - Git installé en local (`git --version` doit répondre).
 - Le client GitHub CLI (`gh`) installé et configuré : https://cli.github.com/
-- Un remote de référence (`develop`, `develop2`, `master`, `main`…) disponible en local.
+- Une branche de référence (`develop`, `develop2`, `master`, `main`…) présente sur le remote. Elle n'a pas besoin d'exister en local : `jgit` la récupère au besoin, y compris sur un clone tout neuf.
 
 Configurez ensuite GitHub CLI sur chaque dépôt projet :
 
@@ -83,6 +83,38 @@ jgit <scope> <action> [<cible>] [options...]
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
 - `--squash` : lors d'un `rebase`, squash tous les commits de la branche de travail en un seul avant de rejouer l'historique.
 - `jgit help` / `jgit -h` : affiche l'aide complète.
+
+## Fraîcheur des branches
+
+`jgit` travaille toujours sur la version du serveur. Chaque fois qu'il bascule
+sur une branche — la vôtre, la branche de PR, `develop`, `main`, une release —
+il la remet au niveau du remote en **fast-forward strict**, avant d'agir.
+
+Trois situations, trois comportements :
+
+| Votre branche locale | Ce que fait `jgit` |
+| --- | --- |
+| en retard sur le serveur | la met à jour et vous le dit |
+| **en avance** (commits non poussés) | ne touche à rien et vous le signale — c'est le cas normal d'une branche sur laquelle vous venez de travailler |
+| a **divergé** du serveur | s'arrête, sans rien modifier ni en local ni sur le serveur |
+
+Deux garanties qui découlent de cette règle :
+
+- **`jgit` ne pousse jamais à votre place.** Avoir des commits d'avance n'est pas
+  une anomalie et ne bloque rien.
+- **`jgit` ne choisit pas entre deux historiques.** En cas de divergence, à vous
+  de réconcilier la branche (`git rebase` ou `git merge`) puis de relancer :
+
+  ```
+  La branche feature/MONPROJET-123 a divergé de origin/feature/MONPROJET-123.
+  2 commit(s) uniquement en local, 1 commit(s) uniquement sur le serveur.
+  jgit ne choisit pas à votre place : réconciliez la branche (rebase ou merge) puis relancez.
+  ```
+
+Seule exception : pendant un `rebase`, une fois l'historique réécrit, les
+branches divergent du serveur **par construction** — c'est précisément ce que le
+`push --force` final va publier. `jgit` ne les resynchronise donc pas à ce
+moment-là.
 
 ## Commandes par scope
 

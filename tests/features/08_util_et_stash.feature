@@ -15,11 +15,14 @@ Fonctionnalité: Utilitaires et garde-fous transverses
     Alors jgit se termine sans erreur
     Et la sortie contient "Aucune branche locale à nettoyer"
 
+  # feature/TEST-1 et __PR__feature/TEST-1 sont de vraies branches jgit. Les
+  # deux autres sont des branches temporaires, qu'un rebase interrompu laisse
+  # derrière lui : seul leur nom compte pour un nettoyage par motif.
   Scénario: Les branches techniques sont supprimées, les autres conservées
-    Étant donné je crée la branche locale "jgit_rebase_feature/TEST-1"
-    Et je crée la branche locale "__PR__feature/TEST-1"
+    Étant donné je lance "jgit feature start TEST-1 --no-interaction --no-open"
+    Et je récupère la branche distante "__PR__feature/TEST-1" en local
+    Et je crée la branche locale "jgit_rebase_feature/TEST-1"
     Et je crée la branche locale "jgit_verify_rebase_a_onto_b"
-    Et je crée la branche locale "feature/TEST-1"
     Quand je lance "jgit util clean"
     Alors jgit se termine sans erreur
     Et la sortie contient "Suppression des branches locales suivantes :"
