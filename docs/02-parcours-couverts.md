@@ -212,3 +212,53 @@ Le scénario portait un commentaire `# ANOMALIE CONNUE` annonçant qu'il passera
 au rouge le jour de la correction. C'est exactement ce qui s'est produit
 (issue #34) : il a été inversé et décrit maintenant le refus attendu. Un
 comportement discutable mais connu valait mieux qu'un angle mort.
+
+---
+
+## Parcours 11 — La fraîcheur des branches
+
+Fichier : [`tests/features/11_synchronisation.feature`](../tests/features/11_synchronisation.feature)
+
+Ce parcours ne valide pas une commande mais une **règle transversale** : toute
+bascule de branche, quelle qu'en soit la raison, passe par une fonction unique
+qui remet la branche au niveau du serveur en fast-forward strict.
+
+La règle tient en une phrase : *on travaille sur la version du serveur, sauf
+quand on a du travail local en cours — et dans ce cas jgit ne pousse rien à
+votre place.*
+
+### Ce que le parcours vérifie
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Branche en retard | mise à jour silencieuse, le travail du collègue est là |
+| Branche **en avance** (commits non poussés) | acceptée telle quelle ; `jgit` le signale, **ne pousse pas**, et la branche distante est inchangée |
+| Rebase d'une branche non poussée | fonctionne : l'avance locale est le cas normal, pas une anomalie |
+| Branche de travail **divergente** | arrêt ; ni le remote ni l'historique local ne bougent |
+| Branche de **release** divergente | arrêt ; la release distante est inchangée |
+| `feature start` avec une préprod locale périmée | la feature part de `develop` **du serveur** |
+| `hotfix start` avec une prod locale périmée | le hotfix part de `main` **du serveur** |
+| `demo start` avec une référence périmée | la démo part de la version du serveur |
+
+### Ce que ce parcours protège
+
+Le cas le plus coûteux est celui des deux derniers scénarios de départ : avant,
+`jgit feature start` faisait bien un `git fetch`, mais basculait ensuite sur la
+branche de référence **locale**, qui pouvait avoir des semaines de retard. Une
+feature démarrait alors sur une base périmée, sans le moindre avertissement — et
+pour un `hotfix`, cela voulait dire partir d'une production qui n'était plus la
+production.
+
+Le second acquis est la distinction entre **avance** et **divergence**. Il serait
+facile de « sécuriser » jgit en refusant toute branche qui n'est pas strictement
+identique au serveur : ce serait inutilisable, puisqu'une branche de travail est
+en avance la moitié du temps. Trois scénarios vérifient que l'avance passe, et
+que rien n'est poussé au passage.
+
+| Régression qui serait attrapée |
+| --- |
+| Une branche de référence utilisée dans sa version locale périmée |
+| Un `git pull` sans `--ff-only` réintroduit : commit de fusion silencieux, ou dépôt laissé en conflit |
+| Un code de retour de synchronisation à nouveau ignoré : la commande continue sur des données périmées |
+| Un `push` ajouté « pour aligner » la branche : jgit publierait du travail que le développeur n'a pas choisi de publier |
+| Une divergence traitée comme un cas normal |

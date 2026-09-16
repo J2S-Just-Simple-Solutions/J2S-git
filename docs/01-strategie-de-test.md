@@ -85,10 +85,12 @@ Deux choses distinctes sont simulées côté GitHub :
 | `release merge` | oui |
 | `release finish` | oui |
 | `feature restart` | oui — [parcours 04](02-parcours-couverts.md) |
-| `feature rebase` (avec et sans `--squash`, avec conflit) | pas encore |
-| `hotfix restart` / `hotfix rebase` | pas encore |
-| `demo start / merge / list / remove` | pas encore |
-| `util clean`, `util verify_rebase` | pas encore |
+| `feature rebase` (avec et sans `--squash`, avec conflit) | oui |
+| `hotfix restart` / `hotfix rebase` | oui |
+| `demo start / merge / list / remove` | oui |
+| `util clean`, `util verify_rebase` | oui |
+| Syntaxes dépréciées | oui |
+| Fraîcheur des branches (retard, avance, divergence) | oui — [parcours 11](02-parcours-couverts.md) |
 
 ## Figer un comportement discutable plutôt que l'ignorer
 
