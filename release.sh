@@ -121,18 +121,18 @@ release_merge_single() {
         exit_safe 1
     fi
 
-    local existed_in_local
-    existed_in_local=$(git branch --list "$resolved_branch")
-    local existed_in_remote
-    existed_in_remote=$(git ls-remote --heads "$j2s_remote" "$resolved_branch")
+    # C'est la version du serveur qui fait foi. La branche __PR__ porte le code
+    # validé par la revue : une copie locale peut dater d'avant le squash-merge
+    # de la PR, et on livrerait alors du code qui n'a jamais été validé.
     local merge_source=""
 
-    if [[ -n "$existed_in_local" ]]; then
-        echo "Feature branch exists on local machine, use it..."
-        merge_source="$resolved_branch"
-    elif [[ -n "$existed_in_remote" ]]; then
+    if git show-ref --verify --quiet "refs/remotes/$j2s_remote/$resolved_branch"; then
         echo "Remote branch exists, use it..."
         merge_source="$j2s_remote/$resolved_branch"
+    elif git show-ref --verify --quiet "refs/heads/$resolved_branch"; then
+        printf "\033[1;31mLa branche '%s' n'existe qu'en local : elle n'a jamais été publiée, donc jamais validée.\033[0m\n" "$resolved_branch" >&2
+        printf "Une release n'intègre que du code validé sur %s.\n" "$j2s_remote" >&2
+        exit_safe 1
     else
         printf "\033[1;31m/!\\ Feature branch '%s' was not found!\033[0m\n" "$resolved_branch"
         exit_safe 1

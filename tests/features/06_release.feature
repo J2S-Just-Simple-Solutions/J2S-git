@@ -166,6 +166,27 @@ Fonctionnalité: Cycle de vie d'une release
     Alors jgit se termine en erreur
     Et la sortie contient "Feature branch '__PR__feature/INCONNUE' was not found!"
 
+  # La branche __PR__ porte le code validé par la revue : c'est la version du
+  # serveur qui est intégrée, jamais une copie locale qui peut dater d'avant le
+  # squash-merge de la PR.
+  Scénario: Une copie locale périmée de la branche de PR est ignorée
+    Étant donné je lance "jgit feature start TEST-14 --no-interaction --no-open"
+    Et je commite le fichier "src/feature14.txt" contenant "feature 14" avec le message "Ajoute la feature 14"
+    Et je pousse la branche courante
+    Et la PR de "feature/TEST-14" est squash-mergée sur GitHub avec le message "TEST-14 (#14)"
+    Et je crée la branche locale "__PR__feature/TEST-14" depuis "develop"
+    Quand je lance "jgit release merge --from feature/TEST-14"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "Remote branch exists, use it..."
+    Et le fichier "src/feature14.txt" existe sur la branche distante "release/1.1.0"
+
+  Scénario: Une source qui n'existe qu'en local est refusée
+    Étant donné je crée la branche locale "__PR__feature/JAMAIS-POUSSEE" depuis "develop"
+    Quand je lance "jgit release merge --from feature/JAMAIS-POUSSEE"
+    Alors jgit se termine en erreur
+    Et la sortie contient "n'existe qu'en local : elle n'a jamais été publiée, donc jamais validée."
+    Et l'historique de "release/1.1.0" ne contient pas "Release merge feature branch : __PR__feature/JAMAIS-POUSSEE"
+
   # --- release finish -------------------------------------------------------
 
   Scénario: La release est fusionnée dans main, taguée et publiée
