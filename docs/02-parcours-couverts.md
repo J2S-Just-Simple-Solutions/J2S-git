@@ -160,6 +160,8 @@ chemin nominal de bout en bout, celui-ci explore en profondeur la seule commande
 | `start` relancé sur une feature existante | la branche locale est réutilisée, pas recréée |
 | Feature présente sur GitHub mais absente en local | elle est rapatriée depuis le remote |
 | Branche locale sans équivalent distant | `jgit` le signale (la feature a probablement déjà été mergée) |
+| Aucune branche de référence disponible | refus explicite et lisible, sans rien créer |
+| `gh pr create` en échec | `jgit` sort en erreur en précisant que les branches sont poussées et qu'il ne reste que la PR à ouvrir |
 
 ### Ce que ce parcours protège
 
@@ -171,6 +173,11 @@ hotfix.
 
 Le second est le respect du refus : quand l'utilisateur répond « non » à la
 confirmation, le dépôt doit être exactement dans l'état où il était.
+
+Le troisième est la qualité du diagnostic quand quelque chose échoue à la marge.
+Deux scénarios s'en assurent : le message d'absence de branche de référence doit
+rester lisible, et un échec côté GitHub ne doit ni passer inaperçu, ni laisser
+croire qu'il faut tout recommencer.
 
 ---
 
@@ -191,14 +198,17 @@ sur une base propre sans ouvrir un nouveau ticket.
 | PR pas encore mergée | refus : le `restart` n'est possible que si les deux branches portent le même code |
 | `--no-open` | recrée la branche sans demander de PR |
 | `hotfix restart` | se comporte comme `feature restart` |
+| Feature inexistante | refus : aucune branche créée, rien de poussé |
 
-### Un scénario de caractérisation
+### D'un scénario de caractérisation à un test de non-régression
 
-Le dernier scénario est d'une nature différente : il décrit ce que `jgit` fait
-aujourd'hui pour un `restart` sur une feature **inexistante** — il crée et pousse
-une branche de travail au lieu de refuser. Ce n'est pas le comportement souhaité.
+Le dernier scénario a une histoire. Il figeait au départ un comportement
+**constaté mais non souhaité** : un `restart` sur une feature inexistante créait
+et poussait une branche de travail au lieu de refuser, parce que le garde-fou
+reposait sur un `git ls-remote` sans `--exit-code` — une commande qui renvoie 0
+même sans correspondance, donc une condition toujours fausse.
 
-Le scénario le fige tel quel, avec un commentaire qui l'annonce. Utilité : le jour
-où la commande sera corrigée, ce scénario échouera immédiatement et rappellera
-qu'il doit être réécrit pour décrire le refus attendu. Un comportement discutable
-mais connu vaut mieux qu'un angle mort.
+Le scénario portait un commentaire `# ANOMALIE CONNUE` annonçant qu'il passerait
+au rouge le jour de la correction. C'est exactement ce qui s'est produit
+(issue #34) : il a été inversé et décrit maintenant le refus attendu. Un
+comportement discutable mais connu valait mieux qu'un angle mort.
