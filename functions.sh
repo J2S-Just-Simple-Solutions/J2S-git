@@ -124,7 +124,9 @@ exit_safe() {
 
     if [[ $exit_code -ne 0 ]]; then
         echo "checkout on $current_branch"
-        checkout_if_exists "$current_branch"
+        # Mode recover : on est déjà dans un chemin d'erreur, il ne doit ni
+        # synchroniser, ni échouer, ni rappeler exit_safe.
+        switch_branch "$current_branch" recover
     fi
 
     if [[ $stash == true ]]; then
@@ -417,50 +419,173 @@ rename_branch() {
   git branch -m "$source_branch" "$destination_branch"
 }
 
-# Si la branche n'existe pas elle est créé si elle existe on checkout dessus.
-checkout_or_create_branch() {
-  local branch="$1"
+###############################################
+###############################################
+#      Changement de branche : point unique
+###############################################
+###############################################
 
-  if [[ -z "$branch" ]]; then
-    printf "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m\n" >&2
+# jgit travaille toujours sur la version serveur des branches. Deux fonctions
+# seulement le garantissent : jgit_fetch_once rapatrie les références, et
+# switch_branch est le seul endroit du dépôt qui appelle `git checkout`.
+
+# Un seul fetch par exécution : toutes les synchronisations qui suivent se font
+# sur les références déjà rapatriées, sans nouvel aller-retour réseau.
+JGIT_FETCH_DONE=false
+
+jgit_fetch_once() {
+  if [[ $JGIT_FETCH_DONE == true ]]; then
+    return 0
+  fi
+
+  if ! git fetch "$j2s_remote" --quiet; then
+    printf "\033[1;31mImpossible de contacter %s.\033[0m\n" "$j2s_remote" >&2
+    printf "jgit travaille toujours sur les dernières versions du serveur : vérifiez votre connexion.\n" >&2
     return 1
   fi
-  if git show-ref --verify --quiet "refs/heads/$branch"; then
-      # La branche existe en local
-      git checkout "$branch" --quiet
-      git pull --ff-only "$j2s_remote" "$branch" --quiet
 
-  elif git ls-remote --exit-code --heads "$j2s_remote" "$branch" > /dev/null; then
-      # La branche existe sur le remote mais pas en local
-      git fetch "$j2s_remote" "$branch:$branch" --quiet
-      git checkout "$branch" --quiet
-  else
-    echo "Bascule vers '$branch' (Création depuis la branche courante)"
-    git checkout -b "$branch"
-  fi
+  JGIT_FETCH_DONE=true
 }
 
-# Si la branche existe on checkout dessus et on la met à jour, si elle n'existe pas on lance une erreur.
-checkout_if_exists() {
+# Remet la branche courante au niveau de son homologue distante, en fast-forward
+# strict. Suppose que l'on est déjà positionné dessus et que le fetch a eu lieu.
+#
+#   pas d'homologue distante -> rien à faire (branches temporaires jgit_*)
+#   en retard                -> mise à jour
+#   en avance                -> acceptée telle quelle, rien n'est poussé
+#   divergence               -> échec, sans rien modifier
+#
+# Le cas « en avance » est celui d'une branche de travail sur laquelle on vient
+# de commiter : c'est normal, jgit ne pousse jamais à la place du développeur.
+sync_branch_with_remote() {
   local branch="$1"
+  local remote_ref="$j2s_remote/$branch"
+
+  if ! git show-ref --verify --quiet "refs/remotes/$remote_ref"; then
+    return 0
+  fi
+
+  local counts behind ahead
+  if ! counts=$(git rev-list --left-right --count "$remote_ref...$branch"); then
+    printf "\033[1;31mImpossible de comparer %s à %s.\033[0m\n" "$branch" "$remote_ref" >&2
+    return 1
+  fi
+  behind=$(awk '{print $1}' <<< "$counts")
+  ahead=$(awk '{print $2}' <<< "$counts")
+
+  if [[ $behind -gt 0 && $ahead -gt 0 ]]; then
+    printf "\033[1;31mLa branche %s a divergé de %s.\033[0m\n" "$branch" "$remote_ref" >&2
+    printf "%s commit(s) uniquement en local, %s commit(s) uniquement sur le serveur.\n" "$ahead" "$behind" >&2
+    printf "jgit ne choisit pas à votre place : réconciliez la branche (rebase ou merge) puis relancez.\n" >&2
+    return 1
+  fi
+
+  if [[ $behind -gt 0 ]]; then
+    if ! git merge --ff-only "$remote_ref" --quiet; then
+      printf "\033[1;31mLa mise à jour de %s depuis %s a échoué.\033[0m\n" "$branch" "$remote_ref" >&2
+      return 1
+    fi
+    printf "%s mise à jour depuis %s (%s commit(s)).\n" "$branch" "$remote_ref" "$behind"
+    return 0
+  fi
+
+  if [[ $ahead -gt 0 ]]; then
+    printf "%s a %s commit(s) d'avance sur %s, non poussé(s).\n" "$branch" "$ahead" "$remote_ref"
+  fi
+
+  return 0
+}
+
+# Vrai si la branche existe, en local ou sur le remote. S'appuie sur les mêmes
+# références que switch_branch, pour qu'un contrôle préalable et la bascule qui
+# suit ne puissent jamais être en désaccord.
+branch_exists() {
+  local branch="$1"
+
+  [[ -n "$branch" ]] || return 1
+  git show-ref --verify --quiet "refs/heads/$branch" && return 0
+  git show-ref --verify --quiet "refs/remotes/$j2s_remote/$branch"
+}
+
+# Unique point d'entrée pour changer de branche : aucun autre `git checkout` ne
+# doit exister dans le dépôt. Toute branche sur laquelle on va travailler est
+# donc remise au niveau du serveur au moment où on y bascule.
+#
+#   switch_branch <branche> [mode]
+#
+#   sync     (défaut) la branche doit exister en local ou sur le remote ; elle est
+#                     synchronisée ; toute anomalie arrête la commande
+#   create            comme sync, mais crée la branche depuis la branche courante
+#                     si elle n'existe nulle part
+#   try               comme sync, mais renvoie 1 au lieu d'arrêter la commande
+#   nosync            bascule sans synchroniser, mais échoue si le checkout rate.
+#                     Réservé aux branches que jgit vient délibérément de
+#                     réécrire et s'apprête à pousser en force : après un rebase,
+#                     la divergence avec le serveur est le résultat attendu, pas
+#                     une anomalie.
+#   recover           chemin de récupération : ni fetch, ni synchronisation, ni
+#                     échec — utilisé par exit_safe, qui traite déjà une erreur
+#   discard           comme recover, mais force le checkout en abandonnant l'état
+#                     de l'arbre de travail (annulation d'un rebase en conflit)
+switch_branch() {
+  local branch="$1"
+  local mode="${2:-sync}"
+
+  case "$mode" in
+    recover)
+      [[ -n "$branch" ]] && git checkout "$branch" --quiet 2>/dev/null
+      return 0
+      ;;
+    discard)
+      [[ -n "$branch" ]] && git checkout -f "$branch" --quiet 2>/dev/null
+      return 0
+      ;;
+  esac
+
+  local fatal=true
+  [[ "$mode" == "try" ]] && fatal=false
 
   if [[ -z "$branch" ]]; then
     printf "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m\n" >&2
+    [[ $fatal == true ]] && exit_safe 1
     return 1
   fi
-  if git show-ref --verify --quiet "refs/heads/$branch"; then
-      # La branche existe en local
-      git checkout "$branch" --quiet
-      git pull --ff-only "$j2s_remote" "$branch" --quiet
 
-  elif git ls-remote --exit-code --heads "$j2s_remote" "$branch" > /dev/null; then
-      # La branche existe sur le remote mais pas en local
-      git fetch "$j2s_remote" "$branch:$branch" --quiet
-      git checkout "$branch" --quiet
-  else
-    echo "La branche n'existe pas"
-    exit_safe 1
+  if [[ "$mode" != "nosync" ]] && ! jgit_fetch_once; then
+    [[ $fatal == true ]] && exit_safe 1
+    return 1
   fi
+
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    if ! git checkout "$branch" --quiet; then
+      printf "\033[1;31mImpossible de basculer sur %s.\033[0m\n" "$branch" >&2
+      [[ $fatal == true ]] && exit_safe 1
+      return 1
+    fi
+    if [[ "$mode" != "nosync" ]] && ! sync_branch_with_remote "$branch"; then
+      [[ $fatal == true ]] && exit_safe 1
+      return 1
+    fi
+  elif git show-ref --verify --quiet "refs/remotes/$j2s_remote/$branch"; then
+    if ! git checkout -b "$branch" "$j2s_remote/$branch" --quiet; then
+      printf "\033[1;31mImpossible de créer %s depuis %s/%s.\033[0m\n" "$branch" "$j2s_remote" "$branch" >&2
+      [[ $fatal == true ]] && exit_safe 1
+      return 1
+    fi
+  elif [[ "$mode" == "create" ]]; then
+    echo "Bascule vers '$branch' (Création depuis la branche courante)"
+    if ! git checkout -b "$branch" --quiet; then
+      printf "\033[1;31mImpossible de créer la branche %s.\033[0m\n" "$branch" >&2
+      [[ $fatal == true ]] && exit_safe 1
+      return 1
+    fi
+  else
+    printf "\033[1;31mLa branche %s n'existe pas (ni en local ni sur %s).\033[0m\n" "$branch" "$j2s_remote" >&2
+    [[ $fatal == true ]] && exit_safe 1
+    return 1
+  fi
+
+  return 0
 }
 
 # Script de nettoyage qui va nettoyer toutes les branches utiles à jgit mais pas au développeur.
@@ -510,6 +635,11 @@ util_verify_rebase() {
     return 1
   fi
 
+  if ! jgit_fetch_once; then
+    echo "false"
+    return 1
+  fi
+
   local source_branch="${sources[0]}"
   local source_ref
   local target_ref
@@ -553,7 +683,7 @@ util_verify_rebase() {
     return 1
   fi
 
-  if ! git checkout --quiet "$temp_branch"; then
+  if ! switch_branch "$temp_branch" try; then
     git branch -D "$temp_branch" >/dev/null 2>&1 || true
     echo "Erreur : impossible de basculer sur la branche temporaire." >&2
     echo "false"
@@ -566,7 +696,7 @@ util_verify_rebase() {
     git rebase --abort >/dev/null 2>&1 || true
   fi
 
-  git checkout --quiet "$start_branch" >/dev/null 2>&1 || true
+  switch_branch "$start_branch" recover
   git branch -D "$temp_branch" >/dev/null 2>&1 || true
 
   if [[ "$rebase_ok" == true ]]; then

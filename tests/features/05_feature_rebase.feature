@@ -246,7 +246,7 @@ Fonctionnalité: Rebase d'une feature sur sa branche de référence
   Scénario: Rebaser une feature inconnue est refusé
     Quand je lance "jgit feature rebase INCONNUE --no-interaction"
     Alors jgit se termine en erreur
-    Et la sortie contient "La branche n'existe pas"
+    Et la sortie contient "La branche feature/INCONNUE n'existe pas (ni en local ni sur origin)."
     Et la branche distante "feature/INCONNUE" n'existe pas
 
   Scénario: Une paire de branches jamais publiée est refusée

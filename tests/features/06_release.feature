@@ -55,12 +55,14 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "Local changes, cannot start release"
     Et la branche distante "release/1.1.0" n'existe pas
 
+  # La branche locale n'est plus détruite puis re-trackée : elle est reprise et
+  # remise au niveau du serveur en fast-forward.
   Scénario: Relancer start réutilise la release déjà publiée
     Étant donné je lance "jgit release start"
     Quand je lance "jgit release start"
     Alors jgit se termine sans erreur
-    Et la sortie contient "Release release/1.1.0 local branch exists, deletion..."
     Et la sortie contient "Remote branch exists, use it..."
+    Et la sortie ne contient pas "local branch exists, deletion..."
     Et je suis sur la branche "release/1.1.0"
     Et la branche distante "release/1.1.0" a 1 commits d'avance sur "main"
 

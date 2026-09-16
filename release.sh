@@ -26,16 +26,9 @@ checkout_release_branch() {
         exit_safe 1
     fi
 
-    if git show-ref --verify --quiet "refs/heads/$branch"; then
-        git checkout "$branch" --quiet
-        git pull "$j2s_remote" "$branch" --quiet
-    elif git ls-remote --exit-code --heads "$j2s_remote" "$branch" >/dev/null 2>&1; then
-        git fetch "$j2s_remote" "$branch:$branch" --quiet
-        git checkout "$branch" --quiet
-    else
-        printf "\033[1;31mLa branche %s n'existe pas (ni en local ni sur %s).\033[0m\n" "$branch" "$j2s_remote"
-        exit_safe 1
-    fi
+    # switch_branch refuse lui-même une branche inexistante, avec le même
+    # message, et garantit qu'on travaille sur la version du serveur.
+    switch_branch "$branch"
 
     current_branch="$branch"
 }
@@ -68,8 +61,7 @@ release_start() {
         exit_safe 1
     fi
 
-    git checkout "$prod_branch"
-    git fetch "$j2s_remote"
+    switch_branch "$prod_branch"
 
     if [[ -n "$requested_version" ]]; then
         future_tag="$requested_version"
@@ -98,25 +90,18 @@ release_start() {
 
     local branch
     branch=$(normalize_release_branch_name "$future_tag")
-    local existed_in_local
-    existed_in_local=$(git branch --list "$branch")
     local existed_in_remote
     existed_in_remote=$(git ls-remote --heads "$j2s_remote" "$branch")
 
     echo "Searching a branch naming: ${branch}"
 
     if [[ -n ${existed_in_remote} ]]; then
-        if [[ -n ${existed_in_local} ]]; then
-            echo "Release ${branch} local branch exists, deletion..."
-            git branch -D "$branch"
-        fi
         echo "Remote branch exists, use it..."
-        git checkout --track "$j2s_remote/$branch"
-        git pull "$j2s_remote" "$branch" --quiet
+        switch_branch "$branch"
     else
         echo "Release does not exists, create it..."
         git reset --hard "$j2s_remote/$prod_branch"
-        git checkout -b "$branch"
+        switch_branch "$branch" create
         git commit --allow-empty -m "$prefix_init_commit release ${branch}. $suffix_init_commit"
         git push "$j2s_remote" "$branch"
     fi
@@ -160,7 +145,7 @@ release_merge_single() {
         exit_safe 1
     fi
 
-    git checkout "$release_branch" --quiet
+    switch_branch "$release_branch"
     git merge --no-ff "$merge_source" -m "$prefix_commit Release merge feature branch : $resolved_branch"
 }
 
@@ -175,11 +160,10 @@ release_merge() {
         exit_safe 1
     fi
 
-    # Sans --into, release_start fait déjà ce fetch. Avec --into, on passe par
-    # checkout_release_branch qui ne rafraîchit que la branche de release : les
-    # références __PR__ resteraient périmées et une PR mergée serait vue comme
-    # non mergée.
-    git fetch "$j2s_remote" --quiet
+    # Les références __PR__ doivent être à jour avant le contrôle « la branche
+    # ne contient que son commit d'initialisation » : sans cela une PR mergée
+    # est vue comme non mergée.
+    jgit_fetch_once || exit_safe 1
 
     local release_branch
     if [[ -n "$explicit_into" ]]; then
@@ -262,11 +246,10 @@ release_finish() {
         local minor="${BASH_REMATCH[3]}"
         local future_tag="${major}.${feature}.${minor}"
         echo "Future tag: ${future_tag}"
-        git checkout "$prod_branch"
+        switch_branch "$prod_branch"
         # La branche de release va être supprimée : sans cela, exit_safe
         # tenterait de revenir sur une branche qui n'existe plus.
         current_branch="$prod_branch"
-        git fetch "$j2s_remote"
         git reset --hard "$j2s_remote/$prod_branch"
         echo "Merging release ${branch} in $prod_branch branch..."
         git merge --no-ff "${branch}" -m "Merge release branch : ${branch}"
