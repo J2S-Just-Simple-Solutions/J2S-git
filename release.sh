@@ -59,7 +59,9 @@ release_start() {
     local future_tag=""
     local prod_branch
 
-    prod_branch=$(get_reference_branch "hotfix")
+    if ! prod_branch=$(get_reference_branch "hotfix"); then
+        exit_safe 1
+    fi
 
     if [[ $(git status --porcelain) ]]; then
         echo "/!\\ Local changes, cannot start release"
@@ -198,7 +200,9 @@ release_finish() {
     local branch="$requested_target"
     local prod_branch
 
-    prod_branch=$(get_reference_branch "hotfix")
+    if ! prod_branch=$(get_reference_branch "hotfix"); then
+        exit_safe 1
+    fi
 
     if [[ -n "$requested_target" ]]; then
         branch=$(normalize_release_branch_name "$requested_target")

@@ -161,7 +161,8 @@ verify_stash() {
 # Les paramètre du fichier .jgit/conf_local.sh seront pris en 2nd
 # Sinon le script prendra la première branche qui existe parmis les fallback_branches
 #
-# Si la branche de référence n'existe pas une erreur est lancée.
+# Si aucune branche de référence n'existe, la fonction renvoie 1 et écrit son
+# message sur stderr : l'appelant doit contrôler le code de retour.
 get_reference_branch() {
     local feature_type=${1:-feature}
     local fallback_branches=("develop" "master" "main")
@@ -183,8 +184,11 @@ get_reference_branch() {
         fi
     done
 
-    echo "Erreur: Aucune branche valide trouvée."
-    exit_safe 1
+    # La fonction est appelée en substitution de commande : un exit_safe ne
+    # quitterait que le sous-shell et le message partirait sur stdout, donc
+    # serait lu comme un nom de branche. On passe par stderr + code de retour.
+    printf "\033[1;31mErreur : aucune branche de référence valide trouvée.\033[0m\n" >&2
+    return 1
 }
 
 # Fonction pour récupérer le dernier commit contenant le pattern de commit d'init jgit.

@@ -113,19 +113,18 @@ Fonctionnalité: Création d'une feature ou d'un hotfix
     Et la branche distante "feature/TEST-10" existe
     Et le fichier "src/preprod.txt" n'existe pas sur la branche distante "feature/TEST-10"
 
-  # ANOMALIE CONNUE (cf. functions.sh, get_reference_branch) : la fonction est
-  # appelée dans une substitution de commande, donc son `exit_safe 1` ne quitte
-  # que le sous-shell. Son message d'erreur est renvoyé comme s'il s'agissait
-  # d'un nom de branche, d'où le message final imbriqué. jgit sort bien en
-  # erreur et ne crée rien, mais le diagnostic affiché est illisible.
-  Scénario: Sans aucune branche de référence, le message d'erreur est confus
+  # get_reference_branch est appelée en substitution de commande : son message
+  # doit partir sur stderr et l'échec passer par le code de retour, sinon il est
+  # capturé comme un nom de branche et le diagnostic devient illisible.
+  Scénario: Sans aucune branche de référence, le refus est explicite
     Étant donné je crée la branche locale "autre" depuis "main"
     Et je me place sur la branche "autre"
     Et je supprime la branche locale "develop"
     Et je supprime la branche locale "main"
     Quand je lance "jgit feature start TEST-11 --no-interaction --no-open"
     Alors jgit se termine en erreur
-    Et la sortie contient "Aucune branche valide trouvée."
+    Et la sortie contient "Erreur : aucune branche de référence valide trouvée."
+    Et la sortie ne contient pas "La branche référence"
     Et la branche distante "feature/TEST-11" n'existe pas
 
   Scénario: Valider sans rien saisir applique la réponse par défaut

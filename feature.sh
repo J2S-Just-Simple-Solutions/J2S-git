@@ -28,8 +28,8 @@ feature_start() {
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
         if [[ -n "$BASED_ON" ]]; then
             reference_branch="$BASED_ON"
-        else
-            reference_branch=$(get_reference_branch "$feature_type")
+        elif ! reference_branch=$(get_reference_branch "$feature_type"); then
+            exit_safe 1
         fi
 
         # Vérifier si la branche référence existe

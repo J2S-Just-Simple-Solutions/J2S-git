@@ -22,8 +22,8 @@ demo_start() {
     local base_branch
     if [[ -n "$based_on" ]]; then
         base_branch="$based_on"
-    else
-        base_branch=$(get_reference_branch)
+    elif ! base_branch=$(get_reference_branch); then
+        exit_safe 1
     fi
 
     if [[ -z "$base_branch" ]]; then
@@ -98,14 +98,18 @@ resolve_demo_source_branch() {
     if [[ "$source" == feature/* || "$source" == hotfix/* ]]; then
         echo "$source"
     else
-        printf "\033[1;31mLe format attendu est feature/<ticket> ou hotfix/<ticket>.\033[0m\n"
-        exit_safe 1
+        # Appelée en substitution de commande : message sur stderr et code de
+        # retour, sinon le message serait capturé comme un nom de branche.
+        printf "\033[1;31mLe format attendu est feature/<ticket> ou hotfix/<ticket>.\033[0m\n" >&2
+        return 1
     fi
 }
 
 demo_merge_branch() {
     local source_branch
-    source_branch=$(resolve_demo_source_branch "$1")
+    if ! source_branch=$(resolve_demo_source_branch "$1"); then
+        exit_safe 1
+    fi
     local demo_branch="$2"
 
     local source_remote="$j2s_remote/$source_branch"
@@ -246,7 +250,9 @@ demo_remove() {
     git fetch "$j2s_remote" --quiet
 
     local reference_branch
-    reference_branch=$(get_reference_branch "feature")
+    if ! reference_branch=$(get_reference_branch "feature"); then
+        exit_safe 1
+    fi
 
     local color_title=$(tput bold; tput setaf 6)
     local color_branch=$(tput bold; tput setaf 1)
