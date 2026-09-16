@@ -1,0 +1,10 @@
+{
+  // Où sont les scénarios.
+  "cucumber.features": ["tests/features/**/*.feature"],
+
+  // Les définitions d'étapes sont écrites en bash (tests/steps/*.steps.sh), que
+  // l'extension ne sait pas lire : elle s'appuie sur tests/steps/vscode_glue.py,
+  // généré par tests/steps/generate_vscode_glue.sh, qui lui redéclare les mêmes
+  // phrases. Sans cela, toutes les étapes sont soulignées « Undefined step ».
+  "cucumber.glue": ["tests/steps/**/*.py"]
+}

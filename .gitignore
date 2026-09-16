@@ -1,1 +1,27 @@
-.jgit/*
+# Configuration locale du projet, propre à chaque poste (voir README).
+.jgit/
+
+# macOS
+.DS_Store
+.AppleDouble
+._*
+
+# VS Code : on versionne la configuration partagée de l'équipe
+# (extensions recommandées + réglages Cucumber), pas les fichiers personnels.
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Autres éditeurs
+.idea/
+*.swp
+*~
+
+# Python : tests/lib/expect.py et le fichier de glue VS Code peuvent laisser
+# des caches s'ils sont importés.
+__pycache__/
+*.py[cod]
+
+# Les tests créent leurs dépôts jetables et leurs journaux dans le répertoire
+# temporaire du système : rien à ignorer ici, sauf exécution manuelle.
+tests/**/tmp/
