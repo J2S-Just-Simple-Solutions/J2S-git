@@ -133,3 +133,41 @@ Avec `--no-interaction`, un conflit ne peut pas être résolu : la commande s'ar
 
 - `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `__PR__*`).
 - `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
+
+## Tests
+
+`jgit` est couvert par une suite de tests « grandeur nature ». Les scénarios sont
+écrits en Gherkin (style Cucumber), en français, et déroulent de vraies commandes
+git — vrais commits, vraies branches, vrais tags — dans un dépôt jetable dont le
+remote est local. Seul le client `gh` est simulé, de sorte qu'aucun test ne touche
+les dépôts de l'organisation.
+
+```gherkin
+Scénario: Une feature est développée puis livrée dans une release
+  Quand je lance "jgit feature start TEST-123" et que je réponds aux questions :
+    | Souhaitez-vous continuer | y |
+  Alors jgit se termine sans erreur
+  Et la branche distante "feature/TEST-123" existe
+  Et GitHub a reçu "--base=__PR__feature/TEST-123"
+```
+
+```bash
+./tests/run.sh          # joue tous les scénarios
+./tests/run.sh -v       # avec le déroulé complet
+./tests/run.sh release  # uniquement les fichiers dont le nom contient "release"
+```
+
+Les scénarios interactifs sont joués dans un pseudo-terminal : le test vérifie
+que chaque question est bien posée par `jgit` avant d'y répondre, et échoue si une
+question disparaît ou si une question inattendue apparaît.
+
+Pour écrire ou relire des scénarios confortablement, installez l'extension
+Cucumber recommandée par le dépôt (VS Code la propose à l'ouverture du projet) :
+
+```bash
+code --install-extension CucumberOpen.cucumber-official
+```
+
+- Mode d'emploi des tests (lancer, écrire un scénario, étapes disponibles) :
+  [`tests/README.md`](tests/README.md)
+- Stratégie de test, parcours couverts et choix techniques : [`docs/`](docs/)
