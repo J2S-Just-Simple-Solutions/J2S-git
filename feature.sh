@@ -11,29 +11,28 @@ feature_start() {
     branch_in_local=$( git branch --list ${branch} )
     branch_in_remote=$(git ls-remote --heads ${j2s_remote} ${branch})
 
-    git fetch $j2s_remote --quiet
+    jgit_fetch_once || exit_safe 1
 
     if [[ -n ${branch_in_local} ]] && [[ -n ${branch_in_remote} ]]; then
         echo "Exists in remote and local"
         echo "Use local branch"
-        git checkout $branch
-        git pull
+        switch_branch "$branch"
     elif [[ -z ${branch_in_local} ]] && [[ -n ${branch_in_remote} ]]; then
         echo "Exists in remote but not in local"
         echo "Use remote branch"
-        git checkout -b $branch $j2s_remote/$branch
+        switch_branch "$branch"
     elif [[ -n ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
         echo "Exists in local and not in remote"
         echo "Is this feature already merged ?"
     elif [[ -z ${branch_in_local} ]] && [[ -z ${branch_in_remote} ]]; then
         if [[ -n "$BASED_ON" ]]; then
             reference_branch="$BASED_ON"
-        else
-            reference_branch=$(get_reference_branch "$feature_type")
+        elif ! reference_branch=$(get_reference_branch "$feature_type"); then
+            exit_safe 1
         fi
 
-        # Vérifier si la branche référence existe
-        if ! git rev-parse --verify "$reference_branch" >/dev/null 2>&1; then
+        # Vérifier si la branche référence existe, en local ou sur le remote
+        if ! branch_exists "$reference_branch"; then
             echo "Erreur : La branche référence '$reference_branch' n'existe pas."
             exit_safe 1
         fi
@@ -47,13 +46,13 @@ feature_start() {
         fi
 
         echo "Checkout and reset $reference_branch branch"
-        git checkout $reference_branch --quiet
+        switch_branch "$reference_branch"
         echo "Create pull request branch $branch_PR branch"
-        git checkout -b $branch_PR --quiet
+        switch_branch "$branch_PR" create
         git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
-        git checkout -b $branch --quiet
+        switch_branch "$branch" create
         git commit --allow-empty -m "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - START $branch $suffix_init_commit" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         current_branch="$branch"
@@ -62,7 +61,10 @@ feature_start() {
             echo "Skipping pull request creation (--no-open)."
         else
             echo "Create pull request"
-            gh pr create --title "$feature_name" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"
+            if ! gh pr create --title "$feature_name" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"; then
+                report_pr_creation_failure "$branch" "$branch_PR"
+                exit_safe 1
+            fi
         fi
     else
         echo "On est dans la Matrix"
@@ -78,14 +80,16 @@ feature_restart() {
     local branch_PR=$prefix_PR$branch
 
     # Vérifier si la branche référence existe
-    if ! git rev-parse --verify "$branch_PR" >/dev/null 2>&1 && ! git ls-remote --heads "$j2s_remote" "$branch_PR" >/dev/null 2>&1; then
+    if ! git rev-parse --verify "$branch_PR" >/dev/null 2>&1 \
+       && ! git ls-remote --exit-code --heads "$j2s_remote" "$branch_PR" >/dev/null 2>&1; then
         echo "Erreur : La branche de PR '$branch_PR' n'existe pas."
         exit_safe 1
     fi
 
-    # On remet les branches à jour en local.
-    checkout_or_create_branch $branch_PR
-    checkout_or_create_branch $branch
+    # On remet les branches à jour en local. La branche de PR existe forcément
+    # (garde-fou ci-dessus) ; la branche de travail peut avoir été supprimée.
+    switch_branch "$branch_PR"
+    switch_branch "$branch" create
 
     branches_have_same_code "$branch" "$branch_PR"
 
@@ -103,8 +107,8 @@ feature_restart() {
     #####################################################
     # On supprime la branche de travail pour la recréer
     #####################################################
-    git checkout $branch_PR --quiet
-    
+    switch_branch "$branch_PR"
+
     # Suppression locale de la branche - on ignore l'erreur si elle n'existe déjà pas
     git branch -d "$branch" 2>/dev/null
   
@@ -112,7 +116,7 @@ feature_restart() {
     git push "$j2s_remote" --delete "$branch" 2>/dev/null
 
     echo "Create working branch $branch"
-    git checkout -b $branch --quiet
+    switch_branch "$branch" create
     git commit --allow-empty -m "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - RESTART $branch $suffix_init_commit" --quiet
     git push --set-upstream $j2s_remote $branch --quiet
     current_branch="$branch"
@@ -121,6 +125,9 @@ feature_restart() {
         echo "Skipping pull request creation (--no-open)."
     else
         echo "Create pull request"
-        gh pr create --title "$feature_name - RESTART" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"
+        if ! gh pr create --title "$feature_name - RESTART" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"; then
+            report_pr_creation_failure "$branch" "$branch_PR"
+            exit_safe 1
+        fi
     fi
 }

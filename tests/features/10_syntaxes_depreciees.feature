@@ -96,15 +96,17 @@ Fonctionnalité: Compatibilité avec les anciennes syntaxes
   # --- jgit clean -----------------------------------------------------------
 
   Scénario: L'ancien jgit clean fonctionne encore
-    Étant donné je crée la branche locale "jgit_rebase_feature/TEST-1"
-    Et je crée la branche locale "__PR__feature/TEST-1"
-    Et je crée la branche locale "feature/GARDEE"
+    Étant donné je lance "jgit feature start TEST-1 --no-interaction --no-open"
+    Et je récupère la branche distante "__PR__feature/TEST-1" en local
+    Et je lance "jgit feature start GARDEE --no-interaction --no-open"
+    Et je crée la branche locale "jgit_rebase_feature/TEST-1"
     Quand je lance "jgit clean"
     Alors jgit se termine sans erreur
     Et la sortie contient "[déprécié] « jgit clean » : utilisez désormais « jgit util clean »."
     Et la branche locale "jgit_rebase_feature/TEST-1" n'existe pas
     Et la branche locale "__PR__feature/TEST-1" n'existe pas
     Et la branche locale "feature/GARDEE" existe
+    Et la branche locale "feature/TEST-1" existe
 
   Scénario: jgit util clean n'affiche aucun avertissement
     Étant donné je crée la branche locale "jgit_rebase_feature/TEST-1"

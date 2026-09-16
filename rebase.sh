@@ -14,13 +14,13 @@ abort_rebase() {
     local squash_done="$6"
 
     git cherry-pick --abort >/dev/null 2>&1
-    git checkout -f "$reference_branch" --quiet 2>/dev/null
+    switch_branch "$reference_branch" discard
 
     if [[ "$squash_done" == true ]]; then
         echo "Restauration de l'historique initial de $branch (annulation du squash)."
-        git checkout -f "$branch" --quiet
+        switch_branch "$branch" discard
         git reset --hard "$original_head" --quiet
-        git checkout -f "$reference_branch" --quiet
+        switch_branch "$reference_branch" discard
     fi
 
     git branch -D "$branch_rebase" --quiet 2>/dev/null
@@ -41,12 +41,12 @@ feature_rebase() {
 
     current_date=`date '+%s'`
 
-    git fetch $j2s_remote --quiet
+    jgit_fetch_once || exit_safe 1
 
     git branch -D "$branch_rebase" --quiet 2>/dev/null
     git branch -D $branch_PR_rebase --quiet 2>/dev/null
-    checkout_if_exists "$branch"
-    checkout_if_exists "$branch_PR"
+    switch_branch "$branch"
+    switch_branch "$branch_PR"
 
     branch_in_remote=$(git ls-remote --heads ${j2s_remote} ${branch})
     branch_PR_in_remote=$(git ls-remote --heads ${j2s_remote} ${branch_PR})
@@ -55,12 +55,12 @@ feature_rebase() {
 
     if [[ -n "$BASED_ON" ]]; then
         reference_branch="$BASED_ON"
-    else
-        reference_branch=$(get_reference_branch "$feature_type")
+    elif ! reference_branch=$(get_reference_branch "$feature_type"); then
+        exit_safe 1
     fi
 
-    # Vérifier si la branche référence existe
-    if ! git rev-parse --verify "$reference_branch" >/dev/null 2>&1; then
+    # Vérifier si la branche référence existe, en local ou sur le remote
+    if ! branch_exists "$reference_branch"; then
         echo "Erreur : La branche référence '$reference_branch' n'existe pas."
         exit_safe 1
     fi
@@ -75,15 +75,15 @@ feature_rebase() {
 
     if [[ -z ${branch_in_local} ]]; then
         echo "$branch exists in remote but not in local, checkout from remote"
-        git checkout -b $branch $j2s_remote/$branch --quiet
+        switch_branch "$branch"
     fi
 
     if [[ -z ${branch_PR_in_local} ]]; then
         echo "$branch_PR exists in remote but not in local, checkout from remote"
-        git checkout -b $branch_PR $j2s_remote/$branch_PR --quiet
+        switch_branch "$branch_PR"
     fi
 
-    git checkout $branch --quiet
+    switch_branch "$branch"
     # Lister les commits sur la branche feature en avance de la branche PR (dans l'ordre du plus ancien au plus récent)
     local commits=($(git rev-list "$branch_PR..$branch" | tail -r))
 
@@ -93,7 +93,7 @@ feature_rebase() {
     # présents sur la branche PR qui ne doivent pas être oubliés
     ##############################################################################
 
-    git checkout $branch_PR --quiet
+    switch_branch "$branch_PR"
     # Récupérer le dernier commit avec le pattern jgit de démarrage de feature
     last_init_commit=$(get_last_commit_with_pattern "$prefix_init_commit $feature_type")
     if [ -z "$last_init_commit" ]; then
@@ -113,7 +113,7 @@ feature_rebase() {
         exit_safe 1
     fi
     
-    git checkout $branch_PR --quiet
+    switch_branch "$branch_PR"
 
     # On ne peut pas automatiser un rebase s'il y a un commit de fusion, on refuse l'action
     for commit in "${commits_on_PR[@]}"; do
@@ -152,7 +152,7 @@ feature_rebase() {
         done
     fi
 
-    git checkout $branch --quiet
+    switch_branch "$branch"
 
     ##################################################
     # Squash optionnel des commits de la branche de travail
@@ -224,12 +224,11 @@ feature_rebase() {
     ###################################
     # On met à jour la branche de référence par rapport au remote pour être bien à jour
     echo "Checkout and pull $reference_branch branch"
-    git checkout $reference_branch --quiet
-    git pull $j2s_remote $reference_branch --quiet
+    switch_branch "$reference_branch"
 
     # rebase de la branche PR par application des commits déjà présents sur l'ancienne branche PR en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
-    checkout_or_create_branch $branch_PR_rebase
+    switch_branch "$branch_PR_rebase" create
     if ! cherry_pick_commits "${commits_on_PR[@]}"; then
         abort_rebase "$branch" "$reference_branch" "$branch_rebase" "$branch_PR_rebase" "$original_head" "$squash_done"
         exit_safe 1
@@ -237,36 +236,40 @@ feature_rebase() {
 
     # rebase de la branche principal par application de tous les commits en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
-    checkout_or_create_branch $branch_rebase
+    switch_branch "$branch_rebase" create
     if ! cherry_pick_commits "${commits[@]}"; then
         abort_rebase "$branch" "$reference_branch" "$branch_rebase" "$branch_PR_rebase" "$original_head" "$squash_done"
         exit_safe 1
     fi
 
     # On vient écraser les branches historiques par les branches que l'on vient de rebase
-    git checkout $reference_branch
+    switch_branch "$reference_branch"
     rename_branch $branch_PR_rebase $branch_PR
     rename_branch $branch_rebase $branch
-    
+
+    # À partir d'ici $branch et $branch_PR ont un historique réécrit : elles
+    # divergent du serveur par construction, et c'est précisément ce qu'on
+    # s'apprête à pousser en force. D'où le mode nosync.
+    #
     # On propose à l'utlisateur de vérifier son arbre GIT avant de pusher en force sur le remote.
-    git checkout $branch
+    switch_branch "$branch" nosync
     git_history_with_merges "$branch" "$reference_branch"
 
     if ! confirm_action "Confirmez-vous que le rebase s'est bien passé, les branches vont être push --force ?" "y"; then
         echo "les branches locales ne sont plus correctes ($branch et $branch_PR), elles vont être supprimées en local."
-        git checkout $reference_branch --quiet
+        switch_branch "$reference_branch"
         git branch -D $branch
         git branch -D $branch_PR
         echo "Pull de la branche $branch en local depuis Github."
-        checkout_if_exists  $branch
+        switch_branch "$branch"
         exit_safe 1
     fi
 
     # on push force les nouvelles branches fraichement rebasée.
-    git checkout $branch_PR
+    switch_branch "$branch_PR" nosync
     git push --force --set-upstream $j2s_remote "$branch_PR"
 
-    git checkout $branch
+    switch_branch "$branch" nosync
     git push --force --set-upstream $j2s_remote "$branch"
 
     current_branch="$branch"

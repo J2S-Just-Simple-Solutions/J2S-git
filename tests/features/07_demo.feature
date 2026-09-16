@@ -40,8 +40,12 @@ Fonctionnalité: Branches de démonstration
     Et la sortie contient "Branche demo_sprint12 prête pour la démo."
     Et je suis sur la branche "demo_sprint12"
 
-  Scénario: Une démo locale jamais publiée doit être traitée à la main
-    Étant donné je crée la branche locale "demo_orpheline"
+  # Une démo est toujours créée et poussée par jgit : l'état « en local mais
+  # pas sur le serveur » vient d'une suppression côté GitHub, pas d'une branche
+  # fabriquée à la main.
+  Scénario: Une démo absente du serveur doit être traitée à la main
+    Étant donné je lance "jgit demo start orpheline --no-interaction"
+    Et la branche "demo_orpheline" est supprimée sur GitHub
     Quand je lance "jgit demo start orpheline --no-interaction"
     Alors jgit se termine en erreur
     Et la sortie contient "La branche demo_orpheline existe en local mais pas sur origin."
@@ -149,13 +153,12 @@ Fonctionnalité: Branches de démonstration
     Alors jgit se termine en erreur
     Et la sortie contient "Cette commande doit être exécutée depuis une branche demo_*."
 
-  # ANOMALIE CONNUE (cf. demo.sh, demo_list) : le nom de la branche intégrée est
-  # tronqué. Le format `%H%-_-_-%s` ne produit pas le séparateur attendu et
-  # `IFS=$'-_-_-'` découpe en réalité sur les caractères « - » et « _ », si bien
-  # que « feature/TEST-7 » est lu comme « feature ». La commande release
-  # suggérée est donc inutilisable telle quelle. Ce scénario fige le
-  # comportement constaté pour que sa correction se voie immédiatement.
-  Scénario: demo list tronque le nom des branches - comportement actuel, non souhaitable
+  # Le marqueur de démo compte six mots :
+  #   [jgit] DEMO merge <type> <type>/<ticket> [empty_commit]
+  # Un séparateur fantaisiste ou un mot de décalage dans le découpage suffit à
+  # tronquer « feature/TEST-7 » en « feature », ce qui rend la commande release
+  # suggérée inutilisable telle quelle.
+  Scénario: demo list affiche le nom complet des branches intégrées
     Étant donné je lance "jgit demo start sprint12 --no-interaction"
     Et je lance "jgit feature start TEST-7 --no-interaction --no-open"
     Et je commite le fichier "src/feature7.txt" contenant "feature 7" avec le message "Ajoute la feature 7"
@@ -165,9 +168,9 @@ Fonctionnalité: Branches de démonstration
     Quand je lance "jgit demo list"
     Alors jgit se termine sans erreur
     Et la sortie contient "Branches mergées dans demo_sprint12 :"
+    Et la sortie contient "feature/TEST-7"
     Et la sortie contient "Commandes release suggérées :"
-    Et la sortie ne contient pas "jgit release merge --from feature/TEST-7"
-    Et la sortie contient "jgit release merge --from feature"
+    Et la sortie contient "jgit release merge --from feature/TEST-7"
 
   # --- demo remove ----------------------------------------------------------
 

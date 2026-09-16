@@ -55,12 +55,14 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "Local changes, cannot start release"
     Et la branche distante "release/1.1.0" n'existe pas
 
+  # La branche locale n'est plus détruite puis re-trackée : elle est reprise et
+  # remise au niveau du serveur en fast-forward.
   Scénario: Relancer start réutilise la release déjà publiée
     Étant donné je lance "jgit release start"
     Quand je lance "jgit release start"
     Alors jgit se termine sans erreur
-    Et la sortie contient "Release release/1.1.0 local branch exists, deletion..."
     Et la sortie contient "Remote branch exists, use it..."
+    Et la sortie ne contient pas "local branch exists, deletion..."
     Et je suis sur la branche "release/1.1.0"
     Et la branche distante "release/1.1.0" a 1 commits d'avance sur "main"
 
@@ -126,21 +128,19 @@ Fonctionnalité: Cycle de vie d'une release
     Et je suis sur la branche "release/5.0.0"
     Et le fichier "src/feature6.txt" existe sur la branche distante "release/5.0.0"
 
-  # ANOMALIE CONNUE (cf. release.sh, release_merge) : avec --into, jgit passe
-  # par checkout_release_branch, qui ne rafraîchit que la branche de release.
-  # Les références distantes des branches __PR__ restent périmées et jgit croit
-  # à tort que la PR n'a pas été mergée. Sans --into, release_start fait un
-  # « git fetch » complet et le cas ne se produit pas.
-  Scénario: --into sans fetch préalable croit à tort que la PR n'est pas mergée
+  # Avec --into, jgit passe par checkout_release_branch, qui ne rafraîchit que
+  # la branche de release : sans un fetch complet en tête de release_merge, les
+  # références __PR__ restent périmées et la PR mergée est vue comme non mergée.
+  Scénario: --into rafraîchit les références sans fetch préalable
     Étant donné je lance "jgit release start 6.0.0"
     Et je lance "jgit feature start TEST-13 --no-interaction --no-open"
     Et je commite le fichier "src/feature13.txt" contenant "feature 13" avec le message "Ajoute la feature 13"
     Et je pousse la branche courante
     Et la PR de "feature/TEST-13" est squash-mergée sur GitHub avec le message "TEST-13 (#13)"
     Quand je lance "jgit release merge --from feature/TEST-13 --into 6.0.0"
-    Alors jgit se termine en erreur
-    Et la sortie contient "ne contient que le commit d'initialisation."
-    Et le fichier "src/feature13.txt" n'existe pas sur la branche distante "release/6.0.0"
+    Alors jgit se termine sans erreur
+    Et je suis sur la branche "release/6.0.0"
+    Et le fichier "src/feature13.txt" existe sur la branche distante "release/6.0.0"
 
   Scénario: --into sur une release inexistante est refusé
     Étant donné je lance "jgit feature start TEST-7 --no-interaction --no-open"
@@ -161,10 +161,39 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release."
     Et le fichier "src/feature8.txt" n'existe pas sur la branche distante "release/1.1.0"
 
+  # Le commit d'init est posé sous le nom de la branche de travail : le refus
+  # doit se déclencher quelle que soit la forme employée pour la source.
+  Scénario: Une PR non mergée est refusée aussi sous la forme __PR__
+    Étant donné je lance "jgit feature start TEST-16 --no-interaction --no-open"
+    Et je commite le fichier "src/feature16.txt" contenant "feature 16" avec le message "Ajoute la feature 16"
+    Et je pousse la branche courante
+    Quand je lance "jgit release merge --from __PR__feature/TEST-16"
+    Alors jgit se termine en erreur
+    Et la sortie contient "ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release."
+    Et l'historique de "release/1.1.0" ne contient pas "Release merge feature branch : __PR__feature/TEST-16"
+
   Scénario: Une branche source inconnue est refusée
     Quand je lance "jgit release merge --from feature/INCONNUE"
     Alors jgit se termine en erreur
     Et la sortie contient "Feature branch '__PR__feature/INCONNUE' was not found!"
+
+  # La branche __PR__ porte le code validé par la revue : c'est la version du
+  # serveur qui est intégrée, jamais une copie locale.
+  #
+  # Le développeur rapatrie ici la branche de PR AVANT le squash-merge : sa
+  # copie locale ne contient donc que le commit d'initialisation, alors que le
+  # serveur porte le code validé. C'est exactement la situation qui faisait
+  # livrer une release amputée de la feature.
+  Scénario: Une copie locale périmée de la branche de PR est ignorée
+    Étant donné je lance "jgit feature start TEST-14 --no-interaction --no-open"
+    Et je commite le fichier "src/feature14.txt" contenant "feature 14" avec le message "Ajoute la feature 14"
+    Et je pousse la branche courante
+    Et je récupère la branche distante "__PR__feature/TEST-14" en local
+    Et la PR de "feature/TEST-14" est squash-mergée sur GitHub avec le message "TEST-14 (#14)"
+    Quand je lance "jgit release merge --from feature/TEST-14"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "Remote branch exists, use it..."
+    Et le fichier "src/feature14.txt" existe sur la branche distante "release/1.1.0"
 
   # --- release finish -------------------------------------------------------
 
@@ -225,17 +254,15 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "It seems that the release is empty..."
 
   Scénario: Une release plus ancienne que le dernier tag est remplacée
-    Étant donné je crée la branche locale "release/1.0.0" depuis "main"
-    Et je me place sur la branche "release/1.0.0"
+    Étant donné je lance "jgit release start 1.0.0"
     Quand je lance "jgit release finish"
     Alors jgit se termine en erreur
     Et la sortie contient "Local release does not have the right tag, switching to new branch"
     Et la sortie contient "Release: release/1.1.0"
 
-  # ANOMALIE CONNUE (cf. release.sh, release_finish) : l'échec de
-  # `gh release create` n'est pas contrôlé et jgit se termine malgré tout en
-  # succès. Le tag est bien poussé, mais aucune release GitHub n'existe.
-  Scénario: Un échec de gh release create passe inaperçu - comportement actuel
+  # Le tag et le merge sur main sont déjà poussés quand gh échoue : jgit doit
+  # sortir en erreur, mais en disant précisément ce qu'il reste à rejouer.
+  Scénario: Un échec de gh release create est signalé
     Étant donné je lance "jgit feature start TEST-12 --no-interaction --no-open"
     Et je commite le fichier "src/feature12.txt" contenant "feature 12" avec le message "Ajoute la feature 12"
     Et je pousse la branche courante
@@ -243,6 +270,8 @@ Fonctionnalité: Cycle de vie d'une release
     Et je lance "jgit release merge --from feature/TEST-12"
     Et le client gh échoue pour les commandes "release create"
     Quand je lance "jgit release finish"
-    Alors jgit se termine sans erreur
+    Alors jgit se termine en erreur
+    Et la sortie contient "La release GitHub 1.1.0 n'a pas pu être créée."
+    Et la sortie contient "il ne reste que la release GitHub."
     Et le tag "1.1.0" existe sur le remote
     Et GitHub a reçu "release create 1.1.0 --generate-notes"

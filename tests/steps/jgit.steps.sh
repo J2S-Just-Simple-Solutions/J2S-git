@@ -99,6 +99,11 @@ step_squash_merge_pr() {
 }
 step_def "la PR de {chaine} est squash-mergée sur GitHub avec le message {chaine}" step_squash_merge_pr
 
+step_branches_non_standard() {
+    repo_use_non_standard_branches "$1"
+}
+step_def "le projet utilise {chaine} au lieu de develop, master ou main" step_branches_non_standard
+
 step_github_supprime_branche() {
     github_delete_branch "$1"
 }
@@ -327,6 +332,16 @@ step_fetch() {
     info "remote recupere dans le depot de travail"
 }
 step_def "je récupère les nouveautés du remote" step_fetch
+
+# Rapatrie une branche du serveur en local, telle qu'elle est a cet instant.
+# C'est la seule facon realiste d'avoir une branche __PR__ en local : on la
+# recupere depuis origin, avec son commit d'initialisation et son historique.
+# On ne la recree jamais a la main.
+step_recupere_branche_en_local() {
+    repo_git fetch --quiet origin "$1:$1"
+    info "branche $1 rapatriee depuis origin"
+}
+step_def "je récupère la branche distante {chaine} en local" step_recupere_branche_en_local
 
 step_tag_absent() {
     assert_remote_tag_missing "$1"

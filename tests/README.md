@@ -300,30 +300,78 @@ test_passed
 | `01_feature_vers_release.feature` | `feature start` (interactif) → commits réels → squash-merge de la PR → `release merge` → `release finish` (merge sur `main`, tag, release GitHub) |
 | `02_ligne_de_commande.feature` | aide, scopes et actions inconnus, options sans valeur, options inconnues, positionnels superflus, `--`, garde-fou `ensure_remote` |
 | `03_feature_start.feature` | référence `develop`/`main` selon le scope, `--based-on`, `--no-open`, refus de confirmation, les 4 combinaisons local/distant, repli de branche de référence, réponses par défaut |
-| `04_feature_restart.feature` | restart après squash-merge, refus si le code diffère, `--no-open`, hotfix, cas d'une feature inconnue |
+| `04_feature_restart.feature` | restart après squash-merge, refus si le code diffère, refus d'une feature inconnue, `--no-open`, hotfix |
 | `05_feature_rebase.feature` | rebase nominal, hotfix, `--based-on`, `--squash`, seuil de squash, refus des deux confirmations, conflits, PR déjà mergée, commit de fusion, branches non publiées |
 | `06_release.feature` | `release start` (calcul de version, version explicite, sans tag, dépôt sale, reprise), `release merge` (`--from`, `--into`, sources multiples, PR non mergée), `release finish` (tag, merge, release vide, bascule de branche) |
 | `07_demo.feature` | `demo start` (nom par défaut, `--based-on`, reprise, refus), `demo merge` (sources multiples, doublon, formats invalides, `--into`), `demo list`, `demo remove` |
 | `08_util_et_stash.feature` | `util clean`, `util verify_rebase` (tous les refus, true/false, absence de trace), stash automatique accepté et refusé |
 | `09_parcours_complets.feature` | hotfix de bout en bout, feature rebasée puis redémarrée puis livrée, démo servant de répétition, deux releases successives |
 | `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
+| `11_synchronisation.feature` | fraîcheur des branches : mise à jour d'une branche en retard, acceptation sans push d'une branche en avance, arrêt sur divergence, départ d'une feature/hotfix/démo sur la version serveur de la branche de référence |
 
-### Anomalies figées par les tests
+### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 
-Cinq scénarios documentent un comportement **constaté mais non souhaitable**.
-Ils sont signalés par un commentaire `# ANOMALIE CONNUE` et passeront au rouge
-le jour où le défaut sera corrigé — c'est voulu : la correction doit se voir.
+Un scénario doit partir d'un état que le dépôt peut réellement atteindre. La
+tentation est de créer directement les branches dont on a besoin :
 
-| Scénario | Défaut |
-| --- | --- |
-| `04` — restart d'une feature inconnue | le garde-fou « la branche de PR n'existe pas » ne se déclenche jamais (`git ls-remote` sans `--exit-code`) : jgit publie une feature partie de nulle part |
-| `06` — `release merge --into` sans fetch | `checkout_release_branch` ne rafraîchit pas les références distantes : jgit croit à tort que la PR n'est pas mergée |
-| `06` — échec de `gh release create` | le code de retour n'est pas contrôlé : jgit se termine en succès alors qu'aucune release GitHub n'a été créée |
-| `07` — `demo list` | le nom des branches est tronqué (`%-_-_-` et `IFS=$'-_-_-'`) : les commandes `release merge` suggérées sont inutilisables |
-| `03` — aucune branche de référence | `get_reference_branch` est appelée dans une substitution de commande : son `exit_safe` ne quitte que le sous-shell et son message d'erreur ressort comme un nom de branche |
+```gherkin
+# NON : cette branche ne peut pas exister
+Étant donné je crée la branche locale "__PR__feature/TEST-14" depuis "develop"
+```
+
+Une branche `__PR__` est toujours créée **par jgit**, porte son commit
+d'initialisation et vit sur le serveur. Fabriquée à la main depuis `develop`,
+elle n'a rien de tout cela : le scénario valide alors un comportement face à un
+état impossible, et ne prouve rien sur la vraie vie.
+
+La même situation se reproduit en passant par jgit et par le serveur :
+
+```gherkin
+# OUI : la branche vient du serveur, avec son historique
+Étant donné je lance "jgit feature start TEST-14 --no-interaction --no-open"
+Et je récupère la branche distante "__PR__feature/TEST-14" en local
+Et la PR de "feature/TEST-14" est squash-mergée sur GitHub avec le message "TEST-14 (#14)"
+```
+
+Trois réflexes :
+
+| Pour obtenir… | Passer par… | Plutôt que… |
+| --- | --- | --- |
+| une branche `feature/`, `__PR__`, `release/` ou `demo_` | la commande jgit qui la crée | `je crée la branche locale` |
+| une branche `__PR__` en local | `je récupère la branche distante … en local` | une création depuis `develop` |
+| une branche absente du serveur | `la branche … est supprimée sur GitHub` | ne jamais la pousser |
+
+Seules les branches **purement techniques** (`jgit_rebase_*`,
+`jgit_verify_rebase_*`) se créent encore à la main : elles n'ont pas de contenu
+signifiant, seul leur nom compte pour le nettoyage par motif.
+
+Corollaire utile : quand un état s'avère impossible à reproduire, c'est souvent
+que le code défend contre un cas qui ne se produit pas. La branche
+correspondante mérite alors d'être supprimée plutôt que testée.
+
+### Les anomalies figées, et ce qu'elles sont devenues
+
+La première version de la suite portait cinq scénarios `# ANOMALIE CONNUE` :
+ils décrivaient un comportement **constaté mais non souhaitable**, pour qu'une
+correction future se voie immédiatement en faisant virer le scénario au rouge.
+
+Le mécanisme a fonctionné. Les cinq défauts ont été ouverts en issues (#34 à
+#38) puis corrigés, et chaque scénario a été **inversé** : il décrit désormais
+le comportement attendu et protège contre la réapparition du défaut.
+
+| Scénario | Défaut corrigé | Issue |
+| --- | --- | --- |
+| `04` — restart d'une feature inconnue | le garde-fou « la branche de PR n'existe pas » ne se déclenchait jamais (`git ls-remote` sans `--exit-code`) | #34 |
+| `06` — `release merge --into` sans fetch | les références distantes n'étaient pas rafraîchies : une PR mergée était vue comme non mergée | #35 |
+| `06` — échec de `gh release create` | le code de retour n'était pas contrôlé : jgit se terminait en succès sans release GitHub | #36 |
+| `07` — `demo list` | le nom des branches était tronqué (`%-_-_-` et `IFS=$'-_-_-'`) : les commandes `release merge` suggérées étaient inutilisables | #37 |
+| `03` — aucune branche de référence | `get_reference_branch` écrivait son erreur sur stdout depuis une substitution de commande : le message ressortait comme un nom de branche | #38 |
+
+Aucun scénario `# ANOMALIE CONNUE` ne subsiste aujourd'hui. Si un nouveau défaut
+est constaté sans être corrigé dans la foulée, on réapplique la même méthode.
 | `02_ligne_de_commande.feature` | aide, scopes et actions inconnus, options mal formées, absence de remote — et l'absence d'effet de bord après un refus |
 | `03_feature_start.feature` | `feature start` / `hotfix start` en détail : branche de référence, `--based-on`, `--no-open`, refus de la confirmation, reprise d'une branche existante |
-| `04_feature_restart.feature` | `feature restart` après squash-merge de la PR, refus si la PR n'est pas mergée, `--no-open`, et un scénario de caractérisation d'un comportement à corriger |
+| `04_feature_restart.feature` | `feature restart` après squash-merge de la PR, refus si la PR n'est pas mergée, refus si la feature est inconnue, `--no-open` |
 
 La description fonctionnelle de ces parcours est dans
 [`docs/02-parcours-couverts.md`](../docs/02-parcours-couverts.md).

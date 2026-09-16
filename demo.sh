@@ -19,11 +19,13 @@ demo_start() {
     local _unused_into="$3"
     local current_local_branch=$(git rev-parse --abbrev-ref HEAD)
 
+    jgit_fetch_once || exit_safe 1
+
     local base_branch
     if [[ -n "$based_on" ]]; then
         base_branch="$based_on"
-    else
-        base_branch=$(get_reference_branch)
+    elif ! base_branch=$(get_reference_branch); then
+        exit_safe 1
     fi
 
     if [[ -z "$base_branch" ]]; then
@@ -38,23 +40,11 @@ demo_start() {
     local demo_branch
     demo_branch=$(get_demo_branch_name "$requested_name")
 
-    git fetch "$j2s_remote" --quiet
-
     local remote_exists
     remote_exists=$(git ls-remote --heads "$j2s_remote" "$demo_branch")
 
     if [[ -n "$remote_exists" ]]; then
-        if git show-ref --verify --quiet "refs/heads/$demo_branch"; then
-            git checkout "$demo_branch" --quiet
-            if ! git pull --ff-only "$j2s_remote" "$demo_branch"; then
-                printf "\033[1;31mLa branche locale %s est en conflit avec %s/%s\033[0m\n" "$demo_branch" "$j2s_remote" "$demo_branch"
-                printf "Veuillez résoudre manuellement la divergence avant de relancer la commande.\n"
-                exit_safe 1
-            fi
-        else
-            git checkout -b "$demo_branch" "$j2s_remote/$demo_branch" --quiet
-            git pull --ff-only "$j2s_remote" "$demo_branch" --quiet
-        fi
+        switch_branch "$demo_branch"
         current_branch="$demo_branch"
         printf "Branche %s prête pour la démo.\n" "$demo_branch"
         exit_safe 0
@@ -66,13 +56,9 @@ demo_start() {
         exit_safe 1
     fi
 
-    if ! git show-ref --verify --quiet "refs/heads/$base_branch"; then
-        if git ls-remote --heads "$j2s_remote" "$base_branch" >/dev/null 2>&1; then
-            git fetch "$j2s_remote" "$base_branch:$base_branch" --quiet
-        else
-            printf "\033[1;31mLa branche de référence %s est introuvable en local ou sur %s.\033[0m\n" "$base_branch" "$j2s_remote"
-            exit_safe 1
-        fi
+    if ! branch_exists "$base_branch"; then
+        printf "\033[1;31mLa branche de référence %s est introuvable en local ou sur %s.\033[0m\n" "$base_branch" "$j2s_remote" >&2
+        exit_safe 1
     fi
 
     printf "%sJGit va créer la branche de démo %s%s%s%s qui se basera sur la branche %s%s%s\n" \
@@ -83,8 +69,8 @@ demo_start() {
         exit_safe 1
     fi
 
-    checkout_if_exists "$base_branch"
-    git checkout -b "$demo_branch" --quiet
+    switch_branch "$base_branch"
+    switch_branch "$demo_branch" create
     git commit --allow-empty -m "$prefix_init_commit demo $demo_branch $suffix_init_commit" --quiet
     git push --set-upstream "$j2s_remote" "$demo_branch" --quiet
 
@@ -98,14 +84,18 @@ resolve_demo_source_branch() {
     if [[ "$source" == feature/* || "$source" == hotfix/* ]]; then
         echo "$source"
     else
-        printf "\033[1;31mLe format attendu est feature/<ticket> ou hotfix/<ticket>.\033[0m\n"
-        exit_safe 1
+        # Appelée en substitution de commande : message sur stderr et code de
+        # retour, sinon le message serait capturé comme un nom de branche.
+        printf "\033[1;31mLe format attendu est feature/<ticket> ou hotfix/<ticket>.\033[0m\n" >&2
+        return 1
     fi
 }
 
 demo_merge_branch() {
     local source_branch
-    source_branch=$(resolve_demo_source_branch "$1")
+    if ! source_branch=$(resolve_demo_source_branch "$1"); then
+        exit_safe 1
+    fi
     local demo_branch="$2"
 
     local source_remote="$j2s_remote/$source_branch"
@@ -115,20 +105,14 @@ demo_merge_branch() {
         exit_safe 1
     fi
 
-    git fetch "$j2s_remote" --quiet
+    jgit_fetch_once || exit_safe 1
 
     if ! git ls-remote --exit-code --heads "$j2s_remote" "$source_branch" >/dev/null 2>&1; then
         printf "\033[1;31mLa branche %s n'existe pas sur %s.\033[0m\n" "$source_branch" "$j2s_remote"
         exit_safe 1
     fi
 
-    git checkout "$demo_branch" --quiet
-
-    if ! git pull --ff-only "$j2s_remote" "$demo_branch"; then
-        printf "\033[1;31mImpossible de mettre à jour %s depuis %s/%s.\033[0m\n" "$demo_branch" "$j2s_remote" "$demo_branch"
-        printf "Veuillez résoudre la divergence puis relancer la commande.\n"
-        exit_safe 1
-    fi
+    switch_branch "$demo_branch"
 
     if git merge-base --is-ancestor "$source_remote" HEAD; then
         printf "La branche %s est déjà présente dans %s.\n" "$source_branch" "$demo_branch"
@@ -165,7 +149,7 @@ demo_merge() {
         if [[ "$target_branch" != ${DemoBranchPrefix}* ]]; then
             target_branch=$(get_demo_branch_name "$target_branch")
         fi
-        checkout_if_exists "$target_branch"
+        switch_branch "$target_branch"
     fi
 
     if [[ ${#sources[@]} -eq 0 ]]; then
@@ -186,8 +170,7 @@ demo_list() {
         exit_safe 1
     fi
 
-    git fetch "$j2s_remote" --quiet
-    git pull --ff-only "$j2s_remote" "$demo_branch" >/dev/null 2>&1
+    switch_branch "$demo_branch"
 
     local init_commit
     init_commit=$(get_last_commit_with_pattern "$prefix_init_commit demo $demo_branch")
@@ -199,11 +182,15 @@ demo_list() {
 
     local entries=()
     local log_output
-    log_output=$(git log --reverse --pretty=format:"%H%-_-_-%s" "$init_commit^..HEAD")
+    log_output=$(git log --reverse --pretty=format:"%s" "$init_commit^..HEAD")
 
-    while IFS=$'-_-_-' read -r commit_hash commit_subject; do
-        read -r first_word second_word branch_type branch_name _ <<< "$commit_subject"
-        if [[ "$second_word" == "DEMO" && -n "$branch_type" && -n "$branch_name" ]]; then
+    # Un marqueur de démo s'écrit exactement :
+    #   [jgit] DEMO merge <type> <type>/<ticket> [empty_commit]
+    local prefix keyword action branch_type branch_name
+    while IFS= read -r commit_subject; do
+        read -r prefix keyword action branch_type branch_name _ <<< "$commit_subject"
+        if [[ "$prefix" == "$prefix_commit" && "$keyword" == "DEMO" && "$action" == "merge" \
+              && -n "$branch_type" && -n "$branch_name" ]]; then
             entries+=("$branch_type:$branch_name")
         fi
     done <<< "$log_output"
@@ -243,10 +230,12 @@ demo_remove() {
         exit_safe 1
     fi
 
-    git fetch "$j2s_remote" --quiet
+    jgit_fetch_once || exit_safe 1
 
     local reference_branch
-    reference_branch=$(get_reference_branch "feature")
+    if ! reference_branch=$(get_reference_branch "feature"); then
+        exit_safe 1
+    fi
 
     local color_title=$(tput bold; tput setaf 6)
     local color_branch=$(tput bold; tput setaf 1)
@@ -263,7 +252,7 @@ demo_remove() {
         exit_safe 1
     fi
 
-    checkout_if_exists "$reference_branch"
+    switch_branch "$reference_branch"
 
     if git ls-remote --exit-code --heads "$j2s_remote" "$demo_branch" >/dev/null 2>&1; then
         if ! git push "$j2s_remote" --delete "$demo_branch"; then
