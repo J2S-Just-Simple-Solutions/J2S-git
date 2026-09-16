@@ -263,6 +263,9 @@ release_finish() {
         local future_tag="${major}.${feature}.${minor}"
         echo "Future tag: ${future_tag}"
         git checkout "$prod_branch"
+        # La branche de release va être supprimée : sans cela, exit_safe
+        # tenterait de revenir sur une branche qui n'existe plus.
+        current_branch="$prod_branch"
         git fetch "$j2s_remote"
         git reset --hard "$j2s_remote/$prod_branch"
         echo "Merging release ${branch} in $prod_branch branch..."
@@ -275,7 +278,15 @@ release_finish() {
         echo "Delete remote branch ${branch}"
         git push -d "$j2s_remote" "${branch}"
         git push "$j2s_remote" tag "${future_tag}"
-        gh release create "${future_tag}" --generate-notes
+        # Le merge sur $prod_branch et le tag sont déjà poussés : seule la
+        # release GitHub manque, le message doit le dire sans laisser croire
+        # qu'il faut rejouer la release entière.
+        if ! gh release create "${future_tag}" --generate-notes; then
+            printf "\033[1;31mLa release GitHub %s n'a pas pu être créée.\033[0m\n" "${future_tag}" >&2
+            printf "Le merge sur %s et le tag %s sont poussés : il ne reste que la release GitHub.\n" "$prod_branch" "${future_tag}" >&2
+            printf "Relancez « gh release create %s --generate-notes ».\n" "${future_tag}" >&2
+            exit_safe 1
+        fi
     else
         echo "Release branch seems to have a wrong format..."
         exit_safe 1

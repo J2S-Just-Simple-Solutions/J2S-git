@@ -62,7 +62,10 @@ feature_start() {
             echo "Skipping pull request creation (--no-open)."
         else
             echo "Create pull request"
-            gh pr create --title "$feature_name" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"
+            if ! gh pr create --title "$feature_name" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"; then
+                report_pr_creation_failure "$branch" "$branch_PR"
+                exit_safe 1
+            fi
         fi
     else
         echo "On est dans la Matrix"
@@ -122,6 +125,9 @@ feature_restart() {
         echo "Skipping pull request creation (--no-open)."
     else
         echo "Create pull request"
-        gh pr create --title "$feature_name - RESTART" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"
+        if ! gh pr create --title "$feature_name - RESTART" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"; then
+            report_pr_creation_failure "$branch" "$branch_PR"
+            exit_safe 1
+        fi
     fi
 }

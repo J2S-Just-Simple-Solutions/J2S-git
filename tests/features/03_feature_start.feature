@@ -139,3 +139,14 @@ Fonctionnalité: Création d'une feature ou d'un hotfix
     Alors jgit se termine en erreur
     Et la sortie contient "Opération annulée."
     Et la branche distante "feature/TEST-13" n'existe pas
+
+  # Les deux branches sont déjà poussées quand gh échoue : jgit doit le dire
+  # sans laisser croire qu'il faut tout recommencer.
+  Scénario: Un échec de gh pr create est signalé
+    Étant donné le client gh échoue pour les commandes "pr create"
+    Quand je lance "jgit feature start TEST-14 --no-interaction"
+    Alors jgit se termine en erreur
+    Et la sortie contient "La pull request n'a pas pu être créée sur GitHub."
+    Et la sortie contient "il ne reste que la PR à ouvrir."
+    Et la branche distante "feature/TEST-14" existe
+    Et la branche distante "__PR__feature/TEST-14" existe

@@ -230,10 +230,9 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "Local release does not have the right tag, switching to new branch"
     Et la sortie contient "Release: release/1.1.0"
 
-  # ANOMALIE CONNUE (cf. release.sh, release_finish) : l'échec de
-  # `gh release create` n'est pas contrôlé et jgit se termine malgré tout en
-  # succès. Le tag est bien poussé, mais aucune release GitHub n'existe.
-  Scénario: Un échec de gh release create passe inaperçu - comportement actuel
+  # Le tag et le merge sur main sont déjà poussés quand gh échoue : jgit doit
+  # sortir en erreur, mais en disant précisément ce qu'il reste à rejouer.
+  Scénario: Un échec de gh release create est signalé
     Étant donné je lance "jgit feature start TEST-12 --no-interaction --no-open"
     Et je commite le fichier "src/feature12.txt" contenant "feature 12" avec le message "Ajoute la feature 12"
     Et je pousse la branche courante
@@ -241,6 +240,8 @@ Fonctionnalité: Cycle de vie d'une release
     Et je lance "jgit release merge --from feature/TEST-12"
     Et le client gh échoue pour les commandes "release create"
     Quand je lance "jgit release finish"
-    Alors jgit se termine sans erreur
+    Alors jgit se termine en erreur
+    Et la sortie contient "La release GitHub 1.1.0 n'a pas pu être créée."
+    Et la sortie contient "il ne reste que la release GitHub."
     Et le tag "1.1.0" existe sur le remote
     Et GitHub a reçu "release create 1.1.0 --generate-notes"

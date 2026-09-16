@@ -138,6 +138,17 @@ exit_safe() {
     exit $exit_code
 }
 
+# Les branches sont déjà poussées quand gh échoue : le message doit dire ce
+# qu'il reste à rejouer à la main, pas laisser croire qu'il faut tout refaire.
+report_pr_creation_failure() {
+    local branch="$1"
+    local branch_PR="$2"
+
+    printf "\033[1;31mLa pull request n'a pas pu être créée sur GitHub.\033[0m\n" >&2
+    printf "Les branches %s et %s sont bien poussées : il ne reste que la PR à ouvrir.\n" "$branch" "$branch_PR" >&2
+    printf "Relancez « gh pr create --base=%s --head=%s » ou ouvrez-la depuis GitHub.\n" "$branch_PR" "$branch" >&2
+}
+
 ###############################################
 ###############################################
 #            Manipulations GIT

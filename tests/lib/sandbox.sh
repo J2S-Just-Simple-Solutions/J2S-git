@@ -35,6 +35,9 @@ sandbox_create() {
     export TERM="${TERM:-xterm}"
     export JGIT_GH_LOG="$SANDBOX/gh-calls.log"
     : > "$JGIT_GH_LOG"
+    # Les scenarios d'un meme fichier partagent le processus : une panne gh
+    # simulee ne doit pas deborder sur le scenario suivant.
+    unset JGIT_GH_FAIL
 
     cat > "$GIT_CONFIG_GLOBAL" <<'GITCONFIG'
 [user]
