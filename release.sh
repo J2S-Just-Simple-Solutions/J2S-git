@@ -138,9 +138,14 @@ release_merge_single() {
         exit_safe 1
     fi
 
+    # Le commit d'initialisation est posé sous le nom de la branche de travail,
+    # pas sous celui de la branche de PR. Comparer à ce que l'utilisateur a
+    # tapé laissait passer « --from __PR__feature/X », qui ne correspondait
+    # jamais : le garde-fou ne se déclenchait que sur « --from feature/X ».
+    local work_branch="${resolved_branch#$prefix_PR}"
     local last_commit_subject
     last_commit_subject=$(git log -1 --pretty=%s "$merge_source")
-    if [[ "$last_commit_subject" == "$prefix_init_commit $source_branch $suffix_init_commit" ]]; then
+    if [[ "$last_commit_subject" == "$prefix_init_commit $work_branch $suffix_init_commit" ]]; then
         printf "\033[1;31m/!\\ La branche '%s' ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release.\033[0m\n" "$resolved_branch"
         exit_safe 1
     fi

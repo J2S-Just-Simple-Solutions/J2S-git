@@ -161,6 +161,17 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release."
     Et le fichier "src/feature8.txt" n'existe pas sur la branche distante "release/1.1.0"
 
+  # Le commit d'init est posé sous le nom de la branche de travail : le refus
+  # doit se déclencher quelle que soit la forme employée pour la source.
+  Scénario: Une PR non mergée est refusée aussi sous la forme __PR__
+    Étant donné je lance "jgit feature start TEST-16 --no-interaction --no-open"
+    Et je commite le fichier "src/feature16.txt" contenant "feature 16" avec le message "Ajoute la feature 16"
+    Et je pousse la branche courante
+    Quand je lance "jgit release merge --from __PR__feature/TEST-16"
+    Alors jgit se termine en erreur
+    Et la sortie contient "ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release."
+    Et l'historique de "release/1.1.0" ne contient pas "Release merge feature branch : __PR__feature/TEST-16"
+
   Scénario: Une branche source inconnue est refusée
     Quand je lance "jgit release merge --from feature/INCONNUE"
     Alors jgit se termine en erreur
