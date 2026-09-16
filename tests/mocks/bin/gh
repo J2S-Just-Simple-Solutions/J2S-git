@@ -1,0 +1,51 @@
+#!/bin/bash
+#
+# Mock du client GitHub CLI.
+#
+# Aucun appel reseau : chaque invocation est journalisee dans $JGIT_GH_LOG afin
+# que les tests puissent verifier ce que jgit aurait demande a GitHub.
+#
+# Variables reconnues :
+#   JGIT_GH_LOG   fichier de journal (obligatoire, cree par le bac a sable)
+#   JGIT_GH_FAIL  motif (grep -E) : si la commande correspond, le mock echoue
+#   JGIT_GH_CODE  code de sortie utilise en cas d'echec simule (defaut : 1)
+
+set -u
+
+log_file="${JGIT_GH_LOG:-/dev/null}"
+
+quoted=""
+for arg in "$@"; do
+    case "$arg" in
+        *[[:space:]]*) quoted="$quoted '$arg'" ;;
+        *)             quoted="$quoted $arg" ;;
+    esac
+done
+# Retire l'espace de tete.
+quoted="${quoted# }"
+
+printf '%s\n' "$quoted" >> "$log_file"
+
+if [[ -n "${JGIT_GH_FAIL:-}" ]] && printf '%s' "$quoted" | grep -Eq "$JGIT_GH_FAIL"; then
+    echo "[mock gh] echec simule pour : $quoted" >&2
+    exit "${JGIT_GH_CODE:-1}"
+fi
+
+case "${1:-}" in
+    pr)
+        case "${2:-}" in
+            create) echo "https://github.com/J2S-mock/repo/pull/1" ;;
+            *)      : ;;
+        esac
+        ;;
+    release)
+        case "${2:-}" in
+            create) echo "https://github.com/J2S-mock/repo/releases/tag/${3:-inconnu}" ;;
+            *)      : ;;
+        esac
+        ;;
+    *)
+        : ;;
+esac
+
+exit 0
