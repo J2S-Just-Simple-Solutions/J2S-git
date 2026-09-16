@@ -1,0 +1,4 @@
+{
+  // Extension recommandée pour les scénarios Gherkin de tests/features.
+  "recommendations": ["CucumberOpen.cucumber-official"]
+}

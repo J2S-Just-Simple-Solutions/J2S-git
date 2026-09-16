@@ -41,8 +41,7 @@ feature_start() {
         printf "%sJGit va créer la branche %s%s%s%s et sa PR associée qui se basera sur la branche %s%s%s\n" \
         "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$reference_branch" "$(tput sgr0)"
         # Demander confirmation à l'utilisateur
-        read -p "Souhaitez-vous continuer ? (y/n) " user_input
-        if [[ "$user_input" != "y" ]]; then
+        if ! confirm_action "Souhaitez-vous continuer ?" "y"; then
             echo "Opération annulée."
             exit_safe 1
         fi
@@ -59,8 +58,12 @@ feature_start() {
         git push --set-upstream $j2s_remote $branch --quiet
         current_branch="$branch"
         git branch -D $branch_PR --quiet
-        echo "Create pull request"
-        gh pr create --title $feature_name --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label "NFR"
+        if [[ $JGIT_NO_OPEN == true ]]; then
+            echo "Skipping pull request creation (--no-open)."
+        else
+            echo "Create pull request"
+            gh pr create --title "$feature_name" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"
+        fi
     else
         echo "On est dans la Matrix"
     fi
@@ -75,7 +78,7 @@ feature_restart() {
     local branch_PR=$prefix_PR$branch
 
     # Vérifier si la branche référence existe
-    if ! git rev-parse --verify "$branch_PR" >/dev/null 2>&1 && ! git ls-remote --heads origin "$branch_PR" >/dev/null 2>&1; then
+    if ! git rev-parse --verify "$branch_PR" >/dev/null 2>&1 && ! git ls-remote --heads "$j2s_remote" "$branch_PR" >/dev/null 2>&1; then
         echo "Erreur : La branche de PR '$branch_PR' n'existe pas."
         exit_safe 1
     fi
@@ -106,7 +109,7 @@ feature_restart() {
     git branch -d "$branch" 2>/dev/null
   
     # Suppression de la branche sur le remote - on ignore l'erreur si elle n'existe déjà pas
-    git push origin --delete "$branch" 2>/dev/null
+    git push "$j2s_remote" --delete "$branch" 2>/dev/null
 
     echo "Create working branch $branch"
     git checkout -b $branch --quiet
@@ -114,6 +117,10 @@ feature_restart() {
     git push --set-upstream $j2s_remote $branch --quiet
     current_branch="$branch"
     git branch -D $branch_PR --quiet
-    echo "Create pull request"
-    gh pr create --title "$feature_name - RESTART" --body "https://justsimplesolutions.atlassian.net/browse/"$feature_name --base=$branch_PR --head=$branch --label "NFR"
+    if [[ $JGIT_NO_OPEN == true ]]; then
+        echo "Skipping pull request creation (--no-open)."
+    else
+        echo "Create pull request"
+        gh pr create --title "$feature_name - RESTART" --body "https://justsimplesolutions.atlassian.net/browse/$feature_name" --base=$branch_PR --head=$branch --label "NFR"
+    fi
 }
