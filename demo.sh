@@ -203,11 +203,15 @@ demo_list() {
 
     local entries=()
     local log_output
-    log_output=$(git log --reverse --pretty=format:"%H%-_-_-%s" "$init_commit^..HEAD")
+    log_output=$(git log --reverse --pretty=format:"%s" "$init_commit^..HEAD")
 
-    while IFS=$'-_-_-' read -r commit_hash commit_subject; do
-        read -r first_word second_word branch_type branch_name _ <<< "$commit_subject"
-        if [[ "$second_word" == "DEMO" && -n "$branch_type" && -n "$branch_name" ]]; then
+    # Un marqueur de démo s'écrit exactement :
+    #   [jgit] DEMO merge <type> <type>/<ticket> [empty_commit]
+    local prefix keyword action branch_type branch_name
+    while IFS= read -r commit_subject; do
+        read -r prefix keyword action branch_type branch_name _ <<< "$commit_subject"
+        if [[ "$prefix" == "$prefix_commit" && "$keyword" == "DEMO" && "$action" == "merge" \
+              && -n "$branch_type" && -n "$branch_name" ]]; then
             entries+=("$branch_type:$branch_name")
         fi
     done <<< "$log_output"
