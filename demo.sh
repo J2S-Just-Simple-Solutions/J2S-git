@@ -67,7 +67,7 @@ demo_start() {
     fi
 
     if ! git show-ref --verify --quiet "refs/heads/$base_branch"; then
-        if git ls-remote --heads "$j2s_remote" "$base_branch" >/dev/null 2>&1; then
+        if git ls-remote --exit-code --heads "$j2s_remote" "$base_branch" >/dev/null 2>&1; then
             git fetch "$j2s_remote" "$base_branch:$base_branch" --quiet
         else
             printf "\033[1;31mLa branche de référence %s est introuvable en local ou sur %s.\033[0m\n" "$base_branch" "$j2s_remote"

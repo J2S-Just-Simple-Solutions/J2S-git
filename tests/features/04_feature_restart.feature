@@ -71,15 +71,13 @@ Fonctionnalité: Redémarrage d'une feature après le merge de sa PR
     Et le dernier commit de "hotfix/URGENT-1" contient "RESTART hotfix/URGENT-1"
     Et GitHub a reçu "--title 'URGENT-1 - RESTART'"
 
-  # ANOMALIE CONNUE (cf. feature.sh, feature_restart) : le garde-fou
-  # « La branche de PR n'existe pas » ne se déclenche jamais, car
-  # `git ls-remote --heads` renvoie 0 même sans correspondance (il manque
-  # --exit-code). jgit crée donc la feature à partir de la branche courante et
-  # la publie, au lieu de refuser. Ce scénario fige le comportement constaté
-  # pour que sa correction se voie immédiatement.
-  Scénario: Restart d'une feature inconnue - comportement actuel, non souhaitable
+  # Le garde-fou repose sur `git ls-remote --exit-code` : sans --exit-code la
+  # commande renvoie 0 même sans correspondance, et jgit publiait une feature
+  # orpheline au lieu de refuser.
+  Scénario: Le restart d'une feature inconnue est refusé
     Quand je lance "jgit feature restart INCONNUE --no-interaction --no-open"
-    Alors jgit se termine sans erreur
-    Et la sortie ne contient pas "La branche de PR '__PR__feature/INCONNUE' n'existe pas."
-    Et la branche distante "feature/INCONNUE" existe
+    Alors jgit se termine en erreur
+    Et la sortie contient "La branche de PR '__PR__feature/INCONNUE' n'existe pas."
+    Et la branche locale "feature/INCONNUE" n'existe pas
+    Et la branche distante "feature/INCONNUE" n'existe pas
     Et la branche distante "__PR__feature/INCONNUE" n'existe pas

@@ -78,7 +78,8 @@ feature_restart() {
     local branch_PR=$prefix_PR$branch
 
     # Vérifier si la branche référence existe
-    if ! git rev-parse --verify "$branch_PR" >/dev/null 2>&1 && ! git ls-remote --heads "$j2s_remote" "$branch_PR" >/dev/null 2>&1; then
+    if ! git rev-parse --verify "$branch_PR" >/dev/null 2>&1 \
+       && ! git ls-remote --exit-code --heads "$j2s_remote" "$branch_PR" >/dev/null 2>&1; then
         echo "Erreur : La branche de PR '$branch_PR' n'existe pas."
         exit_safe 1
     fi
