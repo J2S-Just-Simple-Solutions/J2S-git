@@ -47,6 +47,24 @@ warn_deprecated_syntax() {
     "$(tput setaf 3)" "$(tput sgr0)" >&2
 }
 
+# jgit ne tourne aujourd'hui que sur macOS : plusieurs commandes s'appuient sur
+# des outils BSD dont l'équivalent GNU se comporte différemment, et un rebase
+# lancé ailleurs écraserait la branche de travail au lieu de la rejouer.
+# Le détail et l'inventaire sont dans docs/05-portabilite.md.
+ensure_supported_platform() {
+  local system
+  system=$(uname -s 2>/dev/null)
+
+  if [[ "$system" == "Darwin" ]]; then
+    return 0
+  fi
+
+  printf "\033[1;31mjgit ne fonctionne que sur macOS (système détecté : %s).\033[0m\n" "${system:-inconnu}" >&2
+  printf "Certaines commandes s'appuient sur des outils BSD et détruiraient du travail ailleurs.\n" >&2
+  printf "Voir docs/05-portabilite.md pour le détail et l'état d'avancement.\n" >&2
+  return 1
+}
+
 # Vrai si la valeur est un numéro de version de release (x.y.z), que le préfixe
 # release/ soit présent ou non. Sert à distinguer, en position de cible,
 # une version d'un nom de branche.
@@ -70,9 +88,11 @@ confirm_action() {
     return 1
   fi
 
-  # La réponse par défaut (celle appliquée si l'utilisateur valide sans rien saisir)
-  # est signalée par la majuscule dans le suffixe.
-  local suffix="(y/n)"
+  # RÈGLE : la réponse par défaut — celle appliquée quand l'utilisateur valide
+  # sans rien saisir — est TOUJOURS signalée par la majuscule, quelle qu'elle
+  # soit. Une question sans majuscule serait une question dont on ne peut pas
+  # deviner ce que fait la touche Entrée.
+  local suffix="(Y/n)"
   if [[ "$default_response" == "n" ]]; then
     suffix="(y/N)"
   fi
@@ -118,6 +138,118 @@ resolve_git_ref() {
   return 1
 }
 
+###############################################
+#   Mise de côté des commits de la branche de production
+###############################################
+#
+# Les commandes de release exigent que la branche de production soit alignée sur
+# le serveur. Elle peut pourtant porter des commits que le développeur n'a pas
+# encore poussés : les écraser silencieusement reviendrait à détruire son
+# travail. On applique donc le même principe que le stash de verify_stash — on
+# demande, on met de côté, on remet en place à la fin.
+JGIT_PROD_STASH_BRANCH=""
+JGIT_PROD_STASH_REF=""
+JGIT_PROD_STASH_COUNT=0
+JGIT_PROD_STASH_MODE=""
+
+prod_stash_branch_name() {
+  echo "jgit_stash_$1"
+}
+
+# Propose de mettre de côté les commits non poussés de la branche de production.
+#
+#   mode restore : jgit ne fait pas avancer cette branche, elle est remise à
+#                  l'identique en fin de commande (release start)
+#   mode keep    : jgit fait légitimement avancer la branche, les commits mis de
+#                  côté restent sur leur branche de sauvegarde (release finish)
+#
+# Renvoie 1 si l'utilisateur refuse : à l'appelant d'arrêter la commande.
+stash_prod_branch_commits() {
+  local branch="$1"
+  local mode="${2:-restore}"
+  local remote_ref="$j2s_remote/$branch"
+
+  if ! git show-ref --verify --quiet "refs/remotes/$remote_ref"; then
+    return 0
+  fi
+
+  local ahead
+  ahead=$(git rev-list --count "$remote_ref..$branch" 2>/dev/null) || return 0
+  if [[ -z "$ahead" || $ahead -eq 0 ]]; then
+    return 0
+  fi
+
+  local stash_branch
+  stash_branch=$(prod_stash_branch_name "$branch")
+
+  printf "%sLa branche %s%s%s%s porte %s commit(s) que vous n'avez pas poussé(s).%s\n" \
+    "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)" "$(tput setaf 2)" "$ahead" "$(tput sgr0)"
+  printf "%sUne release doit partir de la version du serveur : jgit peut les mettre de côté sur %s%s%s.%s\n" \
+    "$(tput setaf 2)" "$(tput setaf 1)" "$stash_branch" "$(tput sgr0)" "$(tput sgr0)"
+
+  if ! confirm_action "Mettre ces commits de côté ?" "y"; then
+    echo "Opération annulée."
+    return 1
+  fi
+
+  local saved_ref
+  saved_ref=$(git rev-parse "$branch") || return 1
+
+  git branch -f "$stash_branch" "$saved_ref" --quiet 2>/dev/null || {
+    printf "\033[1;31mImpossible de créer la branche de sauvegarde %s.\033[0m\n" "$stash_branch" >&2
+    return 1
+  }
+
+  # La branche repart de la version du serveur : le reset est sans risque, le
+  # travail vient d'être sauvegardé.
+  git reset --hard "$remote_ref" --quiet
+
+  JGIT_PROD_STASH_BRANCH="$branch"
+  JGIT_PROD_STASH_REF="$saved_ref"
+  JGIT_PROD_STASH_COUNT="$ahead"
+  JGIT_PROD_STASH_MODE="$mode"
+
+  printf "%s commit(s) de %s mis de côté sur %s.\n" "$ahead" "$branch" "$stash_branch"
+  return 0
+}
+
+# Remet la branche de production en place. Appelée par exit_safe, donc dans le
+# chemin nominal comme dans le chemin d'erreur.
+restore_prod_branch_commits() {
+  [[ -n "$JGIT_PROD_STASH_REF" ]] || return 0
+
+  local branch="$JGIT_PROD_STASH_BRANCH"
+  local stash_branch
+  stash_branch=$(prod_stash_branch_name "$branch")
+
+  if [[ "$JGIT_PROD_STASH_MODE" == "keep" ]]; then
+    printf "%sVos %s commit(s) de %s sont conservés sur la branche %s.%s\n" \
+      "$(tput setaf 2)" "$JGIT_PROD_STASH_COUNT" "$branch" "$stash_branch" "$(tput sgr0)"
+    JGIT_PROD_STASH_REF=""
+    return 0
+  fi
+
+  # git branch -f refuse de déplacer la branche courante : quand on est dessus,
+  # c'est reset --hard qui fait le même travail sans quitter la branche.
+  local restored=false
+  if [[ "$(git rev-parse --abbrev-ref HEAD)" == "$branch" ]]; then
+    git reset --hard "$JGIT_PROD_STASH_REF" --quiet 2>/dev/null && restored=true
+  else
+    git branch -f "$branch" "$JGIT_PROD_STASH_REF" --quiet 2>/dev/null && restored=true
+  fi
+
+  if [[ $restored == true ]]; then
+    git branch -D "$stash_branch" --quiet 2>/dev/null
+    printf "%s restaurée avec vos %s commit(s) non poussé(s).\n" "$branch" "$JGIT_PROD_STASH_COUNT"
+  else
+    printf "\033[1;31mImpossible de restaurer %s : vos commits restent sur %s.\033[0m\n" \
+      "$branch" "$stash_branch" >&2
+  fi
+
+  JGIT_PROD_STASH_REF=""
+  return 0
+}
+
 # fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
 exit_safe() {
     local exit_code=${1:-0}
@@ -128,6 +260,8 @@ exit_safe() {
         # synchroniser, ni échouer, ni rappeler exit_safe.
         switch_branch "$current_branch" recover
     fi
+
+    restore_prod_branch_commits
 
     if [[ $stash == true ]]; then
         git stash pop

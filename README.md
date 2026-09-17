@@ -24,6 +24,11 @@
 
 ## Prérequis
 
+- **macOS.** `jgit` refuse de démarrer sur un autre système : plusieurs commandes
+  s'appuient sur des outils BSD dont l'équivalent GNU se comporte différemment, et
+  un `feature rebase` lancé ailleurs écraserait la branche de travail au lieu de
+  la rejouer. Le détail et l'état d'avancement sont dans
+  [`docs/05-portabilite.md`](docs/05-portabilite.md).
 - Un dépôt Git avec un remote nommé `origin` pointant vers GitHub (organisation J2S).
 - Git installé en local (`git --version` doit répondre).
 - Le client GitHub CLI (`gh`) installé et configuré : https://cli.github.com/
@@ -79,7 +84,7 @@ jgit <scope> <action> [<cible>] [options...]
 - `--based-on <branche>` : force la branche de référence lors d'un `start` ou d'un `rebase`.
 - `--from <branche>` : ajoute une source à fusionner (option répétable).
 - `--into <branche>` : définit explicitement la branche de destination.
-- `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune (celle signalée par la majuscule dans le suffixe `(y/N)`). Un conflit de rebase, qui exige une intervention humaine, n'est jamais validé automatiquement : la commande s'arrête proprement (voir ci-dessous).
+- `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune. Cette réponse par défaut est **toujours** celle signalée par la majuscule dans le suffixe de la question — `(Y/n)` quand valider sans rien saisir revient à dire oui, `(y/N)` quand cela revient à dire non. Il n'existe aucune question affichée `(y/n)`. Un conflit de rebase, qui exige une intervention humaine, n'est jamais validé automatiquement : la commande s'arrête proprement (voir ci-dessous).
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
 - `--squash` : lors d'un `rebase`, squash tous les commits de la branche de travail en un seul avant de rejouer l'historique.
 - `jgit help` / `jgit -h` : affiche l'aide complète.
@@ -111,10 +116,26 @@ Deux garanties qui découlent de cette règle :
   jgit ne choisit pas à votre place : réconciliez la branche (rebase ou merge) puis relancez.
   ```
 
-Seule exception : pendant un `rebase`, une fois l'historique réécrit, les
-branches divergent du serveur **par construction** — c'est précisément ce que le
-`push --force` final va publier. `jgit` ne les resynchronise donc pas à ce
-moment-là.
+Deux exceptions, toutes deux explicites :
+
+- Pendant un `rebase`, une fois l'historique réécrit, les branches divergent du
+  serveur **par construction** — c'est précisément ce que le `push --force` final
+  va publier. `jgit` ne les resynchronise donc pas à ce moment-là.
+- Les commandes de release exigent que la branche de production soit **alignée sur
+  le serveur**. Si elle porte des commits non poussés, `jgit` propose de les
+  **mettre de côté** sur une branche `jgit_stash_<branche>` :
+
+  ```
+  La branche main porte 2 commit(s) que vous n'avez pas poussé(s).
+  Une release doit partir de la version du serveur : jgit peut les mettre de côté sur jgit_stash_main.
+  Mettre ces commits de côté ? (Y/n)
+  ```
+
+  Avec `release start`, `main` est **remise en place telle quelle** en fin de
+  commande et la branche de sauvegarde est supprimée. Avec `release finish`, qui
+  fait légitimement avancer `main`, les commits **restent sur la branche de
+  sauvegarde** et `jgit` vous indique où les retrouver. Refuser la proposition
+  arrête la commande sans rien modifier.
 
 ## Commandes par scope
 
@@ -154,16 +175,29 @@ Avec `--no-interaction`, un conflit ne peut pas être résolu : la commande s'ar
 - `jgit release merge [<x.y.z>] --from <branche> [--into <branche>]` : s'assure que la branche de release est prête, puis fusionne en série chaque branche fournie avec `--from`. Les noms avec ou sans préfixe `__PR__` sont pris en charge.
 - `jgit release finish [--into <release/x.y.z>]` : vérifie la cohérence, fusionne sur la branche de production (`branch_prod`), crée le tag, supprime la branche de release en local/distante et génère la release GitHub.
 
+#### Conflits pendant une release
+
+Une release ne part **jamais à moitié**. Si une fusion conflicte, `jgit` annule le
+merge et s'arrête :
+
+- pendant `release merge`, la branche de release n'est pas poussée et les sources
+  restantes ne sont pas tentées — à vous de résoudre le conflit à la main, puis de
+  relancer `jgit` pour les sources qui restent ;
+- pendant `release finish`, **aucun tag n'est posé, rien n'est poussé** et la
+  branche de release reste disponible.
+
+Dans les deux cas l'espace de travail est rendu propre : rien n'est perdu.
+
 ### Demo
 
 - `jgit demo start [<nom_demo>] [--based-on <branche>]` : prépare une branche `demo_<nom>` existante (checkout + fast-forward) ou en crée une nouvelle à partir de la branche fournie après confirmation.
-- `jgit demo merge [--into <branche_demo>] --from feature/<ticket> [--from hotfix/<ticket>]...` : fusionne successivement chaque branche listée dans la démo cible (branche courante par défaut) en conservant un historique linéaire.
+- `jgit demo merge [--into <branche_demo>] --from feature/<ticket> [--from hotfix/<ticket>]...` : intègre successivement chaque branche listée dans la démo cible (branche courante par défaut). L'intégration procède par **rebase de la branche de démo sur la source**, suivi d'un `push --force-with-lease` : l'historique de la démo est réécrit à chaque ajout, ce qui le garde linéaire. Une branche de démo est jetable et ne doit servir qu'à la démonstration. En cas de conflit, `jgit` s'arrête et vous laisse la main (`git rebase --continue` ou `git rebase --abort`).
 - `jgit demo list` : parcourt les commits `[jgit] DEMO …`, affiche les branches déjà fusionnées et suggère les commandes `jgit release merge --from ...` correspondantes.
 - `jgit demo remove [--no-interaction]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
 
 ### Utilitaires
 
-- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `__PR__*`).
+- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_verify_rebase_*`, `__PR__*`). Les branches `jgit_stash_*`, qui portent du travail mis de côté, ne sont **pas** touchées.
 - `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
 
 ### Syntaxes dépréciées
@@ -218,4 +252,5 @@ code --install-extension CucumberOpen.cucumber-official
 
 - Mode d'emploi des tests (lancer, écrire un scénario, étapes disponibles) :
   [`tests/README.md`](tests/README.md)
-- Stratégie de test, parcours couverts et choix techniques : [`docs/`](docs/)
+- Stratégie de test, parcours couverts, choix techniques, règles de codage et
+  portabilité : [`docs/`](docs/)

@@ -83,7 +83,7 @@ help() {
     printf "  jgit demo remove [--no-interaction]\n\n"
 
     printf "\033[1;34mUtility:\033[0m\n"
-    printf "  jgit util clean\n"
+    printf "  jgit util clean                Supprime les branches locales jgit_rebase_*, jgit_verify_rebase_* et __PR__*.\n"
     printf "  jgit util verify_rebase --from <branche_source> --into <branche_cible>\n\n"
 
     printf "\033[1;34mSyntaxes dépréciées\033[0m (encore acceptées, retirées à terme) :\n"
@@ -213,6 +213,7 @@ fi
 #
 ####################################
 
+ensure_supported_platform || exit_safe 1
 ensure_remote
 
 case "$JGIT_TYPE" in
@@ -328,6 +329,10 @@ case "$JGIT_TYPE" in
         esac
         ;;
     util)
+        if [[ -z "$JGIT_ACTION" ]]; then
+            help
+            exit_safe 1
+        fi
         case "$JGIT_ACTION" in
             clean)
                 clean_branches

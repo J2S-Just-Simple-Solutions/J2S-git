@@ -146,6 +146,9 @@ Les valeurs sont toujours entre guillemets.
 | `Étant donné le dépôt n'a plus de remote` |
 | `Étant donné le tag "…" est supprimé partout` |
 | `Étant donné je note l'état de la branche distante "…"` (pour `est inchangée`) |
+| `Étant donné je récupère la branche distante "…" en local` |
+| `Étant donné le projet utilise "…" au lieu de develop, master ou main` |
+| `Étant donné le système est "…" et non macOS` (dépose un faux `uname`) |
 
 ### Actions sur GitHub (simulé)
 
@@ -238,6 +241,7 @@ Les fonctions utilisables dans une définition d'étape :
 | `repo_push_current_branch`, `repo_current_branch` | |
 | `repo_create_local_branch`, `repo_delete_local_branch`, `repo_merge_branch` | |
 | `repo_remove_remote`, `repo_delete_tag` | |
+| `repo_use_non_standard_branches <nom>` | renomme develop/main pour tester l'absence de branche de référence |
 | `github_squash_merge_pr <branche> [message]` | simule le « Squash and merge » d'une PR |
 | `github_delete_branch <branche>` | simule la suppression d'une branche sur GitHub |
 | `github_commit_file <branche> <chemin> <contenu> <message>` | simule le travail d'un autre développeur |
@@ -293,7 +297,7 @@ test_passed
 
 ## Scénarios existants
 
-129 scénarios répartis par domaine fonctionnel.
+153 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -302,12 +306,13 @@ test_passed
 | `03_feature_start.feature` | référence `develop`/`main` selon le scope, `--based-on`, `--no-open`, refus de confirmation, les 4 combinaisons local/distant, repli de branche de référence, réponses par défaut |
 | `04_feature_restart.feature` | restart après squash-merge, refus si le code diffère, refus d'une feature inconnue, `--no-open`, hotfix |
 | `05_feature_rebase.feature` | rebase nominal, hotfix, `--based-on`, `--squash`, seuil de squash, refus des deux confirmations, conflits, PR déjà mergée, commit de fusion, branches non publiées |
-| `06_release.feature` | `release start` (calcul de version, version explicite, sans tag, dépôt sale, reprise), `release merge` (`--from`, `--into`, sources multiples, PR non mergée), `release finish` (tag, merge, release vide, bascule de branche) |
-| `07_demo.feature` | `demo start` (nom par défaut, `--based-on`, reprise, refus), `demo merge` (sources multiples, doublon, formats invalides, `--into`), `demo list`, `demo remove` |
+| `06_release.feature` | `release start` (calcul de version, version explicite, sans tag, dépôt sale, reprise, mise de côté des commits non poussés de `main`), `release merge` (`--from`, `--into`, sources multiples, PR non mergée, **conflit**), `release finish` (tag, merge, release vide, bascule de branche, **conflit**) |
+| `07_demo.feature` | `demo start` (nom par défaut, `--based-on`, reprise, refus), `demo merge` (sources multiples, doublon, formats invalides, `--into`, **conflit**), `demo list`, `demo remove` |
 | `08_util_et_stash.feature` | `util clean`, `util verify_rebase` (tous les refus, true/false, absence de trace), stash automatique accepté et refusé |
 | `09_parcours_complets.feature` | hotfix de bout en bout, feature rebasée puis redémarrée puis livrée, démo servant de répétition, deux releases successives |
 | `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
 | `11_synchronisation.feature` | fraîcheur des branches : mise à jour d'une branche en retard, acceptation sans push d'une branche en avance, arrêt sur divergence, départ d'une feature/hotfix/démo sur la version serveur de la branche de référence |
+| `12_portabilite.feature` | refus de démarrer hors macOS, y compris — et surtout — avant un `feature rebase`, l'aide restant accessible |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 
@@ -369,9 +374,6 @@ le comportement attendu et protège contre la réapparition du défaut.
 
 Aucun scénario `# ANOMALIE CONNUE` ne subsiste aujourd'hui. Si un nouveau défaut
 est constaté sans être corrigé dans la foulée, on réapplique la même méthode.
-| `02_ligne_de_commande.feature` | aide, scopes et actions inconnus, options mal formées, absence de remote — et l'absence d'effet de bord après un refus |
-| `03_feature_start.feature` | `feature start` / `hotfix start` en détail : branche de référence, `--based-on`, `--no-open`, refus de la confirmation, reprise d'une branche existante |
-| `04_feature_restart.feature` | `feature restart` après squash-merge de la PR, refus si la PR n'est pas mergée, refus si la feature est inconnue, `--no-open` |
 
 La description fonctionnelle de ces parcours est dans
 [`docs/02-parcours-couverts.md`](../docs/02-parcours-couverts.md).

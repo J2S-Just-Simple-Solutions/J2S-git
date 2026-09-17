@@ -215,6 +215,280 @@ comportement discutable mais connu valait mieux qu'un angle mort.
 
 ---
 
+## Parcours 05 — Rebaser une feature sur une référence qui a avancé
+
+Fichier : [`tests/features/05_feature_rebase.feature`](../tests/features/05_feature_rebase.feature)
+
+C'est la commande la plus risquée de `jgit` : elle **réécrit l'historique** de
+deux branches puis les **force-push**. Le parcours vérifie autant ce qu'elle fait
+que ce qu'elle refuse de faire.
+
+### Le principe rejoué
+
+`jgit` ne rebase pas : il reconstruit. Deux branches temporaires
+`jgit_rebase_*` sont créées au-dessus de la référence remise à jour, les commits
+y sont rejoués un par un en cherry-pick, et ce n'est qu'une fois l'ensemble
+validé par l'utilisateur que les branches historiques sont écrasées et poussées.
+
+```
+  develop ──── (le collègue a livré) ────┬───────────────────────
+                                          │
+                                          ├── jgit_rebase___PR__…  (commits de la PR)
+                                          │        │
+                                          │        └── jgit_rebase_…  (+ commits de travail)
+                                          │                  │
+                                    renommage + push --force ┘
+```
+
+Conséquence directe : **tant que l'utilisateur n'a pas confirmé, le remote est
+intact.** Plusieurs scénarios le vérifient explicitement.
+
+### Ce que le parcours vérifie
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Rebase nominal, `develop` a avancé | le travail du collègue arrive sur les deux branches, les commits de travail sont conservés, l'ordre est respecté |
+| Après le rebase | les branches temporaires `jgit_rebase_*` et la branche `__PR__` locale ont disparu |
+| `hotfix rebase` | se rebase sur `main`, pas sur `develop` |
+| `--based-on` | impose la référence ; une branche inconnue est refusée sans rien toucher |
+| `--squash` | les commits de travail sont regroupés en un seul, **le code est intégralement conservé** |
+| `--squash` sur un seul commit | ne fait rien, et le dit |
+| Au-delà de `squash_threshold` | le squash est **proposé**, et la réponse par défaut est **non** |
+| En dessous du seuil | rien n'est proposé |
+| Le squash proposé est accepté | le message est demandé, l'historique est réécrit, le code reste complet |
+| Refus de la première confirmation | aucune des deux branches distantes ne bouge |
+| Refus de la confirmation finale | rien n'est poussé, et l'historique local est rendu à son état d'origine |
+| Conflit en `--no-interaction` | arrêt explicite, cherry-pick abandonné, branches temporaires supprimées, remote intact |
+| Conflit après un squash | l'historique initial de la branche de travail est **restauré** |
+| PR déjà mergée (plus un fast-forward) | refus explicite, avec la raison |
+| Commit de fusion dans l'historique | refus explicite : un merge ne se rejoue pas en cherry-pick |
+| Feature inconnue, ou paire de branches supprimée du serveur | refus, sans rien créer |
+
+### Ce que ce parcours protège
+
+| Régression qui serait attrapée |
+| --- |
+| Un `push --force` déclenché avant la confirmation de l'utilisateur |
+| Un squash qui perdrait du code au lieu de ne réécrire que l'historique |
+| Un conflit « validé » tout seul en `--no-interaction` — le seul cas qui exige vraiment un humain |
+| Un squash appliqué sans retour en arrière possible quand le rebase échoue ensuite |
+| Le squash proposé avec « oui » par défaut : valider sans lire réécrirait l'historique |
+| Des branches `jgit_rebase_*` laissées derrière, qui feraient échouer le rebase suivant |
+
+---
+
+## Parcours 06 — Le cycle de vie d'une release
+
+Fichier : [`tests/features/06_release.feature`](../tests/features/06_release.feature)
+
+Trois commandes, du calcul de la version jusqu'à la publication sur GitHub.
+C'est le parcours qui touche la production : chaque effet y est irréversible.
+
+### Ce que le parcours vérifie
+
+**`release start`**
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Sans argument | la version suivante est déduite du dernier tag (`1.0.0` → `release/1.1.0`) |
+| La release part de `main` | ce qui n'est qu'en préprod n'y entre pas |
+| Version explicite, avec ou sans préfixe `release/` | respectée telle quelle, sans double préfixe |
+| Aucun tag dans le dépôt | refus explicite |
+| Espace de travail sale | refus explicite |
+| Relancer `start` sur une release publiée | elle est reprise et remise au niveau du serveur, **jamais détruite puis recréée** |
+| `main` porte des commits non poussés | ils sont **mis de côté** sur `jgit_stash_main`, puis `main` est **restaurée** en fin de commande |
+| L'utilisateur refuse la mise de côté | la commande s'arrête, les commits sont intacts, aucune release n'est créée |
+
+**`release merge`**
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Une feature livrée | c'est la branche `__PR__` **du serveur** qui est intégrée |
+| Source donnée sous la forme `__PR__…` | acceptée à l'identique |
+| Plusieurs `--from` | intégrées en série, chacune avec son commit de traçabilité |
+| Version cible à la volée / `--into` | la release visée est créée ou reprise |
+| `--into` sans fetch préalable | les références sont rafraîchies : une PR mergée n'est pas vue comme non mergée |
+| `--into` sur une release inexistante | refus explicite |
+| PR non mergée (branche réduite à son commit d'init) | refus, quelle que soit la forme de la source |
+| Copie locale périmée de la branche `__PR__` | ignorée : c'est le serveur qui fait foi |
+| **Conflit pendant un merge** | arrêt net : le merge est annulé, **rien n'est poussé**, les sources restantes ne sont pas tentées |
+
+**`release finish`**
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Nominal | merge dans `main`, tag posé, branche de release supprimée en local **et** sur le remote, release GitHub demandée |
+| Enchaîner une seconde release | la version suivante repart du nouveau tag |
+| `--into` | désigne explicitement la release à terminer, depuis n'importe quelle branche |
+| Release vide | refus explicite |
+| Release plus ancienne que le dernier tag | remplacée par la version calculée |
+| **Conflit à la fusion dans `main`** | arrêt : **aucun tag**, **aucun push**, **aucune release GitHub**, et la branche de release reste disponible |
+| Échec de `gh release create` | erreur explicite précisant que seul l'appel GitHub reste à rejouer |
+
+### Ce que ce parcours protège
+
+| Régression qui serait attrapée |
+| --- |
+| Une release poussée **amputée** d'une de ses sources après un conflit ignoré |
+| Un tag posé alors que la fusion dans la production a échoué |
+| Des commits non poussés de la production **écrasés** au démarrage d'une release |
+| Une release construite depuis la branche de travail, ou depuis une copie locale périmée |
+| Une PR non validée intégrée à une livraison |
+| Une branche de release oubliée sur le remote après `finish` |
+| Un échec côté GitHub passé sous silence |
+
+---
+
+## Parcours 07 — Les branches de démonstration
+
+Fichier : [`tests/features/07_demo.feature`](../tests/features/07_demo.feature)
+
+Une branche `demo_*` sert à **montrer** plusieurs features ensemble avant de les
+livrer. Elle est jetable : contrairement à une release, son historique est
+réécrit à chaque ajout.
+
+> `demo merge` porte le nom de « merge » mais procède par **rebase de la branche
+> de démo sur la source**, suivi d'un `push --force-with-lease`. C'est ce qui
+> garde l'historique linéaire ; c'est aussi pourquoi une démo ne doit jamais
+> servir de base à autre chose qu'une démonstration.
+
+### Ce que le parcours vérifie
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `demo start` sans nom | la démo prend le nom de la branche de référence (`demo_develop`) |
+| `demo start <nom>` / `--based-on` | nom et base imposés, ce qui n'est pas dans la base n'y entre pas |
+| Relancer `start` sur une démo publiée | elle est simplement remise à jour |
+| Démo présente en local mais supprimée du serveur | refus, avec la marche à suivre |
+| Confirmation refusée | aucune branche, ni locale ni distante |
+| `demo merge` | la feature arrive dans la démo, avec son commit marqueur `[jgit] DEMO merge …` |
+| Plusieurs `--from`, `feature` et `hotfix` mélangés | intégrées en série |
+| `--into` | désigne la démo à alimenter depuis n'importe quelle branche |
+| Intégrer deux fois la même feature | détecté, la branche distante ne bouge pas |
+| Source au mauvais format, ou absente du serveur | refus, la démo ne bouge pas |
+| `merge`, `list`, `remove` hors d'une branche `demo_*` | refus explicite |
+| **Conflit pendant l'intégration** | la main est rendue au développeur : le rebase reste en cours, rien n'est poussé |
+| `demo list` | affiche le **nom complet** des branches intégrées et les commandes `release merge` correspondantes |
+| Démo vide | signalée comme telle |
+| `demo remove` | supprimée du remote puis du local, retour sur la branche de référence |
+| Refus de la suppression / démo déjà supprimée sur GitHub | respectivement conservée, et nettoyée en local |
+
+### Ce que ce parcours protège
+
+Le point historiquement fragile est `demo list` : le nom des branches était
+tronqué (issue #37), rendant inutilisables les commandes `release merge`
+suggérées — c'est-à-dire la seule raison d'être de la commande. Le scénario
+vérifie désormais le nom complet.
+
+Le second est le **traitement des conflits** : contrairement aux commandes de
+release, `demo merge` laisse délibérément le rebase en cours. Le scénario fige ce
+choix pour qu'il reste un choix, et non un oubli.
+
+---
+
+## Parcours 08 — Les utilitaires et le stash automatique
+
+Fichier : [`tests/features/08_util_et_stash.feature`](../tests/features/08_util_et_stash.feature)
+
+Deux sujets sans rapport fonctionnel, mais qui partagent une propriété : ils ne
+doivent **rien** laisser derrière eux.
+
+### `util clean`
+
+Supprime les branches locales purement techniques — `jgit_rebase_*`,
+`jgit_verify_rebase_*`, `__PR__*` — et **uniquement** celles-là. Le scénario place
+côte à côte de vraies branches de travail et des branches techniques, puis vérifie
+que `develop`, `main` et `feature/…` survivent.
+
+### `util verify_rebase`
+
+Répond `true` ou `false` à la question « ce rebase passera-t-il ? », **sans rien
+modifier**, ni en local ni sur le remote.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `--into` ou `--from` manquant, deux `--from` | refus explicite, et `false` |
+| Branche source ou cible inconnue | refus explicite, et `false` |
+| Espace de travail sale | refus, et les modifications sont intactes |
+| Une branche comparée à elle-même | `true` |
+| Rebase possible | `true`, la branche distante est inchangée, l'espace de travail est propre |
+| Rebase conflictuel | `false`, **et l'historique local de la branche source est intact** |
+
+C'est cette dernière ligne qui compte : la vérification travaille sur une copie
+temporaire, jamais sur la branche du développeur.
+
+### Le stash automatique
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Travail non commité avant une commande | `jgit` propose de le mettre de côté, et le **restaure** à la fin |
+| L'utilisateur refuse | la commande s'arrête, rien n'est créé, rien n'est envoyé à GitHub, les modifications sont intactes |
+| Commandes de release | protégées de la même façon |
+| `util clean` | ne déclenche pas le stash : elle ne touche pas à l'arbre de travail |
+
+---
+
+## Parcours 09 — Des journées de travail complètes
+
+Fichier : [`tests/features/09_parcours_complets.feature`](../tests/features/09_parcours_complets.feature)
+
+Les autres parcours testent des commandes ; celui-ci teste leur **enchaînement**.
+Quatre journées types, jouées d'un bout à l'autre :
+
+1. **Un hotfix part de la production et y revient.** Démarré depuis `main` alors
+   que `develop` a du travail en cours, il ne l'embarque pas — ni dans la branche,
+   ni dans la release, ni dans le tag.
+2. **Une feature est rebasée, redémarrée puis livrée.** `start` → commits →
+   `rebase` sur une préprod qui a bougé → squash-merge de la PR → `restart` →
+   second lot → livraison. Les deux lots se retrouvent dans le tag final.
+3. **Une démo sert de répétition avant la release.** Deux features montrées sur
+   une branche de démo, listées, puis livrées pour de vrai, puis la démo est
+   démontée.
+4. **Deux releases successives s'enchaînent.** Les deux tags existent, le contenu
+   de la première est bien présent dans la seconde, et rien n'a fui vers `develop`.
+
+### Ce que ce parcours protège
+
+Les régressions qui n'apparaissent qu'à la jointure entre deux commandes : un
+`restart` qui casserait le `rebase` précédent, une seconde release qui repartirait
+du mauvais tag, un hotfix qui remonterait de la préprod en production.
+
+---
+
+## Parcours 10 — Les syntaxes dépréciées
+
+Fichier : [`tests/features/10_syntaxes_depreciees.feature`](../tests/features/10_syntaxes_depreciees.feature)
+
+Deux commandes ont changé de forme. Les anciennes restent acceptées le temps que
+les habitudes et les scripts de chacun rattrapent.
+
+| Ancienne forme | Forme actuelle |
+| --- | --- |
+| `jgit release merge <branche>` | `jgit release merge --from <branche>` |
+| `jgit clean` | `jgit util clean` |
+
+### Ce que le parcours vérifie
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Ancienne forme | fonctionne **à l'identique**, et affiche l'avertissement de dépréciation |
+| Ancienne forme avec un nom déjà préfixé `__PR__`, ou un `hotfix` | fonctionne aussi |
+| Nouvelle forme | **aucun** avertissement |
+| `release merge 4.2.0` ou `release/5.1.0` | reste une **version cible**, pas une source |
+| Sans source ni version | l'erreur est celle de la nouvelle syntaxe, sans avertissement parasite |
+| Mélanger les deux formes | refus explicite, qui nomme la bonne option à utiliser |
+| L'aide | documente les deux formes dépréciées |
+
+### Ce que ce parcours protège
+
+La distinction repose sur le **format de l'argument** : `1.2.0` est une version,
+tout le reste est une branche source. Une régression sur cette règle ferait
+silencieusement passer une version pour une branche — ou l'inverse. Le parcours
+la vérifie dans les deux sens, et vérifie surtout que l'ancienne forme continue de
+produire **exactement** le même résultat que la nouvelle.
+
+---
+
 ## Parcours 11 — La fraîcheur des branches
 
 Fichier : [`tests/features/11_synchronisation.feature`](../tests/features/11_synchronisation.feature)
@@ -262,3 +536,34 @@ que rien n'est poussé au passage.
 | Un code de retour de synchronisation à nouveau ignoré : la commande continue sur des données périmées |
 | Un `push` ajouté « pour aligner » la branche : jgit publierait du travail que le développeur n'a pas choisi de publier |
 | Une divergence traitée comme un cas normal |
+
+---
+
+## Parcours 12 — Le refus de tourner ailleurs que sur macOS
+
+Fichier : [`tests/features/12_portabilite.feature`](../tests/features/12_portabilite.feature)
+
+`jgit` s'appuie sur des outils BSD dont l'équivalent GNU se comporte
+différemment. Le cas le plus grave : `feature rebase` construit sa liste de
+commits avec `tail -r`, qui n'existe pas dans GNU coreutils. Ailleurs que sur
+macOS, la liste ressort **vide**, le rebase ne rejoue rien, et la branche de
+travail est **force-pushée vidée de tout le travail** — en affichant « Rebase
+terminé avec succès ».
+
+Plutôt que de risquer cela, `jgit` refuse de démarrer. Le détail et l'inventaire
+de ce qu'il reste à lever sont dans [`05-portabilite.md`](05-portabilite.md).
+
+### Ce que le parcours vérifie
+
+| Situation | Comportement attendu |
+| --- | --- |
+| N'importe quelle commande sur un système non supporté | refus explicite, nommant le système détecté et renvoyant à la doc |
+| `feature rebase` en particulier | refus **avant** toute réécriture : la branche distante est inchangée, le travail est toujours là |
+| Les commandes de release | refusées au même titre |
+| `jgit --help` | reste accessible : on doit pouvoir comprendre le refus |
+
+### Comment c'est testé sans machine Linux
+
+Le bac à sable place `$SANDBOX/bin` en tête du `PATH`. L'étape
+`Étant donné le système est "…" et non macOS` y dépose un faux `uname` : `jgit`
+croit tourner ailleurs, sans conteneur ni runner distant.

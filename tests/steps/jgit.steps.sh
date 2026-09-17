@@ -104,6 +104,21 @@ step_branches_non_standard() {
 }
 step_def "le projet utilise {chaine} au lieu de develop, master ou main" step_branches_non_standard
 
+# jgit refuse de tourner ailleurs que sur macOS (docs/05-portabilite.md). Le bac
+# a sable place deja $SANDBOX/bin en tete du PATH : y deposer un faux `uname`
+# suffit a faire croire a jgit qu'il tourne sur Linux.
+step_systeme_non_macos() {
+    local systeme="${1:-Linux}"
+    cat > "$SANDBOX/bin/uname" <<UNAME_MOCK
+#!/bin/bash
+# Faux uname : simule un systeme autre que macOS.
+printf '%s\n' "$systeme"
+UNAME_MOCK
+    chmod +x "$SANDBOX/bin/uname"
+    info "uname simule : $systeme"
+}
+step_def "le système est {chaine} et non macOS" step_systeme_non_macos
+
 step_github_supprime_branche() {
     github_delete_branch "$1"
 }
