@@ -100,7 +100,29 @@ poussait la release **amputée de B** et se terminait en succès.
 
 ---
 
-## 5. Une fonction appelée en substitution de commande écrit ses erreurs sur stderr
+## 5. On ne range pas le travail du développeur à sa place
+
+`feature` et `hotfix` sont des commandes avec lesquelles on **travaille** : le
+stash automatique (`verify_stash`) y est un confort légitime, puisque `jgit`
+restitue ce qu'il a mis de côté avant de rendre la main.
+
+`release` et `demo` sont des commandes qui **fabriquent** un livrable à partir
+d'un état connu du serveur. Elles ne stashent rien et ne déplacent aucun commit :
+face à un espace de travail sale ou à une branche porteuse de commits non
+publiés, elles **refusent**, expliquent, et donnent la commande à lancer
+(`refuse_if_worktree_dirty`, `refuse_if_branch_ahead`).
+
+La frontière n'est pas esthétique. Le sort d'un commit qu'on n'a pas choisi de
+publier appartient à son auteur : `jgit` peut refuser d'avancer, il ne peut pas
+décider. Le cas vécu est l'inverse exact — un `git reset --hard` silencieux sur
+la branche de production, qui supprimait les commits locaux sans rien demander.
+
+Corollaire : n'ajoutez pas `verify_stash` à une commande `release` ou `demo`, et
+n'inventez pas de mécanisme de sauvegarde automatique pour contourner un refus.
+
+---
+
+## 6. Une fonction appelée en substitution de commande écrit ses erreurs sur stderr
 
 ```bash
 reference_branch=$(get_reference_branch "$feature_type")
@@ -113,7 +135,7 @@ quitterait que le sous-shell.
 
 ---
 
-## 6. Compatibilité bash 3.2 et macOS
+## 7. Compatibilité bash 3.2 et macOS
 
 Le bash livré par Apple est le 3.2 : pas de tableaux associatifs, pas de
 `readarray`/`mapfile`, pas de `${var^^}`. Voir le

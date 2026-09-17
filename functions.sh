@@ -139,115 +139,57 @@ resolve_git_ref() {
 }
 
 ###############################################
-#   Mise de côté des commits de la branche de production
+#   Garde-fous des commandes de release et de démo
 ###############################################
 #
-# Les commandes de release exigent que la branche de production soit alignée sur
-# le serveur. Elle peut pourtant porter des commits que le développeur n'a pas
-# encore poussés : les écraser silencieusement reviendrait à détruire son
-# travail. On applique donc le même principe que le stash de verify_stash — on
-# demande, on met de côté, on remet en place à la fin.
-JGIT_PROD_STASH_BRANCH=""
-JGIT_PROD_STASH_REF=""
-JGIT_PROD_STASH_COUNT=0
-JGIT_PROD_STASH_MODE=""
+# Une release ou une démo se fabrique à partir de la version serveur d'une
+# branche. Plutôt que de ranger le travail en cours à la place du développeur —
+# donc de décider pour lui du sort de modifications ou de commits qu'il n'a pas
+# publiés — jgit refuse, explique, et donne la commande à lancer.
+#
+# Ces deux garde-fous ne concernent que les scopes release et demo. Les scopes
+# feature et hotfix continuent de proposer le stash automatique (verify_stash) :
+# on y travaille, alors qu'une release ou une démo se fabrique.
 
-prod_stash_branch_name() {
-  echo "jgit_stash_$1"
+# Refuse si l'arbre de travail contient des modifications non commitées.
+# $1 : ce que l'on fabriquait, capitalisé, pour le message (« Une release »…).
+refuse_if_worktree_dirty() {
+  local what="$1"
+
+  [[ -n $(git status --porcelain) ]] || return 0
+
+  printf "\033[1;31mVotre espace de travail contient des modifications non commitées.\033[0m\n" >&2
+  printf "%s ne se fabrique pas sur un dépôt en cours de modification.\n" "$what" >&2
+  printf "\nMettez-les de côté puis relancez :\n" >&2
+  printf "  git stash push -u -m \"avant jgit\"\n" >&2
+  printf "  # puis, une fois la commande terminée : git stash pop\n" >&2
+  return 1
 }
 
-# Propose de mettre de côté les commits non poussés de la branche de production.
-#
-#   mode restore : jgit ne fait pas avancer cette branche, elle est remise à
-#                  l'identique en fin de commande (release start)
-#   mode keep    : jgit fait légitimement avancer la branche, les commits mis de
-#                  côté restent sur leur branche de sauvegarde (release finish)
-#
-# Renvoie 1 si l'utilisateur refuse : à l'appelant d'arrêter la commande.
-stash_prod_branch_commits() {
+# Refuse si la branche porte des commits que le serveur n'a pas.
+# $1 : la branche ; $2 : ce que l'on fabriquait, capitalisé, pour le message.
+refuse_if_branch_ahead() {
   local branch="$1"
-  local mode="${2:-restore}"
+  local what="$2"
   local remote_ref="$j2s_remote/$branch"
 
-  if ! git show-ref --verify --quiet "refs/remotes/$remote_ref"; then
-    return 0
-  fi
+  git show-ref --verify --quiet "refs/heads/$branch" || return 0
+  git show-ref --verify --quiet "refs/remotes/$remote_ref" || return 0
 
   local ahead
   ahead=$(git rev-list --count "$remote_ref..$branch" 2>/dev/null) || return 0
-  if [[ -z "$ahead" || $ahead -eq 0 ]]; then
-    return 0
-  fi
+  [[ -n "$ahead" && $ahead -gt 0 ]] || return 0
 
-  local stash_branch
-  stash_branch=$(prod_stash_branch_name "$branch")
-
-  printf "%sLa branche %s%s%s%s porte %s commit(s) que vous n'avez pas poussé(s).%s\n" \
-    "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)" "$(tput setaf 2)" "$ahead" "$(tput sgr0)"
-  printf "%sUne release doit partir de la version du serveur : jgit peut les mettre de côté sur %s%s%s.%s\n" \
-    "$(tput setaf 2)" "$(tput setaf 1)" "$stash_branch" "$(tput sgr0)" "$(tput sgr0)"
-
-  if ! confirm_action "Mettre ces commits de côté ?" "y"; then
-    echo "Opération annulée."
-    return 1
-  fi
-
-  local saved_ref
-  saved_ref=$(git rev-parse "$branch") || return 1
-
-  git branch -f "$stash_branch" "$saved_ref" --quiet 2>/dev/null || {
-    printf "\033[1;31mImpossible de créer la branche de sauvegarde %s.\033[0m\n" "$stash_branch" >&2
-    return 1
-  }
-
-  # La branche repart de la version du serveur : le reset est sans risque, le
-  # travail vient d'être sauvegardé.
-  git reset --hard "$remote_ref" --quiet
-
-  JGIT_PROD_STASH_BRANCH="$branch"
-  JGIT_PROD_STASH_REF="$saved_ref"
-  JGIT_PROD_STASH_COUNT="$ahead"
-  JGIT_PROD_STASH_MODE="$mode"
-
-  printf "%s commit(s) de %s mis de côté sur %s.\n" "$ahead" "$branch" "$stash_branch"
-  return 0
-}
-
-# Remet la branche de production en place. Appelée par exit_safe, donc dans le
-# chemin nominal comme dans le chemin d'erreur.
-restore_prod_branch_commits() {
-  [[ -n "$JGIT_PROD_STASH_REF" ]] || return 0
-
-  local branch="$JGIT_PROD_STASH_BRANCH"
-  local stash_branch
-  stash_branch=$(prod_stash_branch_name "$branch")
-
-  if [[ "$JGIT_PROD_STASH_MODE" == "keep" ]]; then
-    printf "%sVos %s commit(s) de %s sont conservés sur la branche %s.%s\n" \
-      "$(tput setaf 2)" "$JGIT_PROD_STASH_COUNT" "$branch" "$stash_branch" "$(tput sgr0)"
-    JGIT_PROD_STASH_REF=""
-    return 0
-  fi
-
-  # git branch -f refuse de déplacer la branche courante : quand on est dessus,
-  # c'est reset --hard qui fait le même travail sans quitter la branche.
-  local restored=false
-  if [[ "$(git rev-parse --abbrev-ref HEAD)" == "$branch" ]]; then
-    git reset --hard "$JGIT_PROD_STASH_REF" --quiet 2>/dev/null && restored=true
-  else
-    git branch -f "$branch" "$JGIT_PROD_STASH_REF" --quiet 2>/dev/null && restored=true
-  fi
-
-  if [[ $restored == true ]]; then
-    git branch -D "$stash_branch" --quiet 2>/dev/null
-    printf "%s restaurée avec vos %s commit(s) non poussé(s).\n" "$branch" "$JGIT_PROD_STASH_COUNT"
-  else
-    printf "\033[1;31mImpossible de restaurer %s : vos commits restent sur %s.\033[0m\n" \
-      "$branch" "$stash_branch" >&2
-  fi
-
-  JGIT_PROD_STASH_REF=""
-  return 0
+  printf "\033[1;31mLa branche %s porte %s commit(s) qui ne sont pas sur %s.\033[0m\n" \
+    "$branch" "$ahead" "$remote_ref" >&2
+  printf "%s doit partir de la version du serveur, et jgit ne décide pas à votre place du sort de commits que vous n'avez pas publiés.\n" "$what" >&2
+  printf "\nPubliez-les :\n" >&2
+  printf "  git push %s %s\n" "$j2s_remote" "$branch" >&2
+  printf "\n…ou mettez-les de côté puis relancez :\n" >&2
+  printf "  git switch %s\n" "$branch" >&2
+  printf "  git branch sauvegarde-%s          # vos commits y restent accessibles\n" "$branch" >&2
+  printf "  git reset --hard %s\n" "$remote_ref" >&2
+  return 1
 }
 
 # fonction à appeler systématiquement permet de remettre les données stashée au départ en cas d'arrêt du script.
@@ -260,8 +202,6 @@ exit_safe() {
         # synchroniser, ni échouer, ni rappeler exit_safe.
         switch_branch "$current_branch" recover
     fi
-
-    restore_prod_branch_commits
 
     if [[ $stash == true ]]; then
         git stash pop

@@ -260,7 +260,7 @@ case "$JGIT_TYPE" in
         fi
         case "$JGIT_ACTION" in
             start)
-                verify_stash
+                refuse_if_worktree_dirty "Une release" || exit_safe 1
                 release_start "$JGIT_TARGET"
                 ;;
             merge)
@@ -284,11 +284,11 @@ case "$JGIT_TYPE" in
                     echo "Veuillez spécifier au moins une source avec --from." >&2
                     exit_safe 1
                 fi
-                verify_stash
+                refuse_if_worktree_dirty "Une release" || exit_safe 1
                 release_merge "$JGIT_TARGET" "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
                 ;;
             finish)
-                verify_stash
+                refuse_if_worktree_dirty "Une release" || exit_safe 1
                 release_finish "$JGIT_INTO_TARGET"
                 ;;
             *)
@@ -304,7 +304,7 @@ case "$JGIT_TYPE" in
         fi
         case "$JGIT_ACTION" in
             start)
-                verify_stash
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
                 demo_start "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
                 ;;
             merge)
@@ -312,14 +312,14 @@ case "$JGIT_TYPE" in
                     echo "Veuillez préciser au moins une source avec --from." >&2
                     exit_safe 1
                 fi
-                verify_stash
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
                 demo_merge "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
                 ;;
             list)
                 demo_list
                 ;;
             remove)
-                verify_stash
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
                 demo_remove
                 ;;
             *)

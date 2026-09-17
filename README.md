@@ -121,21 +121,25 @@ Deux exceptions, toutes deux explicites :
 - Pendant un `rebase`, une fois l'historique réécrit, les branches divergent du
   serveur **par construction** — c'est précisément ce que le `push --force` final
   va publier. `jgit` ne les resynchronise donc pas à ce moment-là.
-- Les commandes de release exigent que la branche de production soit **alignée sur
-  le serveur**. Si elle porte des commits non poussés, `jgit` propose de les
-  **mettre de côté** sur une branche `jgit_stash_<branche>` :
+- Les scopes `release` et `demo` sont plus stricts : une release ou une démo se
+  **fabrique** à partir de la version serveur d'une branche, alors qu'une feature
+  se **travaille**. `jgit` y refuse donc de démarrer si la branche de départ porte
+  des commits non publiés — il ne les écrase pas, mais ne décide pas non plus à
+  votre place de ce qu'il faut en faire :
 
   ```
-  La branche main porte 2 commit(s) que vous n'avez pas poussé(s).
-  Une release doit partir de la version du serveur : jgit peut les mettre de côté sur jgit_stash_main.
-  Mettre ces commits de côté ? (Y/n)
-  ```
+  La branche main porte 2 commit(s) qui ne sont pas sur origin/main.
+  Une release doit partir de la version du serveur, et jgit ne décide pas à votre
+  place du sort de commits que vous n'avez pas publiés.
 
-  Avec `release start`, `main` est **remise en place telle quelle** en fin de
-  commande et la branche de sauvegarde est supprimée. Avec `release finish`, qui
-  fait légitimement avancer `main`, les commits **restent sur la branche de
-  sauvegarde** et `jgit` vous indique où les retrouver. Refuser la proposition
-  arrête la commande sans rien modifier.
+  Publiez-les :
+    git push origin main
+
+  …ou mettez-les de côté puis relancez :
+    git switch main
+    git branch sauvegarde-main          # vos commits y restent accessibles
+    git reset --hard origin/main
+  ```
 
 ## Commandes par scope
 
@@ -195,9 +199,29 @@ Dans les deux cas l'espace de travail est rendu propre : rien n'est perdu.
 - `jgit demo list` : parcourt les commits `[jgit] DEMO …`, affiche les branches déjà fusionnées et suggère les commandes `jgit release merge --from ...` correspondantes.
 - `jgit demo remove [--no-interaction]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
 
+### Espace de travail et stash automatique
+
+Avec `feature` et `hotfix`, `jgit` propose de mettre de côté votre travail non
+commité et vous le restitue en fin de commande — c'est le stash automatique.
+
+Avec `release` et `demo`, il **refuse** :
+
+```
+Votre espace de travail contient des modifications non commitées.
+Une release ne se fabrique pas sur un dépôt en cours de modification.
+
+Mettez-les de côté puis relancez :
+  git stash push -u -m "avant jgit"
+  # puis, une fois la commande terminée : git stash pop
+```
+
+La raison est la même que ci-dessus : une release et une démo se fabriquent à
+partir d'un état connu du serveur. Ranger votre travail à votre place pour y
+parvenir reviendrait à prendre une décision qui ne revient pas à `jgit`.
+
 ### Utilitaires
 
-- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_verify_rebase_*`, `__PR__*`). Les branches `jgit_stash_*`, qui portent du travail mis de côté, ne sont **pas** touchées.
+- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_verify_rebase_*`, `__PR__*`).
 - `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
 
 ### Syntaxes dépréciées

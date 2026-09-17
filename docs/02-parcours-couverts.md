@@ -294,10 +294,9 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 | La release part de `main` | ce qui n'est qu'en préprod n'y entre pas |
 | Version explicite, avec ou sans préfixe `release/` | respectée telle quelle, sans double préfixe |
 | Aucun tag dans le dépôt | refus explicite |
-| Espace de travail sale | refus explicite |
+| Espace de travail sale | refus explicite, avec la commande `git stash` à lancer |
 | Relancer `start` sur une release publiée | elle est reprise et remise au niveau du serveur, **jamais détruite puis recréée** |
-| `main` porte des commits non poussés | ils sont **mis de côté** sur `jgit_stash_main`, puis `main` est **restaurée** en fin de commande |
-| L'utilisateur refuse la mise de côté | la commande s'arrête, les commits sont intacts, aucune release n'est créée |
+| `main` porte des commits non poussés | **refus** : ni écrasés, ni rangés d'office ; le message donne les deux issues (publier, ou mettre de côté) |
 
 **`release merge`**
 
@@ -322,6 +321,7 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 | `--into` | désigne explicitement la release à terminer, depuis n'importe quelle branche |
 | Release vide | refus explicite |
 | Release plus ancienne que le dernier tag | remplacée par la version calculée |
+| `main` porte des commits non poussés | **refus** avant la fusion : sans cela le merge les publierait en production |
 | **Conflit à la fusion dans `main`** | arrêt : **aucun tag**, **aucun push**, **aucune release GitHub**, et la branche de release reste disponible |
 | Échec de `gh release create` | erreur explicite précisant que seul l'appel GitHub reste à rejouer |
 
@@ -332,6 +332,7 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 | Une release poussée **amputée** d'une de ses sources après un conflit ignoré |
 | Un tag posé alors que la fusion dans la production a échoué |
 | Des commits non poussés de la production **écrasés** au démarrage d'une release |
+| Des commits non poussés de la production **publiés** par le merge de `release finish` |
 | Une release construite depuis la branche de travail, ou depuis une copie locale périmée |
 | Une PR non validée intégrée à une livraison |
 | Une branche de release oubliée sur le remote après `finish` |
@@ -356,6 +357,8 @@ réécrit à chaque ajout.
 
 | Situation | Comportement attendu |
 | --- | --- |
+| Espace de travail sale | refus explicite : une démo se fabrique, elle ne se travaille pas |
+| Branche de base porteuse de commits non poussés | refus, **avant** la demande de confirmation |
 | `demo start` sans nom | la démo prend le nom de la branche de référence (`demo_develop`) |
 | `demo start <nom>` / `--based-on` | nom et base imposés, ce qui n'est pas dans la base n'y entre pas |
 | Relancer `start` sur une démo publiée | elle est simplement remise à jour |
@@ -421,10 +424,10 @@ temporaire, jamais sur la branche du développeur.
 
 | Situation | Comportement attendu |
 | --- | --- |
-| Travail non commité avant une commande | `jgit` propose de le mettre de côté, et le **restaure** à la fin |
+| Travail non commité avant une commande `feature` ou `hotfix` | `jgit` propose de le mettre de côté, et le **restaure** à la fin |
 | L'utilisateur refuse | la commande s'arrête, rien n'est créé, rien n'est envoyé à GitHub, les modifications sont intactes |
-| Commandes de release | protégées de la même façon |
-| `util clean` | ne déclenche pas le stash : elle ne touche pas à l'arbre de travail |
+| Commandes `release` et `demo` | **refus** au lieu du stash : elles fabriquent à partir d'un état connu du serveur, ranger le travail à la place du développeur serait une décision qui ne leur revient pas |
+| `util clean` | ne déclenche ni stash ni refus : elle ne touche pas à l'arbre de travail |
 
 ---
 

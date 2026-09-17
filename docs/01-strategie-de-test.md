@@ -92,7 +92,7 @@ Deux choses distinctes sont simulées côté GitHub :
 | Syntaxes dépréciées | oui — [parcours 10](02-parcours-couverts.md) |
 | Fraîcheur des branches (retard, avance, divergence) | oui — [parcours 11](02-parcours-couverts.md) |
 | Conflits (`release merge`, `release finish`, `demo merge`, rebase) | oui — parcours [05](02-parcours-couverts.md), [06](02-parcours-couverts.md) et [07](02-parcours-couverts.md) |
-| Mise de côté des commits non poussés de la production | oui — [parcours 06](02-parcours-couverts.md) |
+| Refus d'un espace de travail sale ou d'une branche non publiée (release, demo) | oui — parcours [06](02-parcours-couverts.md), [07](02-parcours-couverts.md) et [08](02-parcours-couverts.md) |
 | Refus de démarrer hors macOS | oui — [parcours 12](02-parcours-couverts.md) |
 
 ## Figer un comportement discutable plutôt que l'ignorer

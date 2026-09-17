@@ -52,8 +52,11 @@ Fonctionnalité: Cycle de vie d'une release
     Étant donné je modifie le fichier "src/brouillon.txt" avec "travail en cours"
     Quand je lance "jgit release start"
     Alors jgit se termine en erreur
-    Et la sortie contient "Local changes, cannot start release"
+    Et la sortie contient "Votre espace de travail contient des modifications non commitées."
+    Et la sortie contient "Une release ne se fabrique pas sur un dépôt en cours de modification."
+    Et la sortie contient "git stash push -u"
     Et la branche distante "release/1.1.0" n'existe pas
+    Et le fichier de travail "src/brouillon.txt" contient "travail en cours"
 
   # La branche locale n'est plus détruite puis re-trackée : elle est reprise et
   # remise au niveau du serveur en fast-forward.
@@ -66,31 +69,39 @@ Fonctionnalité: Cycle de vie d'une release
     Et je suis sur la branche "release/1.1.0"
     Et la branche distante "release/1.1.0" a 1 commits d'avance sur "main"
 
-  # Une release doit partir de la version serveur de la production. Les commits
-  # que le développeur n'a pas poussés ne sont pas pour autant à jeter : ils sont
-  # mis de côté puis remis en place, comme le fait déjà le stash automatique.
-  Scénario: Les commits non poussés de main sont mis de côté puis restaurés
+  # Une release part de la version serveur de la production. Des commits locaux
+  # non publiés ne sont ni écrasés — ce que faisait un git reset --hard — ni
+  # rangés d'office : jgit refuse et dit quoi faire. Le sort de commits qu'on n'a
+  # pas choisi de publier appartient au développeur.
+  Scénario: Des commits non poussés sur main empêchent de démarrer une release
     Étant donné je me place sur la branche "main"
     Et je commite le fichier "src/local.txt" contenant "travail local" avec le message "Travail local non poussé"
     Quand je lance "jgit release start --no-interaction"
-    Alors jgit se termine sans erreur
-    Et la sortie contient "porte 1 commit(s) que vous n'avez pas poussé(s)."
-    Et la sortie contient "1 commit(s) de main mis de côté sur jgit_stash_main."
-    Et la sortie contient "main restaurée avec vos 1 commit(s) non poussé(s)."
-    Et je suis sur la branche "release/1.1.0"
-    Et l'historique local de "main" contient "Travail local non poussé"
-    Et la branche locale "jgit_stash_main" n'existe pas
-    Et le fichier "src/local.txt" n'existe pas sur la branche distante "release/1.1.0"
-
-  Scénario: Refuser la mise de côté interrompt la release sans rien détruire
-    Étant donné je me place sur la branche "main"
-    Et je commite le fichier "src/local.txt" contenant "travail local" avec le message "Travail local non poussé"
-    Quand je lance "jgit release start" et que je réponds aux questions :
-      | Mettre ces commits de côté | n |
     Alors jgit se termine en erreur
-    Et la sortie contient "Opération annulée."
+    Et la sortie contient "La branche main porte 1 commit(s) qui ne sont pas sur origin/main."
+    Et la sortie contient "jgit ne décide pas à votre place du sort de commits que vous n'avez pas publiés."
+    Et la sortie contient "git push origin main"
+    Et la sortie contient "git reset --hard origin/main"
     Et l'historique local de "main" contient "Travail local non poussé"
     Et la branche distante "release/1.1.0" n'existe pas
+
+  # Le même garde-fou protège l'étape la plus irréversible : sans lui, le merge
+  # de la release embarquerait ces commits et les publierait sur la production.
+  Scénario: Des commits non poussés sur main empêchent de terminer une release
+    Étant donné je lance "jgit feature start TEST-17 --no-interaction --no-open"
+    Et je commite le fichier "src/feature17.txt" contenant "feature 17" avec le message "Ajoute la feature 17"
+    Et je pousse la branche courante
+    Et la PR de "feature/TEST-17" est squash-mergée sur GitHub avec le message "TEST-17 (#17)"
+    Et je lance "jgit release merge --from feature/TEST-17"
+    Et je me place sur la branche "main"
+    Et je commite le fichier "src/local.txt" contenant "travail local" avec le message "Travail local non poussé"
+    Quand je lance "jgit release finish --into 1.1.0"
+    Alors jgit se termine en erreur
+    Et la sortie contient "La branche main porte 1 commit(s) qui ne sont pas sur origin/main."
+    Et le tag "1.1.0" n'existe pas sur le remote
+    Et le fichier "src/local.txt" n'existe pas sur la branche distante "main"
+    Et la branche distante "release/1.1.0" existe
+    Et GitHub n'a pas reçu "release create"
 
   # --- release merge --------------------------------------------------------
 

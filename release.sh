@@ -58,12 +58,14 @@ release_start() {
         exit_safe 1
     fi
 
-    if [[ $(git status --porcelain) ]]; then
-        echo "/!\\ Local changes, cannot start release"
-        exit_safe 1
-    fi
+    refuse_if_worktree_dirty "Une release" || exit_safe 1
 
     switch_branch "$prod_branch"
+
+    # La release part de la version serveur de la production. Des commits locaux
+    # non publiés ne sont ni écrasés ni rangés d'office : on s'arrête et on dit
+    # quoi faire.
+    refuse_if_branch_ahead "$prod_branch" "Une release" || exit_safe 1
 
     if [[ -n "$requested_version" ]]; then
         future_tag="$requested_version"
@@ -102,12 +104,6 @@ release_start() {
         switch_branch "$branch"
     else
         echo "Release does not exists, create it..."
-        # La release part de la version serveur de la production. Les commits
-        # locaux non poussés sont mis de côté, jamais écrasés : jgit ne fait pas
-        # avancer la production ici, la branche est remise en place à la fin.
-        if ! stash_prod_branch_commits "$prod_branch" restore; then
-            exit_safe 1
-        fi
         switch_branch "$branch" create
         git commit --allow-empty -m "$prefix_init_commit release ${branch}. $suffix_init_commit"
         git push "$j2s_remote" "$branch"
@@ -270,11 +266,9 @@ release_finish() {
         # tenterait de revenir sur une branche qui n'existe plus.
         current_branch="$prod_branch"
         # La production doit être alignée sur le serveur avant d'y fusionner la
-        # release. Mode keep : jgit va légitimement faire avancer cette branche,
-        # les commits mis de côté restent donc sur leur branche de sauvegarde.
-        if ! stash_prod_branch_commits "$prod_branch" keep; then
-            exit_safe 1
-        fi
+        # release : sans cela jgit publierait, avec le merge, des commits que le
+        # développeur n'a pas choisi de pousser.
+        refuse_if_branch_ahead "$prod_branch" "Une release" || exit_safe 1
         echo "Merging release ${branch} in $prod_branch branch..."
         if ! git merge --no-ff "${branch}" -m "Merge release branch : ${branch}"; then
             git merge --abort >/dev/null 2>&1

@@ -297,7 +297,7 @@ test_passed
 
 ## Scénarios existants
 
-153 scénarios répartis par domaine fonctionnel.
+156 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -306,9 +306,9 @@ test_passed
 | `03_feature_start.feature` | référence `develop`/`main` selon le scope, `--based-on`, `--no-open`, refus de confirmation, les 4 combinaisons local/distant, repli de branche de référence, réponses par défaut |
 | `04_feature_restart.feature` | restart après squash-merge, refus si le code diffère, refus d'une feature inconnue, `--no-open`, hotfix |
 | `05_feature_rebase.feature` | rebase nominal, hotfix, `--based-on`, `--squash`, seuil de squash, refus des deux confirmations, conflits, PR déjà mergée, commit de fusion, branches non publiées |
-| `06_release.feature` | `release start` (calcul de version, version explicite, sans tag, dépôt sale, reprise, mise de côté des commits non poussés de `main`), `release merge` (`--from`, `--into`, sources multiples, PR non mergée, **conflit**), `release finish` (tag, merge, release vide, bascule de branche, **conflit**) |
-| `07_demo.feature` | `demo start` (nom par défaut, `--based-on`, reprise, refus), `demo merge` (sources multiples, doublon, formats invalides, `--into`, **conflit**), `demo list`, `demo remove` |
-| `08_util_et_stash.feature` | `util clean`, `util verify_rebase` (tous les refus, true/false, absence de trace), stash automatique accepté et refusé |
+| `06_release.feature` | `release start` (calcul de version, version explicite, sans tag, reprise, **refus** d'un dépôt sale ou de commits non poussés sur `main`), `release merge` (`--from`, `--into`, sources multiples, PR non mergée, **conflit**), `release finish` (tag, merge, release vide, bascule de branche, **conflit**, **refus** de commits non poussés) |
+| `07_demo.feature` | `demo start` (nom par défaut, `--based-on`, reprise, refus d'un dépôt sale ou d'une base non publiée), `demo merge` (sources multiples, doublon, formats invalides, `--into`, **conflit**), `demo list`, `demo remove` |
+| `08_util_et_stash.feature` | `util clean`, `util verify_rebase` (tous les refus, true/false, absence de trace), stash automatique accepté et refusé sur `feature`, et son remplacement par un refus sur `release` et `demo` |
 | `09_parcours_complets.feature` | hotfix de bout en bout, feature rebasée puis redémarrée puis livrée, démo servant de répétition, deux releases successives |
 | `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
 | `11_synchronisation.feature` | fraîcheur des branches : mise à jour d'une branche en retard, acceptation sans push d'une branche en avance, arrêt sur divergence, départ d'une feature/hotfix/démo sur la version serveur de la branche de référence |
