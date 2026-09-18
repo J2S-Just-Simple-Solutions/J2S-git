@@ -41,6 +41,12 @@ Puis, dans l'ordre :
 
 À la fin, vous êtes sur votre branche de travail, prêt à coder.
 
+Les deux commits repères posés en 2 et 3 retiennent au passage **d'où part votre
+branche** ([la branche d'origine](01-concepts.md#6-la-branche-dorigine)). Vous ne
+le verrez nulle part dans l'historique, mais c'est ce qui permettra plus tard à
+`jgit util check_rebase` de vous dire où vous en êtes, et à `jgit feature rebase`
+de vous rebaser au bon endroit — y compris si vous avez utilisé `--based-on`.
+
 ### La pull request créée
 
 | Champ | Valeur |
@@ -235,6 +241,9 @@ sans pousser, `jgit` s'arrêterait au lieu de choisir — voir
   mais aucune action n'est prise.
 - **Un `restart` sur une PR déjà fermée et mergée en production** ne se passe pas
   bien ([issue #27](https://github.com/J2S-Just-Simple-Solutions/J2S-git/issues/27)).
+- **Un `restart` ne choisit pas de base** : il reprend celle que porte la branche
+  de PR. Si celle-ci a été créée avant l'enregistrement de la branche d'origine,
+  la branche recréée n'en aura pas davantage.
 
 ---
 

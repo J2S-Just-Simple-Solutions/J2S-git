@@ -164,6 +164,7 @@ Les valeurs sont toujours entre guillemets.
 | Étape |
 | --- |
 | `Alors jgit se termine sans erreur` / `en erreur` |
+| `Alors jgit se termine avec le code N` (pour `util check_rebase`, qui répond par son code) |
 | `Et la sortie contient "…"` / `ne contient pas "…"` |
 | `Et la branche locale "…" existe` / `n'existe pas` |
 | `Et la branche distante "…" existe` / `n'existe pas` |
@@ -181,6 +182,10 @@ Les valeurs sont toujours entre guillemets.
 | `Et l'historique local de "…" contient "…"` / `ne contient pas "…"` |
 | `Et le fichier de travail "…" contient "…"` |
 | `Et l'espace de travail est propre` / `contient encore mes modifications` |
+| `Et la branche locale "…" est partie de "…"` |
+| `Et la branche distante "…" est partie de "…"` |
+| `Et la branche distante "…" ne porte aucune branche d'origine` |
+| `Et aucun sujet de commit de la branche distante "…" ne montre la branche d'origine` |
 | `Et GitHub a reçu "…"` / `n'a pas reçu "…"` |
 | `Et GitHub a reçu exactement N appels` |
 
@@ -248,6 +253,9 @@ Les fonctions utilisables dans une définition d'étape :
 | `remote_snapshot_save <branche>` | mémorise l'état du remote pour `assert_remote_branch_unchanged` |
 | `gh_calls` | journal des appels à `gh` |
 | `assert_jgit_success` / `assert_jgit_failure` / `assert_jgit_output_contains` | |
+| `assert_jgit_exit_code` | code de sortie exact |
+| `assert_local_based_on` / `assert_remote_based_on` / `assert_remote_without_based_on` | branche d'origine enregistrée |
+| `assert_remote_subject_without_based_on` | vérifie que la trace reste hors des sujets de commit |
 | `assert_local_branch_exists` / `_missing` | |
 | `assert_remote_branch_exists` / `_missing` | |
 | `assert_current_branch`, `assert_remote_tag_exists` | |
@@ -297,7 +305,7 @@ test_passed
 
 ## Scénarios existants
 
-156 scénarios répartis par domaine fonctionnel.
+179 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -313,6 +321,7 @@ test_passed
 | `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
 | `11_synchronisation.feature` | fraîcheur des branches : mise à jour d'une branche en retard, acceptation sans push d'une branche en avance, arrêt sur divergence, départ d'une feature/hotfix/démo sur la version serveur de la branche de référence |
 | `12_portabilite.feature` | refus de démarrer hors macOS, y compris — et surtout — avant un `feature rebase`, l'aide restant accessible |
+| `13_branche_origine.feature` | enregistrement de la branche d'origine (`feature`/`hotfix`/`demo`/`release`, `--based-on`, `restart`), `util check_rebase` (à jour, en retard, conflit, refus, codes de sortie), refus sur les anciennes branches — y compris quand un ancêtre porte la trace d'une autre branche —, et le rebase qui propose la base enregistrée |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

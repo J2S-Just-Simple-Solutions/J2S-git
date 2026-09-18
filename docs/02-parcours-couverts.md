@@ -570,3 +570,68 @@ de ce qu'il reste à lever sont dans [`05-portabilite.md`](05-portabilite.md).
 Le bac à sable place `$SANDBOX/bin` en tête du `PATH`. L'étape
 `Étant donné le système est "…" et non macOS` y dépose un faux `uname` : `jgit`
 croit tourner ailleurs, sans conteneur ni runner distant.
+
+---
+
+## Parcours 13 — La branche d'origine et la fraîcheur
+
+Fichier : [`tests/features/13_branche_origine.feature`](../tests/features/13_branche_origine.feature)
+
+Une branche ne dit pas d'où elle vient : Git sait retrouver l'endroit où deux
+branches se séparent, jamais **laquelle a servi de point de départ**. `jgit`
+inscrit donc le point de départ dans le corps du commit d'initialisation, sous
+forme de trailers, et s'en sert pour répondre à « suis-je encore à jour, et
+puis-je rebaser sans conflit ? ».
+
+### Ce que le parcours vérifie
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `feature start` / `hotfix start` | la branche de travail **et** sa branche de PR enregistrent la référence utilisée |
+| `--based-on` | c'est cette branche-là qui est enregistrée, pas la référence du projet |
+| `demo start`, `release start` | enregistrent également leur base |
+| `feature restart` | reprend la base portée par la branche de PR, sans la recalculer |
+| L'affichage de l'historique | les trailers restent dans le corps du message : aucun sujet de commit ne les montre |
+
+### La fraîcheur, vue par `util check_rebase`
+
+| Situation | Réponse et code de sortie |
+| --- | --- |
+| Branche fraîchement créée | *à jour*, code `0` |
+| Base qui a avancé, rebase propre | *en retard de N commits*, *passerait sans conflit*, code `2`, et la commande à lancer |
+| Base qui a avancé, rebase en conflit | *des conflits sont à prévoir*, code `3`, et le rappel de `--squash` |
+| Espace de travail sale, branche inconnue, `--from` en double, branche en positionnel | refus expliqué, code `1` |
+| Après la vérification | rien n'a bougé : branches distantes inchangées, développeur laissé sur sa branche |
+
+### Les anciennes branches
+
+C'est le cœur du parcours. Une branche créée avant ce mécanisme — ou à la main —
+ne porte aucune trace de son point de départ, et `jgit` **refuse de répondre**
+plutôt que de supposer la préprod.
+
+Un scénario va plus loin et protège contre l'erreur qui rendrait ce refus
+inopérant : les commits d'initialisation **remontent dans les branches livrées**
+(une release intègre l'historique des branches `__PR__`, puis `main` celui de la
+release). Une vieille branche partant de `main` compte donc, dans ses ancêtres,
+quantité de commits porteurs d'une origine qui n'est pas la sienne. Le scénario
+joue une livraison complète avant de créer la branche à la main, et vérifie
+qu'elle est bien reconnue comme ancienne — c'est ce que garantit le trailer
+`jgit-branch`, qui nomme la branche que chaque trace décrit.
+
+### Le rebase et la base enregistrée
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Base enregistrée différente de la référence du projet | `jgit` le signale et propose la base enregistrée, qui est la réponse par défaut |
+| Réponse `n` | le rebase vise la référence du projet, et la trace est mise à jour en conséquence |
+| `--no-interaction` | applique la réponse par défaut : la base enregistrée |
+| `--based-on` explicite | fait autorité, aucune question n'est posée, la trace est mise à jour |
+| Branche sans trace | rebase sur la référence du projet, et **acquiert sa trace** au passage |
+
+| Régression qui serait attrapée |
+| --- |
+| Une comparaison de message de commit faite sur `%B` plutôt que sur `%s` : le trailer la ferait échouer, et une release vide passerait pour pleine |
+| Le trailer remonté dans le sujet du commit, donc visible partout |
+| Une ancienne branche à qui l'on attribue la trace d'un ancêtre au lieu de la reconnaître comme ancienne |
+| Un rebase qui laisse la trace d'avant : la branche prétendrait partir d'une base qui n'est plus la sienne |
+| `feature rebase` qui renvoie silencieusement sur `develop` une branche partie d'ailleurs |

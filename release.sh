@@ -105,7 +105,7 @@ release_start() {
     else
         echo "Release does not exists, create it..."
         switch_branch "$branch" create
-        git commit --allow-empty -m "$prefix_init_commit release ${branch}. $suffix_init_commit"
+        commit_init_with_based_on "$prefix_init_commit release ${branch}. $suffix_init_commit" "$branch" "$prod_branch"
         git push "$j2s_remote" "$branch"
     fi
 
@@ -247,10 +247,13 @@ release_finish() {
     fi
 
     echo "Release: ${branch}"
-    local last_commit_message
-    last_commit_message=$(git log -1 --pretty=%B)
+    # Sur le sujet, et non sur le message complet : le commit d'init porte en
+    # plus sa branche d'origine, qui ferait échouer la comparaison — et une
+    # release vide serait alors livrée comme si elle contenait quelque chose.
+    local last_commit_subject
+    last_commit_subject=$(git log -1 --pretty=%s)
 
-    if [[ $last_commit_message == "$prefix_init_commit release ${branch}. $suffix_init_commit" ]]; then
+    if [[ $last_commit_subject == "$prefix_init_commit release ${branch}. $suffix_init_commit" ]]; then
         echo "It seems that the release is empty..."
         exit_safe 1
     fi

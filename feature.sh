@@ -49,11 +49,11 @@ feature_start() {
         switch_branch "$reference_branch"
         echo "Create pull request branch $branch_PR branch"
         switch_branch "$branch_PR" create
-        git commit --allow-empty -m "$prefix_init_commit $branch $suffix_init_commit" --quiet
+        commit_init_with_based_on "$prefix_init_commit $branch $suffix_init_commit" "$branch_PR" "$reference_branch" --quiet
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
         switch_branch "$branch" create
-        git commit --allow-empty -m "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - START $branch $suffix_init_commit" --quiet
+        commit_init_with_based_on "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - START $branch $suffix_init_commit" "$branch" "$reference_branch" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         current_branch="$branch"
         git branch -D $branch_PR --quiet
@@ -115,9 +115,15 @@ feature_restart() {
     # Suppression de la branche sur le remote - on ignore l'erreur si elle n'existe déjà pas
     git push "$j2s_remote" --delete "$branch" 2>/dev/null
 
+    # Un restart ne choisit pas de base : il reprend celle que la branche de PR
+    # porte déjà. Une branche d'avant ce mécanisme n'en a pas, et on ne lui en
+    # invente pas une — elle reste une ancienne branche, ce que dit check_rebase.
+    local recorded_base
+    recorded_base=$(read_based_on "$branch_PR" "$branch_PR") || recorded_base=""
+
     echo "Create working branch $branch"
     switch_branch "$branch" create
-    git commit --allow-empty -m "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - RESTART $branch $suffix_init_commit" --quiet
+    commit_init_with_based_on "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - RESTART $branch $suffix_init_commit" "$branch" "$recorded_base" --quiet
     git push --set-upstream $j2s_remote $branch --quiet
     current_branch="$branch"
     git branch -D $branch_PR --quiet

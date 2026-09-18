@@ -42,19 +42,63 @@ jgit feature rebase MONPROJET-123
 ```
 
 1. `jgit` vérifie que tout est en ordre (voir *Ce qui bloque*) ;
-2. il vous montre la liste des commits qu'il va rejouer, et sur quelle branche il
+2. si votre branche est partie d'ailleurs que de la référence du projet, il vous
+   le dit et propose **sa vraie base** (voir *Sur quelle branche il vous rebase*) ;
+3. il vous montre la liste des commits qu'il va rejouer, et sur quelle branche il
    va se baser, puis demande : **« Souhaitez-vous continuer ? »** ;
-3. il reconstruit les deux branches sur des copies temporaires, en rejouant vos
+4. il reconstruit les deux branches sur des copies temporaires, en rejouant vos
    commits **un par un** ;
-4. il vous affiche l'historique obtenu et demande : **« Confirmez-vous que le
+5. il vous affiche l'historique obtenu et demande : **« Confirmez-vous que le
    rebase s'est bien passé ? »** ;
-5. seulement alors, il republie les deux branches sur le serveur, puis fait le
+6. seulement alors, il republie les deux branches sur le serveur, puis fait le
    ménage.
 
 > **Tant que vous n'avez pas répondu à la seconde question, le serveur n'a pas
 > bougé.** Si vous répondez non, les deux branches réécrites sont supprimées de
 > votre machine et votre branche de travail est récupérée telle qu'elle est sur le
 > serveur : vous revenez à l'état d'avant.
+
+---
+
+## Sur quelle branche il vous rebase
+
+Par défaut, le rebase vise la **référence du projet** : la préprod pour une
+`feature`, la production pour un `hotfix`.
+
+Sauf que votre branche n'en est peut-être pas partie. Si vous l'avez démarrée avec
+`--based-on`, depuis une démo ou depuis une release, la rejouer sur `develop` la
+déplacerait là où elle n'a rien à faire — silencieusement, ce qui était le
+comportement des versions précédentes.
+
+`jgit` note désormais le point de départ à la création
+([la branche d'origine](01-concepts.md#6-la-branche-dorigine)) et vous le rappelle
+quand il diffère :
+
+```
+La branche feature/MONPROJET-412 est partie de demo_sprint12, et non de la
+référence du projet develop.
+Rebaser sur demo_sprint12 ? (Y/n)
+```
+
+| Votre réponse | Ce qui se passe |
+| --- | --- |
+| Entrée ou `y` | le rebase vise `demo_sprint12`, votre vraie base |
+| `n` | le rebase vise `develop`, la référence du projet — votre branche change officiellement de base |
+
+La majuscule le dit : **votre base d'origine est la réponse par défaut**, et c'est
+donc elle que `--no-interaction` applique.
+
+Deux cas où la question ne se pose pas :
+
+- vous avez passé `--based-on` : il fait autorité, sans rien demander ;
+- votre branche est partie de la référence du projet — il n'y a rien à signaler.
+
+Dans tous les cas, le rebase **met la trace à jour** : après lui, la branche
+enregistre la base sur laquelle il vient de la reconstruire. C'est aussi ainsi
+qu'une branche d'avant ce mécanisme en acquiert une.
+
+> Si la base enregistrée n'existe plus — une release livrée, une démo supprimée —
+> `jgit` le signale et se rabat sur la référence du projet, sans poser de question.
 
 ---
 
@@ -109,7 +153,7 @@ sur un conflit impossible à résoudre — **votre historique d'origine est rest
 
 | Option | Effet |
 | --- | --- |
-| `--based-on <branche>` | se rebaser sur une autre branche que la référence habituelle |
+| `--based-on <branche>` | se rebaser sur une autre branche que la référence habituelle — fait autorité, aucune question n'est posée |
 | `--squash` | regrouper vos commits de travail en un seul avant de rejouer |
 | `--no-interaction` | ne rien demander — **ne déclenche jamais le squash** et **ne peut pas traiter un conflit** |
 
@@ -202,6 +246,7 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 | Votre branche ou sa branche de PR n'existe pas sur le serveur | refuse en la nommant | il n'y a rien à republier |
 | Votre PR a **déjà été mergée** | refuse : *« n'est PAS un fast-forward … Cela peut se produire si vous avez déjà cloturé la PR »* | le cas n'est pas géré ; faites un `restart` à la place |
 | Un **commit de fusion** est présent dans l'historique | refuse en le nommant | une fusion ne se rejoue pas commit par commit ; ne mélangez pas merge et rebase |
+| La base enregistrée n'existe plus sur le serveur | le signale et se rabat sur la référence du projet | on ne rejoue pas sur une branche disparue |
 | Vous répondez `n` à la première question | s'arrête : rien n'a été touché | |
 | Vous répondez `n` à la seconde question | supprime les branches réécrites et récupère votre branche de travail du serveur | l'état d'avant est rétabli, le serveur n'a jamais bougé |
 | Conflit **avec** `--no-interaction` | s'arrête proprement, annule tout, restaure votre historique | un conflit demande un humain : il n'est jamais validé tout seul |
@@ -225,6 +270,9 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 - **`--squash` regroupe uniquement vos commits de travail**, c'est-à-dire ceux
   posés après le repère de démarrage. Ce qui est déjà passé par la branche de PR
   n'est pas touché.
+- **Les branches créées avant ce mécanisme n'ont pas de base enregistrée.** Le
+  rebase se comporte alors comme avant — il vise la référence du projet — et leur
+  donne leur trace au passage.
 
 ---
 

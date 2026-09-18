@@ -75,7 +75,7 @@ demo_start() {
 
     switch_branch "$base_branch"
     switch_branch "$demo_branch" create
-    git commit --allow-empty -m "$prefix_init_commit demo $demo_branch $suffix_init_commit" --quiet
+    commit_init_with_based_on "$prefix_init_commit demo $demo_branch $suffix_init_commit" "$demo_branch" "$base_branch" --quiet
     git push --set-upstream "$j2s_remote" "$demo_branch" --quiet
 
     current_branch="$demo_branch"
