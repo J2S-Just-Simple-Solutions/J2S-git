@@ -52,8 +52,11 @@ Fonctionnalité: Cycle de vie d'une release
     Étant donné je modifie le fichier "src/brouillon.txt" avec "travail en cours"
     Quand je lance "jgit release start"
     Alors jgit se termine en erreur
-    Et la sortie contient "Local changes, cannot start release"
+    Et la sortie contient "Votre espace de travail contient des modifications non commitées."
+    Et la sortie contient "Une release ne se fabrique pas sur un dépôt en cours de modification."
+    Et la sortie contient "git stash push -u"
     Et la branche distante "release/1.1.0" n'existe pas
+    Et le fichier de travail "src/brouillon.txt" contient "travail en cours"
 
   # La branche locale n'est plus détruite puis re-trackée : elle est reprise et
   # remise au niveau du serveur en fast-forward.
@@ -65,6 +68,40 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie ne contient pas "local branch exists, deletion..."
     Et je suis sur la branche "release/1.1.0"
     Et la branche distante "release/1.1.0" a 1 commits d'avance sur "main"
+
+  # Une release part de la version serveur de la production. Des commits locaux
+  # non publiés ne sont ni écrasés — ce que faisait un git reset --hard — ni
+  # rangés d'office : jgit refuse et dit quoi faire. Le sort de commits qu'on n'a
+  # pas choisi de publier appartient au développeur.
+  Scénario: Des commits non poussés sur main empêchent de démarrer une release
+    Étant donné je me place sur la branche "main"
+    Et je commite le fichier "src/local.txt" contenant "travail local" avec le message "Travail local non poussé"
+    Quand je lance "jgit release start --no-interaction"
+    Alors jgit se termine en erreur
+    Et la sortie contient "La branche main porte 1 commit(s) qui ne sont pas sur origin/main."
+    Et la sortie contient "jgit ne décide pas à votre place du sort de commits que vous n'avez pas publiés."
+    Et la sortie contient "git push origin main"
+    Et la sortie contient "git reset --hard origin/main"
+    Et l'historique local de "main" contient "Travail local non poussé"
+    Et la branche distante "release/1.1.0" n'existe pas
+
+  # Le même garde-fou protège l'étape la plus irréversible : sans lui, le merge
+  # de la release embarquerait ces commits et les publierait sur la production.
+  Scénario: Des commits non poussés sur main empêchent de terminer une release
+    Étant donné je lance "jgit feature start TEST-17 --no-interaction --no-open"
+    Et je commite le fichier "src/feature17.txt" contenant "feature 17" avec le message "Ajoute la feature 17"
+    Et je pousse la branche courante
+    Et la PR de "feature/TEST-17" est squash-mergée sur GitHub avec le message "TEST-17 (#17)"
+    Et je lance "jgit release merge --from feature/TEST-17"
+    Et je me place sur la branche "main"
+    Et je commite le fichier "src/local.txt" contenant "travail local" avec le message "Travail local non poussé"
+    Quand je lance "jgit release finish --into 1.1.0"
+    Alors jgit se termine en erreur
+    Et la sortie contient "La branche main porte 1 commit(s) qui ne sont pas sur origin/main."
+    Et le tag "1.1.0" n'existe pas sur le remote
+    Et le fichier "src/local.txt" n'existe pas sur la branche distante "main"
+    Et la branche distante "release/1.1.0" existe
+    Et GitHub n'a pas reçu "release create"
 
   # --- release merge --------------------------------------------------------
 
@@ -195,6 +232,26 @@ Fonctionnalité: Cycle de vie d'une release
     Et la sortie contient "Remote branch exists, use it..."
     Et le fichier "src/feature14.txt" existe sur la branche distante "release/1.1.0"
 
+  # Un merge en conflit laissait le dépôt à mi-chemin, la boucle continuait et la
+  # release partait quand même sur le serveur, amputée de la seconde feature —
+  # le tout en se terminant en succès.
+  Scénario: Un conflit pendant le merge arrête la release sans rien pousser
+    Étant donné je lance "jgit feature start CONF-1 --no-interaction --no-open"
+    Et je commite le fichier "src/app.txt" contenant "version CONF-1" avec le message "CONF-1 modifie app"
+    Et je pousse la branche courante
+    Et la PR de "feature/CONF-1" est squash-mergée sur GitHub avec le message "CONF-1 (#1)"
+    Et je lance "jgit feature start CONF-2 --no-interaction --no-open"
+    Et je commite le fichier "src/app.txt" contenant "version CONF-2" avec le message "CONF-2 modifie app"
+    Et je pousse la branche courante
+    Et la PR de "feature/CONF-2" est squash-mergée sur GitHub avec le message "CONF-2 (#2)"
+    Quand je lance "jgit release merge --from feature/CONF-1 --from feature/CONF-2"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Conflit lors de l'intégration de __PR__feature/CONF-2 dans release/1.1.0."
+    Et la sortie contient "la release n'a pas été poussée et rien n'est perdu."
+    Et l'espace de travail est propre
+    Et l'historique de "release/1.1.0" ne contient pas "Release merge feature branch : __PR__feature/CONF-1"
+    Et l'historique de "release/1.1.0" ne contient pas "Release merge feature branch : __PR__feature/CONF-2"
+
   # --- release finish -------------------------------------------------------
 
   Scénario: La release est fusionnée dans main, taguée et publiée
@@ -259,6 +316,25 @@ Fonctionnalité: Cycle de vie d'une release
     Alors jgit se termine en erreur
     Et la sortie contient "Local release does not have the right tag, switching to new branch"
     Et la sortie contient "Release: release/1.1.0"
+
+  # Symétrique du précédent, sur l'étape la plus irréversible : si la fusion dans
+  # la production conflicte, il ne doit y avoir ni tag, ni push, ni release
+  # GitHub, et la branche de release doit rester disponible.
+  Scénario: Un conflit à la fusion dans main annule le finish
+    Étant donné je lance "jgit feature start CONF-3 --no-interaction --no-open"
+    Et je commite le fichier "src/app.txt" contenant "version de la release" avec le message "CONF-3 modifie app"
+    Et je pousse la branche courante
+    Et la PR de "feature/CONF-3" est squash-mergée sur GitHub avec le message "CONF-3 (#3)"
+    Et je lance "jgit release merge --from feature/CONF-3"
+    Et un autre développeur pousse le fichier "src/app.txt" contenant "version de production" sur la branche "main" avec le message "Correctif direct en production"
+    Quand je lance "jgit release finish"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Conflit lors de la fusion de release/1.1.0 dans main."
+    Et la sortie contient "Aucun tag n'a été posé, rien n'a été poussé et la branche de release est intacte."
+    Et l'espace de travail est propre
+    Et le tag "1.1.0" n'existe pas sur le remote
+    Et la branche distante "release/1.1.0" existe
+    Et GitHub n'a pas reçu "release create"
 
   # Le tag et le merge sur main sont déjà poussés quand gh échoue : jgit doit
   # sortir en erreur, mais en disant précisément ce qu'il reste à rejouer.

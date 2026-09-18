@@ -144,13 +144,28 @@ Fonctionnalité: Utilitaires et garde-fous transverses
     Et le fichier de travail "src/app.txt" contient "travail en cours"
     Et GitHub a reçu exactement 0 appels
 
-  Scénario: Le stash protège aussi les commandes de release
+  # Le stash automatique ne couvre que feature et hotfix : on y travaille. Une
+  # release ou une démo se fabrique, et jgit refuse de le faire sur un dépôt en
+  # cours de modification plutôt que de ranger le travail à votre place.
+  Scénario: Les commandes de release refusent un espace de travail sale
     Étant donné je me place sur la branche "develop"
     Et je modifie le fichier "src/app.txt" avec "travail en cours"
     Quand je lance "jgit release start --no-interaction"
-    Alors jgit se termine sans erreur
-    Et je suis sur la branche "release/1.1.0"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Votre espace de travail contient des modifications non commitées."
+    Et la sortie ne contient pas "You have uncommited modifications."
+    Et je suis sur la branche "develop"
     Et le fichier de travail "src/app.txt" contient "travail en cours"
+    Et l'espace de travail contient encore mes modifications
+    Et la branche distante "release/1.1.0" n'existe pas
+
+  Scénario: Les commandes de démo refusent elles aussi
+    Étant donné je modifie le fichier "src/app.txt" avec "travail en cours"
+    Quand je lance "jgit demo start sprint12 --no-interaction"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Une démo ne se fabrique pas sur un dépôt en cours de modification."
+    Et le fichier de travail "src/app.txt" contient "travail en cours"
+    Et la branche distante "demo_sprint12" n'existe pas
 
   Scénario: util ne déclenche pas le stash automatique
     Étant donné je modifie le fichier "src/app.txt" avec "travail en cours"

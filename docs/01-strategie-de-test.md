@@ -89,8 +89,11 @@ Deux choses distinctes sont simulées côté GitHub :
 | `hotfix restart` / `hotfix rebase` | oui |
 | `demo start / merge / list / remove` | oui |
 | `util clean`, `util verify_rebase` | oui |
-| Syntaxes dépréciées | oui |
+| Syntaxes dépréciées | oui — [parcours 10](02-parcours-couverts.md) |
 | Fraîcheur des branches (retard, avance, divergence) | oui — [parcours 11](02-parcours-couverts.md) |
+| Conflits (`release merge`, `release finish`, `demo merge`, rebase) | oui — parcours [05](02-parcours-couverts.md), [06](02-parcours-couverts.md) et [07](02-parcours-couverts.md) |
+| Refus d'un espace de travail sale ou d'une branche non publiée (release, demo) | oui — parcours [06](02-parcours-couverts.md), [07](02-parcours-couverts.md) et [08](02-parcours-couverts.md) |
+| Refus de démarrer hors macOS | oui — [parcours 12](02-parcours-couverts.md) |
 
 ## Figer un comportement discutable plutôt que l'ignorer
 
@@ -108,18 +111,27 @@ la suite ont été ouvertes en issues (#34 à #38), corrigées, et leurs scénar
 inversés pour décrire le comportement attendu. Ils servent désormais de tests de
 non-régression.
 
-## Prochains scénarios, par ordre d'intérêt
+## Ce qui reste à couvrir
 
-1. **`feature rebase`** — c'est la commande la plus risquée : réécriture
-   d'historique et force-push. À couvrir : le rebase nominal, le rebase avec
-   conflit (résolu puis repris), l'arrêt propre en `--no-interaction` sur conflit,
-   et le `--squash` (y compris la proposition spontanée au-delà de
-   `squash_threshold`).
-2. **Les refus** — une commande qui doit échouer est un comportement à tester au
-   même titre : release vide, branche de PR contenant seulement le commit
-   d'initialisation, `restart` sur deux branches au code différent.
-3. **`demo`** — le cycle complet `start` → `merge` → `list` → `remove`.
-4. **`hotfix`** — mêmes parcours que `feature`, mais basé sur la production.
+Les quatre chantiers listés ici dans les versions précédentes — `feature rebase`,
+les refus, `demo`, `hotfix` — sont aujourd'hui couverts (parcours 05, 07, 09 et
+les scénarios `hotfix` répartis dans 03, 04 et 05).
 
-Chacun s'écrit dans un nouveau fichier `tests/features/*.feature` ; le mode
-d'emploi est dans [`tests/README.md`](../tests/README.md).
+Restent trois angles morts identifiés, par ordre d'intérêt :
+
+1. **La résolution interactive d'un conflit de rebase.** L'arrêt propre en
+   `--no-interaction` est couvert, ainsi que la restauration après squash. Le
+   chemin « le développeur résout le conflit dans un autre terminal puis répond
+   oui » ne l'est pas : il suppose de commiter depuis le scénario pendant que
+   `jgit` attend dans son pseudo-terminal.
+2. **Le nettoyage des branches temporaires de `util verify_rebase`.** Leur nom
+   contient le PID (`jgit_verify_rebase_<src>_onto_<cible>_$$`), donc un scénario
+   ne peut pas le prédire. Il manque une étape du type
+   `aucune branche locale ne commence par "…"` — le scénario existant porte ce
+   titre mais ne vérifie aujourd'hui que ce qui l'entoure.
+3. **Un conflit sur la reprise des commits de la branche `__PR__`.** Les conflits
+   sont couverts sur la branche de travail, pas sur la première boucle de
+   cherry-pick.
+
+Chacun s'écrit dans un fichier `tests/features/*.feature` ; le mode d'emploi est
+dans [`tests/README.md`](../tests/README.md).
