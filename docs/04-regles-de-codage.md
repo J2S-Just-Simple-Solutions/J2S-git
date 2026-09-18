@@ -12,9 +12,11 @@ lorsque les trois supports disent la même chose :
 
 1. le **code** ;
 2. l'**aide en ligne** (`jgit --help`, fonction `help()` dans `jgit.sh`) ;
-3. la **documentation Markdown** (`README.md` et `docs/`).
+3. la **documentation technique** (`README.md`, `docs/`, `tests/README.md`) ;
+4. le **guide d'utilisation** (`docs/guide/`), qui fait référence : un refus non
+   décrit dans sa fiche est un refus que personne ne comprendra.
 
-Aucun des trois n'est optionnel, et aucun ne se rattrape « plus tard ».
+Aucun des quatre n'est optionnel, et aucun ne se rattrape « plus tard ».
 
 **Pourquoi.** La doc de `jgit` n'est pas un commentaire : c'est le contrat sur
 lequel le développeur s'appuie pour décider s'il peut lancer une commande
@@ -30,6 +32,7 @@ poussés) → ne touche à rien »* alors que `release start` faisait un
 | Une commande ou une option a changé ? | `help()` dans `jgit.sh` **et** la section correspondante du `README.md` |
 | Un message affiché à l'utilisateur a changé ? | les scénarios qui le vérifient au mot près |
 | Un comportement a changé ? | `docs/02-parcours-couverts.md`, section du parcours concerné |
+| Une commande, un refus ou un message vu par l'utilisateur a changé ? | la fiche correspondante de `docs/guide/` : sections « Comment ça marche », « Ce qui bloque » et « Limites connues » |
 | Un scénario a été ajouté ou supprimé ? | le compte et le tableau de `tests/README.md` |
 | Une nouvelle étape Gherkin ? | catalogue de `tests/README.md` **et** `./tests/steps/generate_vscode_glue.sh` |
 | Une décision structurante a été prise ? | `docs/03-choix-techniques.md` |

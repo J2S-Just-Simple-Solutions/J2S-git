@@ -4,6 +4,11 @@
 
 `jgit` est un ensemble de scripts Bash destiné à automatiser les opérations Git quotidiennes au sein des projets J2S : création de branches, ouverture de pull requests, préparation de releases ou encore gestion de branches de démonstration. L'objectif est d'appliquer les conventions de l'équipe tout en limitant les erreurs manuelles.
 
+> **Vous découvrez `jgit` ?** Commencez par le
+> **[guide d'utilisation](docs/guide/README.md)** : une fiche par commande, avec
+> des scénarios concrets et l'explication de chaque refus. Ce README-ci reste la
+> référence d'installation et de configuration.
+
 ## Installation
 
 1. Clonez ce dépôt dans le répertoire de votre choix :
@@ -276,5 +281,7 @@ code --install-extension CucumberOpen.cucumber-official
 
 - Mode d'emploi des tests (lancer, écrire un scénario, étapes disponibles) :
   [`tests/README.md`](tests/README.md)
+- Guide d'utilisation, fonctionnalité par fonctionnalité :
+  [`docs/guide/`](docs/guide/README.md)
 - Stratégie de test, parcours couverts, choix techniques, règles de codage et
   portabilité : [`docs/`](docs/)
