@@ -83,7 +83,7 @@ help() {
     printf "  jgit demo remove [--no-interaction]\n\n"
 
     printf "\033[1;34mUtility:\033[0m\n"
-    printf "  jgit util clean\n"
+    printf "  jgit util clean                Supprime les branches locales jgit_rebase_*, jgit_verify_rebase_* et __PR__*.\n"
     printf "  jgit util verify_rebase --from <branche_source> --into <branche_cible>\n\n"
 
     printf "\033[1;34mSyntaxes dépréciées\033[0m (encore acceptées, retirées à terme) :\n"
@@ -213,6 +213,7 @@ fi
 #
 ####################################
 
+ensure_supported_platform || exit_safe 1
 ensure_remote
 
 case "$JGIT_TYPE" in
@@ -259,7 +260,7 @@ case "$JGIT_TYPE" in
         fi
         case "$JGIT_ACTION" in
             start)
-                verify_stash
+                refuse_if_worktree_dirty "Une release" || exit_safe 1
                 release_start "$JGIT_TARGET"
                 ;;
             merge)
@@ -283,11 +284,11 @@ case "$JGIT_TYPE" in
                     echo "Veuillez spécifier au moins une source avec --from." >&2
                     exit_safe 1
                 fi
-                verify_stash
+                refuse_if_worktree_dirty "Une release" || exit_safe 1
                 release_merge "$JGIT_TARGET" "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
                 ;;
             finish)
-                verify_stash
+                refuse_if_worktree_dirty "Une release" || exit_safe 1
                 release_finish "$JGIT_INTO_TARGET"
                 ;;
             *)
@@ -303,7 +304,7 @@ case "$JGIT_TYPE" in
         fi
         case "$JGIT_ACTION" in
             start)
-                verify_stash
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
                 demo_start "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
                 ;;
             merge)
@@ -311,14 +312,14 @@ case "$JGIT_TYPE" in
                     echo "Veuillez préciser au moins une source avec --from." >&2
                     exit_safe 1
                 fi
-                verify_stash
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
                 demo_merge "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
                 ;;
             list)
                 demo_list
                 ;;
             remove)
-                verify_stash
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
                 demo_remove
                 ;;
             *)
@@ -328,6 +329,10 @@ case "$JGIT_TYPE" in
         esac
         ;;
     util)
+        if [[ -z "$JGIT_ACTION" ]]; then
+            help
+            exit_safe 1
+        fi
         case "$JGIT_ACTION" in
             clean)
                 clean_branches

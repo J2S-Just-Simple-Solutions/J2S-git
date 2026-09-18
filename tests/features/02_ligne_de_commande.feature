@@ -53,6 +53,37 @@ Fonctionnalité: Analyse de la ligne de commande
     # Util
     Et la sortie contient "jgit util clean"
     Et la sortie contient "jgit util verify_rebase --from <branche_source> --into <branche_cible>"
+    # L'aide doit dire ce que util clean supprime réellement, y compris les
+    # branches laissées par util verify_rebase.
+    Et la sortie contient "jgit_rebase_*, jgit_verify_rebase_* et __PR__*"
+
+  # RÈGLE : la réponse appliquée quand on valide sans rien saisir est toujours
+  # signalée par la majuscule. Une question dont les deux lettres sont en
+  # minuscules ne dit pas ce que fait la touche Entrée.
+  Scénario: Chaque question signale sa réponse par défaut en majuscule
+    Quand je lance "jgit feature start TEST-20" et que je réponds aux questions :
+      | Souhaitez-vous continuer | n |
+    Alors jgit se termine en erreur
+    Et la sortie contient "Souhaitez-vous continuer ? (Y/n)"
+
+  Scénario: Une question dont le défaut est non porte la majuscule sur le non
+    Étant donné je lance "jgit feature start TEST-21 --no-interaction --no-open"
+    Et je commite le fichier "src/t1.txt" contenant "1" avec le message "Commit numéro 1"
+    Et je commite le fichier "src/t2.txt" contenant "2" avec le message "Commit numéro 2"
+    Et je commite le fichier "src/t3.txt" contenant "3" avec le message "Commit numéro 3"
+    Et je commite le fichier "src/t4.txt" contenant "4" avec le message "Commit numéro 4"
+    Et je commite le fichier "src/t5.txt" contenant "5" avec le message "Commit numéro 5"
+    Et je commite le fichier "src/t6.txt" contenant "6" avec le message "Commit numéro 6"
+    Et je commite le fichier "src/t7.txt" contenant "7" avec le message "Commit numéro 7"
+    Et je commite le fichier "src/t8.txt" contenant "8" avec le message "Commit numéro 8"
+    Et je commite le fichier "src/t9.txt" contenant "9" avec le message "Commit numéro 9"
+    Et je pousse la branche courante
+    Quand je lance "jgit feature rebase TEST-21" et que je réponds aux questions :
+      | Souhaitez-vous squasher ces commits | n |
+      | Souhaitez-vous continuer            | n |
+    Alors jgit se termine en erreur
+    Et la sortie contient "Souhaitez-vous squasher ces commits avant le rebase ? (y/N)"
+    Et la sortie contient "Souhaitez-vous continuer ? (Y/n)"
 
   Scénario: Un scope inconnu est refusé
     Quand je lance "jgit bidule"
@@ -86,6 +117,13 @@ Fonctionnalité: Analyse de la ligne de commande
     Quand je lance "jgit demo"
     Alors jgit se termine en erreur
     Et la sortie contient "Usage:"
+    Quand je lance "jgit hotfix"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Usage:"
+    Quand je lance "jgit util"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Usage:"
+    Et la sortie ne contient pas "Action '' non supportée"
 
   Scénario: Une feature ou un hotfix sans identifiant est refusé
     Quand je lance "jgit feature start"

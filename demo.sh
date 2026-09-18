@@ -61,6 +61,10 @@ demo_start() {
         exit_safe 1
     fi
 
+    # Une démo se fabrique à partir de la version serveur de sa base : le contrôle
+    # a lieu avant la confirmation, pour ne pas demander puis refuser.
+    refuse_if_branch_ahead "$base_branch" "Une démo" || exit_safe 1
+
     printf "%sJGit va créer la branche de démo %s%s%s%s qui se basera sur la branche %s%s%s\n" \
     "$(tput setaf 2)" "$(tput setaf 1)" "$demo_branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$base_branch" "$(tput sgr0)"
     # Demander confirmation à l'utilisateur

@@ -60,6 +60,29 @@ Fonctionnalité: Branches de démonstration
     Et la branche locale "demo_sprint14" n'existe pas
     Et la branche distante "demo_sprint14" n'existe pas
 
+  # Une démo se fabrique, elle ne se travaille pas : comme pour une release,
+  # jgit refuse plutôt que de ranger le travail en cours à votre place.
+  Scénario: Un espace de travail sale empêche de créer une démo
+    Étant donné je modifie le fichier "src/app.txt" avec "travail en cours"
+    Quand je lance "jgit demo start sprint12 --no-interaction"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Votre espace de travail contient des modifications non commitées."
+    Et la sortie contient "Une démo ne se fabrique pas sur un dépôt en cours de modification."
+    Et la sortie contient "git stash push -u"
+    Et la branche distante "demo_sprint12" n'existe pas
+    Et le fichier de travail "src/app.txt" contient "travail en cours"
+
+  Scénario: Des commits non poussés sur la branche de base empêchent de créer une démo
+    Étant donné je me place sur la branche "develop"
+    Et je commite le fichier "src/local.txt" contenant "travail local" avec le message "Travail local non poussé"
+    Quand je lance "jgit demo start sprint12 --no-interaction"
+    Alors jgit se termine en erreur
+    Et la sortie contient "La branche develop porte 1 commit(s) qui ne sont pas sur origin/develop."
+    Et la sortie contient "Une démo doit partir de la version du serveur"
+    Et la sortie ne contient pas "Souhaitez-vous continuer"
+    Et l'historique local de "develop" contient "Travail local non poussé"
+    Et la branche distante "demo_sprint12" n'existe pas
+
   # --- demo merge -----------------------------------------------------------
 
   Scénario: Une feature est intégrée à la démo
@@ -138,6 +161,24 @@ Fonctionnalité: Branches de démonstration
     Quand je lance "jgit demo merge --from feature/TEST-6 --no-interaction"
     Alors jgit se termine en erreur
     Et la sortie contient "Cette commande doit être exécutée sur une branche demo_* (branche actuelle : develop)."
+
+  # Contrairement aux commandes de release, demo merge laisse délibérément le
+  # rebase en cours : la démo est une branche jetable, et c'est au développeur de
+  # trancher le conflit. Le scénario fige ce choix et le message qui l'explique.
+  Scénario: Un conflit pendant l'intégration laisse la main au développeur
+    Étant donné je lance "jgit demo start sprint12 --no-interaction"
+    Et je lance "jgit feature start DEMO-1 --no-interaction --no-open"
+    Et je commite le fichier "src/app.txt" contenant "version de la feature" avec le message "DEMO-1 modifie app"
+    Et je pousse la branche courante
+    Et je me place sur la branche "demo_sprint12"
+    Et je commite le fichier "src/app.txt" contenant "version de la démo" avec le message "La démo modifie app"
+    Et je pousse la branche courante
+    Et je note l'état de la branche distante "demo_sprint12"
+    Quand je lance "jgit demo merge --from feature/DEMO-1 --no-interaction"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Rebase interrompu pour feature/DEMO-1."
+    Et la sortie contient "git rebase --continue"
+    Et la branche distante "demo_sprint12" est inchangée
 
   # --- demo list ------------------------------------------------------------
 

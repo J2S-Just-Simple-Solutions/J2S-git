@@ -58,12 +58,14 @@ release_start() {
         exit_safe 1
     fi
 
-    if [[ $(git status --porcelain) ]]; then
-        echo "/!\\ Local changes, cannot start release"
-        exit_safe 1
-    fi
+    refuse_if_worktree_dirty "Une release" || exit_safe 1
 
     switch_branch "$prod_branch"
+
+    # La release part de la version serveur de la production. Des commits locaux
+    # non publiés ne sont ni écrasés ni rangés d'office : on s'arrête et on dit
+    # quoi faire.
+    refuse_if_branch_ahead "$prod_branch" "Une release" || exit_safe 1
 
     if [[ -n "$requested_version" ]]; then
         future_tag="$requested_version"
@@ -102,7 +104,6 @@ release_start() {
         switch_branch "$branch"
     else
         echo "Release does not exists, create it..."
-        git reset --hard "$j2s_remote/$prod_branch"
         switch_branch "$branch" create
         git commit --allow-empty -m "$prefix_init_commit release ${branch}. $suffix_init_commit"
         git push "$j2s_remote" "$branch"
@@ -149,7 +150,16 @@ release_merge_single() {
     fi
 
     switch_branch "$release_branch"
-    git merge --no-ff "$merge_source" -m "$prefix_commit Release merge feature branch : $resolved_branch"
+    # Un merge en conflit laisse le dépôt à mi-chemin : sans contrôle du code de
+    # retour, les sources suivantes échouaient à leur tour et la release était
+    # tout de même poussée, amputée de tout ce qui suit. On s'arrête net.
+    if ! git merge --no-ff "$merge_source" -m "$prefix_commit Release merge feature branch : $resolved_branch"; then
+        git merge --abort >/dev/null 2>&1
+        printf "\033[1;31mConflit lors de l'intégration de %s dans %s.\033[0m\n" "$resolved_branch" "$release_branch" >&2
+        printf "Le merge a été annulé : la release n'a pas été poussée et rien n'est perdu.\n" >&2
+        printf "Résolvez le conflit à la main (« git merge --no-ff %s »), puis relancez jgit pour les sources restantes.\n" "$merge_source" >&2
+        exit_safe 1
+    fi
 }
 
 release_merge() {
@@ -255,9 +265,18 @@ release_finish() {
         # La branche de release va être supprimée : sans cela, exit_safe
         # tenterait de revenir sur une branche qui n'existe plus.
         current_branch="$prod_branch"
-        git reset --hard "$j2s_remote/$prod_branch"
+        # La production doit être alignée sur le serveur avant d'y fusionner la
+        # release : sans cela jgit publierait, avec le merge, des commits que le
+        # développeur n'a pas choisi de pousser.
+        refuse_if_branch_ahead "$prod_branch" "Une release" || exit_safe 1
         echo "Merging release ${branch} in $prod_branch branch..."
-        git merge --no-ff "${branch}" -m "Merge release branch : ${branch}"
+        if ! git merge --no-ff "${branch}" -m "Merge release branch : ${branch}"; then
+            git merge --abort >/dev/null 2>&1
+            printf "\033[1;31mConflit lors de la fusion de %s dans %s.\033[0m\n" "$branch" "$prod_branch" >&2
+            printf "Aucun tag n'a été posé, rien n'a été poussé et la branche de release est intacte.\n" >&2
+            printf "Résolvez le conflit à la main puis relancez « jgit release finish --into %s ».\n" "$branch" >&2
+            exit_safe 1
+        fi
         echo "Create new tag ${future_tag}"
         git tag "${future_tag}"
         git push "$j2s_remote" "$prod_branch"
