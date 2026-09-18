@@ -144,6 +144,13 @@ step_jgit_ko() {
 }
 step_def "jgit se termine en erreur" step_jgit_ko
 
+# util check_rebase ne repond pas par oui ou non mais par un code : 0 a jour,
+# 2 en retard mais rebasable, 3 en retard avec conflits.
+step_jgit_code() {
+    assert_jgit_exit_code "$1"
+}
+step_def "jgit se termine avec le code {nombre}" step_jgit_code
+
 step_sortie_contient() {
     assert_jgit_output_contains "$1"
 }
@@ -221,6 +228,30 @@ step_historique_contient() {
     assert_remote_log_contains "refs/heads/$1" "$2"
 }
 step_def "l'historique de {chaine} contient {chaine}" step_historique_contient
+
+###############################################
+#            Verifications : branche d'origine
+###############################################
+
+step_locale_partie_de() {
+    assert_local_based_on "$1" "$2"
+}
+step_def "la branche locale {chaine} est partie de {chaine}" step_locale_partie_de
+
+step_distante_partie_de() {
+    assert_remote_based_on "$1" "$2"
+}
+step_def "la branche distante {chaine} est partie de {chaine}" step_distante_partie_de
+
+step_distante_sans_origine() {
+    assert_remote_without_based_on "$1"
+}
+step_def "la branche distante {chaine} ne porte aucune branche d'origine" step_distante_sans_origine
+
+step_origine_invisible() {
+    assert_remote_subject_without_based_on "$1"
+}
+step_def "aucun sujet de commit de la branche distante {chaine} ne montre la branche d'origine" step_origine_invisible
 
 ###############################################
 #            Verifications : appels a GitHub

@@ -146,13 +146,79 @@ Deux exceptions, toutes deux explicites :
     git reset --hard origin/main
   ```
 
+## Branche d'origine
+
+Une branche ne dit pas d'où elle vient. `git merge-base` sait où deux branches se
+séparent, jamais **laquelle a servi de point de départ** : six commits plus tard,
+une feature partie d'une démo ressemble en tout point à une feature partie de
+`develop`.
+
+`jgit` inscrit donc cette information à la création, dans le corps du commit
+d'initialisation :
+
+```
+[jgit] INIT feature/MONPROJET-412 [empty_commit]
+
+jgit-branch: feature/MONPROJET-412
+jgit-based-on: develop
+```
+
+Ces deux lignes n'apparaissent ni dans `git log --oneline`, ni dans la liste des
+commits de GitHub : elles vivent dans le corps du message. Elles suivent le clone
+et le `fetch` sans configuration, sont conservées par les cherry-picks du rebase,
+et disparaissent avec le commit d'initialisation au squash-and-merge de la PR.
+
+Sont concernées : `feature start`, `hotfix start`, `feature restart` (qui reprend
+la base portée par la branche de PR), `feature rebase` (qui inscrit la base sur
+laquelle il vient de reconstruire), `release start` et `demo start`.
+
+Deux usages :
+
+- **`jgit util check_rebase`** répond à « suis-je encore à jour sur ma base, et
+  puis-je rebaser sans conflit ? » sans qu'on ait à nommer la base.
+- **`jgit feature rebase`** propose cette base plutôt que la référence du projet.
+  Une feature partie de `main` ou d'une démo n'est plus silencieusement rejouée
+  sur `develop`.
+
+> **Les branches créées avant ce mécanisme n'ont pas cette trace.** `jgit` ne la
+> devine pas : `util check_rebase` refuse alors de répondre plutôt que de
+> supposer `develop`. Un `feature rebase` la leur donne au passage.
+
+### Une base introuvable se refuse toujours de la même façon
+
+La branche de base d'une commande vient de l'une de trois sources : votre saisie
+(`--based-on`), la branche d'origine enregistrée, ou le calcul automatique de la
+référence du projet. Les trois peuvent désigner une branche qui n'existe pas —
+faute de frappe, release livrée puis supprimée, démo effacée.
+
+`jgit` les contrôle donc au même endroit et **refuse dans les mêmes termes**,
+seule la ligne de provenance changeant. Il ne se rabat **jamais** sur une autre
+base : rejouer des commits ailleurs n'est pas la même opération, et sur un
+`rebase` le résultat part en `push --force`.
+
+```
+La branche de base demo_sprint12 n'existe pas (ni en local ni sur origin).
+C'est la branche d'origine de feature/MONPROJET-412, enregistrée à sa création :
+elle a sans doute été livrée puis supprimée depuis.
+Rien n'a été modifié : ni vos branches, ni le serveur.
+
+jgit ne devine pas sur quelle branche vous vouliez partir, et ne se rabat pas sur
+une autre à votre place.
+
+Relancez en nommant une branche qui existe :
+  jgit feature rebase MONPROJET-412 --based-on <branche>
+
+La référence du projet est develop. Si c'est bien elle que vous voulez :
+  jgit feature rebase MONPROJET-412 --based-on develop
+```
+
 ## Commandes par scope
 
 ### Feature & Hotfix
 
 - `jgit feature start <ticket> [--based-on <branche>] [--no-open]` : crée ou reprend la branche `feature/<ticket>` et sa branche PR `__PR__feature/<ticket>`, pousse les commits d'initialisation et ouvre la PR (sauf `--no-open`). Identique avec `hotfix`.
 - `jgit feature restart <ticket> [--no-open]` : recrée la branche de travail depuis la branche PR après vérification de l'alignement du code, supprime l'ancienne branche distante et ré-ouvre la PR si nécessaire.
-- `jgit feature rebase <ticket> [--based-on <branche>] [--squash]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`.
+- `jgit feature rebase <ticket> [--based-on <branche>] [--squash]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`. Sans `--based-on`, il propose la [branche d'origine](#branche-dorigine) enregistrée à la création si elle diffère de la référence du projet — et c'est la réponse par défaut, donc celle qu'applique `--no-interaction`.
 
 #### Squash avant rebase
 
@@ -227,7 +293,31 @@ parvenir reviendrait à prendre une décision qui ne revient pas à `jgit`.
 ### Utilitaires
 
 - `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_verify_rebase_*`, `__PR__*`).
+- `jgit util check_rebase [--from <branche>]` : dit si la branche (par défaut la branche courante) est encore à jour sur [sa branche d'origine](#branche-dorigine) et si le rebase passerait. Ne modifie rien.
 - `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
+
+`check_rebase` répond aussi par son **code de sortie**, pour un script ou un
+tableau de bord :
+
+| Code | Réponse |
+| --- | --- |
+| `0` | à jour sur sa branche d'origine, il n'y a rien à faire |
+| `1` | impossible de répondre : demande invalide, espace de travail sale, ou branche sans origine enregistrée |
+| `2` | en retard, le rebase passerait sans conflit |
+| `3` | en retard, des conflits sont à prévoir |
+
+```
+$ jgit util check_rebase
+Branche   : feature/MONPROJET-412
+Basée sur : develop (origin/develop)
+Avance    : 7 commit(s) absents de develop
+État      : en retard de 12 commit(s) sur develop.
+Rebase    : passerait sans conflit.
+  jgit feature rebase MONPROJET-412
+```
+
+La différence avec `verify_rebase` : `check_rebase` connaît la base et la lit
+tout seul, là où `verify_rebase` attend qu'on lui nomme les deux branches.
 
 ### Syntaxes dépréciées
 

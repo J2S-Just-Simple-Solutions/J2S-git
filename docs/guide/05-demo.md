@@ -214,6 +214,7 @@ laissez ce ticket hors de la démo.
 | --- | --- | --- |
 | Espace de travail modifié | refuse, et donne la commande pour le mettre de côté | une démo se fabrique, elle ne se travaille pas |
 | Commits non poussés sur la branche de base | refuse **avant** de demander confirmation | une démo part de la version du serveur |
+| Branche de base inconnue (`--based-on` ou référence du projet) | refuse en la nommant, sans rien créer | [même refus, mot pour mot, que pour une feature](07-regles-communes.md#si-la-branche-de-base-nexiste-pas) |
 | La démo existe chez vous mais plus sur le serveur | refuse : *« Veuillez la publier manuellement ou la supprimer »* | quelqu'un l'a supprimée sur GitHub ; `jgit` ne devine pas laquelle des deux fait foi |
 | Vous refusez la confirmation de création | s'arrête : aucune branche créée | |
 | Source au mauvais format | refuse : *« Le format attendu est feature/\<ticket\> ou hotfix/\<ticket\> »* | |

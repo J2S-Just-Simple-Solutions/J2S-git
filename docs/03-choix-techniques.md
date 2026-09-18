@@ -225,3 +225,61 @@ dans l'éditeur (les tests, eux, continuent de fonctionner) :
 
 **Écarté.** Se passer d'extension (illisible), ou désactiver les avertissements :
 l'extension n'offre aucun réglage pour cela.
+
+---
+
+## 12. La branche d'origine vit dans un trailer du commit d'init
+
+> Décision sur l'outil, et non sur la suite de tests, consignée ici parce que
+> c'est l'endroit où le projet garde ses décisions structurantes
+> ([règle de codage n°1](04-regles-de-codage.md)).
+
+**Contexte.** Plusieurs commandes ont besoin de savoir de quelle branche une
+autre est partie : `util check_rebase` pour dire si l'on est à jour,
+`feature rebase` pour ne pas renvoyer sur `develop` une branche partie d'ailleurs.
+Or Git ne le sait pas : `git merge-base` donne le point de séparation de deux
+branches, jamais laquelle a servi de point de départ. L'information n'existe
+qu'au moment de la création, et se perd aussitôt.
+
+**Décision.** L'inscrire dans le **corps du commit d'initialisation**, sous forme
+de deux trailers :
+
+```
+[jgit] INIT feature/TEST-1 [empty_commit]
+
+jgit-branch: feature/TEST-1
+jgit-based-on: develop
+```
+
+Le corps du message est le seul support qui voyage avec la branche sans
+configuration : il suit le clone et le `fetch`, est rejoué tel quel par les
+cherry-picks du rebase, reste invisible en `--oneline` comme dans la liste des
+commits de GitHub, et disparaît avec le commit d'init au squash-and-merge.
+
+**Pourquoi deux trailers.** `jgit-branch` n'est pas un doublon du sujet : c'est
+lui qui rend la lecture sûre. Les commits d'init **remontent dans les branches
+livrées** — une release intègre l'historique des branches `__PR__`, puis `main`
+celui de la release — si bien qu'une branche quelconque compte, dans ses
+ancêtres, quantité de commits porteurs d'une origine qui n'est pas la sienne. Une
+lecture qui chercherait seulement `jgit-based-on` attribuerait à une vieille
+branche la trace du voisin, au lieu de la reconnaître comme ancienne. La lecture
+est donc ancrée sur le nom de la branche décrite.
+
+**Conséquence à ne pas perdre de vue.** Le message complet (`%B`) d'un commit
+d'init ne vaut plus son sujet. Toute comparaison porte sur `%s` — le cas vécu
+pendant l'implémentation : `release finish` comparait le `%B` du dernier commit
+pour détecter une release vide, et aurait livré une release vide comme si elle
+contenait quelque chose.
+
+**Écarté.**
+
+| Piste | Pourquoi non |
+| --- | --- |
+| `git notes` | ni poussées ni récupérées par défaut : l'information n'aurait existé que sur la machine qui l'a écrite |
+| Un fichier dans le dépôt | pollue le projet de l'utilisateur, et entre en conflit à chaque merge |
+| Une référence dédiée (`refs/jgit/…`) | pousse et récupère à la main : un clone frais ne l'aurait pas |
+| Le nom de la branche | illisible, et impossible à mettre à jour après un rebase |
+
+**Migration.** Aucune. Les branches créées avant ce mécanisme n'ont pas la trace,
+et on ne la leur invente pas : `util check_rebase` refuse de répondre pour
+elles, et `feature rebase` la leur donne au passage.
