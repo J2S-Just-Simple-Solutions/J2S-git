@@ -47,6 +47,24 @@ warn_deprecated_syntax() {
     "$(tput setaf 3)" "$(tput sgr0)" >&2
 }
 
+# jgit ne tourne aujourd'hui que sur macOS : plusieurs commandes s'appuient sur
+# des outils BSD dont l'équivalent GNU se comporte différemment, et un rebase
+# lancé ailleurs écraserait la branche de travail au lieu de la rejouer.
+# Le détail et l'inventaire sont dans docs/05-portabilite.md.
+ensure_supported_platform() {
+  local system
+  system=$(uname -s 2>/dev/null)
+
+  if [[ "$system" == "Darwin" ]]; then
+    return 0
+  fi
+
+  printf "\033[1;31mjgit ne fonctionne que sur macOS (système détecté : %s).\033[0m\n" "${system:-inconnu}" >&2
+  printf "Certaines commandes s'appuient sur des outils BSD et détruiraient du travail ailleurs.\n" >&2
+  printf "Voir docs/05-portabilite.md pour le détail et l'état d'avancement.\n" >&2
+  return 1
+}
+
 # Vrai si la valeur est un numéro de version de release (x.y.z), que le préfixe
 # release/ soit présent ou non. Sert à distinguer, en position de cible,
 # une version d'un nom de branche.
@@ -70,9 +88,11 @@ confirm_action() {
     return 1
   fi
 
-  # La réponse par défaut (celle appliquée si l'utilisateur valide sans rien saisir)
-  # est signalée par la majuscule dans le suffixe.
-  local suffix="(y/n)"
+  # RÈGLE : la réponse par défaut — celle appliquée quand l'utilisateur valide
+  # sans rien saisir — est TOUJOURS signalée par la majuscule, quelle qu'elle
+  # soit. Une question sans majuscule serait une question dont on ne peut pas
+  # deviner ce que fait la touche Entrée.
+  local suffix="(Y/n)"
   if [[ "$default_response" == "n" ]]; then
     suffix="(y/N)"
   fi
@@ -115,6 +135,60 @@ resolve_git_ref() {
     return 0
   fi
 
+  return 1
+}
+
+###############################################
+#   Garde-fous des commandes de release et de démo
+###############################################
+#
+# Une release ou une démo se fabrique à partir de la version serveur d'une
+# branche. Plutôt que de ranger le travail en cours à la place du développeur —
+# donc de décider pour lui du sort de modifications ou de commits qu'il n'a pas
+# publiés — jgit refuse, explique, et donne la commande à lancer.
+#
+# Ces deux garde-fous ne concernent que les scopes release et demo. Les scopes
+# feature et hotfix continuent de proposer le stash automatique (verify_stash) :
+# on y travaille, alors qu'une release ou une démo se fabrique.
+
+# Refuse si l'arbre de travail contient des modifications non commitées.
+# $1 : ce que l'on fabriquait, capitalisé, pour le message (« Une release »…).
+refuse_if_worktree_dirty() {
+  local what="$1"
+
+  [[ -n $(git status --porcelain) ]] || return 0
+
+  printf "\033[1;31mVotre espace de travail contient des modifications non commitées.\033[0m\n" >&2
+  printf "%s ne se fabrique pas sur un dépôt en cours de modification.\n" "$what" >&2
+  printf "\nMettez-les de côté puis relancez :\n" >&2
+  printf "  git stash push -u -m \"avant jgit\"\n" >&2
+  printf "  # puis, une fois la commande terminée : git stash pop\n" >&2
+  return 1
+}
+
+# Refuse si la branche porte des commits que le serveur n'a pas.
+# $1 : la branche ; $2 : ce que l'on fabriquait, capitalisé, pour le message.
+refuse_if_branch_ahead() {
+  local branch="$1"
+  local what="$2"
+  local remote_ref="$j2s_remote/$branch"
+
+  git show-ref --verify --quiet "refs/heads/$branch" || return 0
+  git show-ref --verify --quiet "refs/remotes/$remote_ref" || return 0
+
+  local ahead
+  ahead=$(git rev-list --count "$remote_ref..$branch" 2>/dev/null) || return 0
+  [[ -n "$ahead" && $ahead -gt 0 ]] || return 0
+
+  printf "\033[1;31mLa branche %s porte %s commit(s) qui ne sont pas sur %s.\033[0m\n" \
+    "$branch" "$ahead" "$remote_ref" >&2
+  printf "%s doit partir de la version du serveur, et jgit ne décide pas à votre place du sort de commits que vous n'avez pas publiés.\n" "$what" >&2
+  printf "\nPubliez-les :\n" >&2
+  printf "  git push %s %s\n" "$j2s_remote" "$branch" >&2
+  printf "\n…ou mettez-les de côté puis relancez :\n" >&2
+  printf "  git switch %s\n" "$branch" >&2
+  printf "  git branch sauvegarde-%s          # vos commits y restent accessibles\n" "$branch" >&2
+  printf "  git reset --hard %s\n" "$remote_ref" >&2
   return 1
 }
 

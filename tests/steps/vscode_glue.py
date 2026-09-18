@@ -47,6 +47,14 @@ def step_checkout(context):
 def step_squash_merge_pr(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("le projet utilise {string} au lieu de develop, master ou main")
+def step_branches_non_standard(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le système est {string} et non macOS")
+def step_systeme_non_macos(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("la branche {string} est supprimée sur GitHub")
 def step_github_supprime_branche(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -201,6 +209,10 @@ def step_nombre_commits_locaux(context):
 
 @given("je récupère les nouveautés du remote")
 def step_fetch(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("je récupère la branche distante {string} en local")
+def step_recupere_branche_en_local(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("le tag {string} n'existe pas sur le remote")
