@@ -209,7 +209,7 @@ sans pousser, `jgit` s'arrêterait au lieu de choisir — voir
 | Situation | Ce que fait `jgit` | Pourquoi |
 | --- | --- | --- |
 | Aucun identifiant de ticket | refuse : *« Please set a feature identifier »* | il n'y a pas de nom de branche à créer |
-| `--based-on` sur une branche inconnue | refuse en la nommant | mieux vaut refuser que partir d'un point arbitraire |
+| `--based-on` sur une branche inconnue | refuse en la nommant, sans rien créer, et rappelle la référence du projet | mieux vaut refuser que partir d'un point arbitraire — c'est [le refus commun à toutes les commandes qui partent d'une branche](07-regles-communes.md#si-la-branche-de-base-nexiste-pas) |
 | Aucune branche de référence trouvée | refuse : *« aucune branche de référence valide trouvée »* | le projet n'a ni `develop`, ni `master`, ni `main` : il faut configurer `jgit` |
 | Vous répondez autre chose que `y` | s'arrête : *« Opération annulée »* | **rien** n'est créé, ni chez vous, ni sur le serveur |
 | Votre branche a divergé du serveur | s'arrête sans rien modifier | `jgit` ne choisit pas entre deux historiques |

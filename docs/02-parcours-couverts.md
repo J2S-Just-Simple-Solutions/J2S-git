@@ -628,9 +628,30 @@ qu'elle est bien reconnue comme ancienne — c'est ce que garantit le trailer
 | `--based-on` explicite | fait autorité, aucune question n'est posée, la trace est mise à jour |
 | Branche sans trace | rebase sur la référence du projet, et **acquiert sa trace** au passage |
 
+### Quand la base n'existe pas, d'où qu'elle vienne
+
+La branche de base vient de l'une de trois sources : la saisie `--based-on`, la
+base enregistrée, ou le calcul automatique. Les trois peuvent désigner une
+branche disparue, et les trois doivent donner **le même refus**.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `--based-on` mal orthographié (`feature start`, `feature rebase`, `demo start`) | refus nommant la branche, la provenance, le remède et la référence du projet |
+| Base enregistrée disparue (une démo supprimée après la démo) | **le même refus**, seule la ligne de provenance change |
+| Refus pendant un `rebase` | rien n'a bougé : branches distantes inchangées, branche de travail intacte, aucune branche `jgit_rebase_*` laissée |
+| Relance avec `--based-on <branche vivante>` | le rebase aboutit et la trace est mise à jour |
+| `hotfix` | même refus, en nommant `hotfix` et la production comme référence |
+
+Le scénario le plus important du lot enchaîne les deux provenances sur la même
+branche et vérifie que les phrases sont identiques : c'est ce qui empêche
+qu'un cas particulier se remette à parler sa propre langue.
+
 | Régression qui serait attrapée |
 | --- |
 | Une comparaison de message de commit faite sur `%B` plutôt que sur `%s` : le trailer la ferait échouer, et une release vide passerait pour pleine |
+| Un rebase qui se rabat en silence sur `develop` quand la base enregistrée a disparu, déplaçant la branche puis la poussant en force |
+| Une valeur par défaut utilisée sans le contrôle appliqué à la saisie |
+| Un message de refus propre à une commande, là où le problème est le même partout |
 | Le trailer remonté dans le sujet du commit, donc visible partout |
 | Une ancienne branche à qui l'on attribue la trace d'un ancêtre au lieu de la reconnaître comme ancienne |
 | Un rebase qui laisse la trace d'avant : la branche prétendrait partir d'une base qui n'est plus la sienne |

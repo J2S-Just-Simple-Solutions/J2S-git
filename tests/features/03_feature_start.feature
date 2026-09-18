@@ -50,7 +50,11 @@ Fonctionnalité: Création d'une feature ou d'un hotfix
   Scénario: --based-on sur une branche inconnue est refusé
     Quand je lance "jgit feature start TEST-4 --based-on inexistante --no-interaction"
     Alors jgit se termine en erreur
-    Et la sortie contient "La branche référence 'inexistante' n'existe pas."
+    Et la sortie contient "La branche de base inexistante n'existe pas (ni en local ni sur origin)."
+    Et la sortie contient "Elle a été demandée par --based-on"
+    Et la sortie contient "Rien n'a été modifié : ni vos branches, ni le serveur."
+    Et la sortie contient "jgit feature start TEST-4 --based-on <branche>"
+    Et la sortie contient "jgit feature start TEST-4 --based-on develop"
     Et la branche distante "feature/TEST-4" n'existe pas
     Et la branche locale "feature/TEST-4" n'existe pas
 
@@ -144,7 +148,7 @@ Fonctionnalité: Création d'une feature ou d'un hotfix
     Quand je lance "jgit feature start TEST-11 --no-interaction --no-open"
     Alors jgit se termine en erreur
     Et la sortie contient "Erreur : aucune branche de référence valide trouvée."
-    Et la sortie ne contient pas "La branche référence"
+    Et la sortie ne contient pas "La branche de base"
     Et la branche distante "feature/TEST-11" n'existe pas
 
   Scénario: Valider sans rien saisir applique la réponse par défaut

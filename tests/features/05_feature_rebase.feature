@@ -68,7 +68,9 @@ Fonctionnalité: Rebase d'une feature sur sa branche de référence
     Et je note l'état de la branche distante "feature/TEST-4"
     Quand je lance "jgit feature rebase TEST-4 --based-on inexistante --no-interaction"
     Alors jgit se termine en erreur
-    Et la sortie contient "La branche référence 'inexistante' n'existe pas."
+    Et la sortie contient "La branche de base inexistante n'existe pas (ni en local ni sur origin)."
+    Et la sortie contient "Elle a été demandée par --based-on"
+    Et la sortie contient "jgit feature rebase TEST-4 --based-on <branche>"
     Et la branche distante "feature/TEST-4" est inchangée
 
   # --- Squash des commits de travail ---------------------------------------

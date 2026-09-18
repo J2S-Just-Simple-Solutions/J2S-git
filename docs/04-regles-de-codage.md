@@ -125,7 +125,47 @@ n'inventez pas de mécanisme de sauvegarde automatique pour contourner un refus.
 
 ---
 
-## 6. Une fonction appelée en substitution de commande écrit ses erreurs sur stderr
+## 6. Une valeur par défaut se contrôle comme une saisie
+
+**La règle.** Une branche que `jgit` va utiliser est contrôlée **au même endroit
+et avec le même message**, qu'elle vienne d'une option de la ligne de commande,
+d'une valeur enregistrée ou d'un calcul automatique. Concrètement, pour la
+branche de base : `ensure_base_branch` (`functions.sh`), appelée par
+`feature start`, `feature rebase` et `demo start`.
+
+**Pourquoi.** Une valeur par défaut a exactement les mêmes façons d'être fausse
+qu'une saisie — elle a juste été écrite plus tôt. Le cas vécu : le contrôle de la
+branche de base ne portait que sur `--based-on`. La branche d'origine
+enregistrée, elle, n'était pas vérifiée ; quand elle avait disparu (une démo
+supprimée après la démo), le rebase **se rabattait en silence sur `develop`**,
+déplaçait la branche et poussait le résultat en `push --force` — en affichant
+« Rebase terminé avec succès ».
+
+**En pratique.**
+
+```bash
+local base_provenance="reference"
+if [[ -n "$BASED_ON" ]]; then
+    reference_branch="$BASED_ON"
+    base_provenance="option"
+elif ! reference_branch=$(get_reference_branch "$feature_type"); then
+    exit_safe 1
+fi
+
+ensure_base_branch "$reference_branch" "$base_provenance" "$feature_type" \
+    "jgit $feature_type start $feature_name" || exit_safe 1
+```
+
+La provenance ne sert qu'à **une ligne** du message. Tout le reste — le constat,
+la garantie que rien n'a bougé, le remède — est commun : c'est ce qui fait qu'un
+même problème se diagnostique d'une seule façon.
+
+**Corollaire.** N'ajoutez pas un second message pour un cas particulier. Si une
+nouvelle provenance apparaît, elle s'ajoute au `case` de `ensure_base_branch`.
+
+---
+
+## 7. Une fonction appelée en substitution de commande écrit ses erreurs sur stderr
 
 ```bash
 reference_branch=$(get_reference_branch "$feature_type")
@@ -138,7 +178,7 @@ quitterait que le sous-shell.
 
 ---
 
-## 7. Compatibilité bash 3.2 et macOS
+## 8. Compatibilité bash 3.2 et macOS
 
 Le bash livré par Apple est le 3.2 : pas de tableaux associatifs, pas de
 `readarray`/`mapfile`, pas de `${var^^}`. Voir le

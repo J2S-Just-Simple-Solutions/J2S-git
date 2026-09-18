@@ -184,6 +184,34 @@ Deux usages :
 > devine pas : `util check_rebase` refuse alors de répondre plutôt que de
 > supposer `develop`. Un `feature rebase` la leur donne au passage.
 
+### Une base introuvable se refuse toujours de la même façon
+
+La branche de base d'une commande vient de l'une de trois sources : votre saisie
+(`--based-on`), la branche d'origine enregistrée, ou le calcul automatique de la
+référence du projet. Les trois peuvent désigner une branche qui n'existe pas —
+faute de frappe, release livrée puis supprimée, démo effacée.
+
+`jgit` les contrôle donc au même endroit et **refuse dans les mêmes termes**,
+seule la ligne de provenance changeant. Il ne se rabat **jamais** sur une autre
+base : rejouer des commits ailleurs n'est pas la même opération, et sur un
+`rebase` le résultat part en `push --force`.
+
+```
+La branche de base demo_sprint12 n'existe pas (ni en local ni sur origin).
+C'est la branche d'origine de feature/MONPROJET-412, enregistrée à sa création :
+elle a sans doute été livrée puis supprimée depuis.
+Rien n'a été modifié : ni vos branches, ni le serveur.
+
+jgit ne devine pas sur quelle branche vous vouliez partir, et ne se rabat pas sur
+une autre à votre place.
+
+Relancez en nommant une branche qui existe :
+  jgit feature rebase MONPROJET-412 --based-on <branche>
+
+La référence du projet est develop. Si c'est bien elle que vous voulez :
+  jgit feature rebase MONPROJET-412 --based-on develop
+```
+
 ## Commandes par scope
 
 ### Feature & Hotfix

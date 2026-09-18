@@ -134,6 +134,12 @@ confirm_action() {
 }
 
 # Résout un nom de branche/réf en une référence git exploitable.
+#
+# Cherche aux mêmes endroits que branch_exists, et dans le même ordre que
+# switch_branch : la version locale d'abord, celle du serveur ensuite. Sans ce
+# second essai, « util verify_rebase --into develop » répondait « introuvable »
+# sur tout dépôt où develop n'a jamais été sortie en local — soit tout clone
+# frais — alors que la branche est parfaitement vivante sur le serveur.
 resolve_git_ref() {
   local ref="$1"
 
@@ -143,6 +149,11 @@ resolve_git_ref() {
 
   if git show-ref --verify --quiet "refs/heads/$ref"; then
     echo "$ref"
+    return 0
+  fi
+
+  if git show-ref --verify --quiet "refs/remotes/$j2s_remote/$ref"; then
+    echo "$j2s_remote/$ref"
     return 0
   fi
 
@@ -393,7 +404,7 @@ $trailer_based_on: $base" "$@"
 # copie distante, origin/feature/X portant la trace de feature/X.
 #
 # Appelée en substitution de commande : rien n'est écrit sur stdout en dehors du
-# nom de la branche (règle de codage n°6).
+# nom de la branche (règle de codage n°7).
 read_based_on() {
   local ref="${1:-HEAD}"
   local branch="${2:-$ref}"
@@ -410,6 +421,66 @@ read_based_on() {
   [[ -n "$base" ]] || return 1
 
   printf '%s\n' "$base"
+}
+
+# Valide la branche de base d'une commande, quelle que soit sa provenance, et
+# refuse de la même façon dans tous les cas.
+#
+#   ensure_base_branch <base> <provenance> <type> <commande_à_relancer> [branche]
+#
+# Une base peut venir de trois endroits : l'option --based-on, la branche
+# d'origine enregistrée à la création, ou le calcul automatique de la référence
+# du projet. Les trois peuvent désigner une branche qui n'existe pas — une faute
+# de frappe, une release livrée puis supprimée, une démo effacée — et les trois
+# doivent donner le même refus : un seul message à lire, un seul remède à
+# appliquer. Seule la ligne qui dit d'où vient la valeur change.
+#
+# La règle qui compte : jgit ne se rabat jamais sur une autre base. La première
+# version de ce contrôle laissait le rebase continuer sur la référence du projet
+# quand la base enregistrée avait disparu — il déplaçait donc la branche, puis
+# poussait le résultat en force.
+#
+# provenance : option | record | reference
+ensure_base_branch() {
+  local base="$1"
+  local provenance="$2"
+  local feature_type="$3"
+  local relaunch="$4"
+  local work_branch="${5:-}"
+
+  if [[ -n "$base" ]] && branch_exists "$base"; then
+    return 0
+  fi
+
+  printf "\033[1;31mLa branche de base %s n'existe pas (ni en local ni sur %s).\033[0m\n" \
+    "${base:-<vide>}" "$j2s_remote" >&2
+
+  case "$provenance" in
+    option)
+      printf "Elle a été demandée par --based-on : vérifiez son orthographe.\n" >&2
+      ;;
+    record)
+      printf "C'est la branche d'origine de %s, enregistrée à sa création : elle a sans doute été livrée puis supprimée depuis.\n" \
+        "$work_branch" >&2
+      ;;
+    *)
+      printf "C'est la référence du projet, choisie automatiquement.\n" >&2
+      ;;
+  esac
+
+  printf "Rien n'a été modifié : ni vos branches, ni le serveur.\n" >&2
+  printf "\njgit ne devine pas sur quelle branche vous vouliez partir, et ne se rabat pas sur une autre à votre place.\n" >&2
+  printf "\nRelancez en nommant une branche qui existe :\n" >&2
+  printf "  %s --based-on <branche>\n" "$relaunch" >&2
+
+  local project_reference
+  if project_reference=$(get_reference_branch "$feature_type" 2>/dev/null) \
+     && [[ -n "$project_reference" && "$project_reference" != "$base" ]]; then
+    printf "\nLa référence du projet est %s. Si c'est bien elle que vous voulez :\n" "$project_reference" >&2
+    printf "  %s --based-on %s\n" "$relaunch" "$project_reference" >&2
+  fi
+
+  return 1
 }
 
 # Réécrit les trailers du commit HEAD. Appelée pendant un rebase : le commit
@@ -867,13 +938,13 @@ util_verify_rebase() {
   local target_ref
 
   source_ref=$(resolve_git_ref "$source_branch") || {
-    echo "Erreur : la branche source '$source_branch' est introuvable." >&2
+    echo "Erreur : la branche source '$source_branch' est introuvable (ni en local ni sur $j2s_remote)." >&2
     echo "false"
     return 1
   }
 
   target_ref=$(resolve_git_ref "$target_branch") || {
-    echo "Erreur : la branche cible '$target_branch' est introuvable." >&2
+    echo "Erreur : la branche cible '$target_branch' est introuvable (ni en local ni sur $j2s_remote)." >&2
     echo "false"
     return 1
   }
@@ -1013,8 +1084,10 @@ util_check_rebase() {
     base_ref="$base"
   else
     printf "\033[1;31mLa branche d'origine %s n'existe plus (ni en local ni sur %s).\033[0m\n" "$base" "$j2s_remote" >&2
-    printf "%s en est pourtant partie. La base a sans doute été livrée puis supprimée : rebasez-la sur une branche vivante.\n" "$branch" >&2
-    printf "  jgit util verify_rebase --from %s --into <branche_de_base>\n" "$branch" >&2
+    printf "%s en est pourtant partie : la base a sans doute été livrée puis supprimée.\n" "$branch" >&2
+    printf "\nIl n'y a plus rien à quoi se comparer. Choisissez une base vivante :\n" >&2
+    printf "  jgit util verify_rebase --from %s --into <branche>   # la question, sans rien modifier\n" "$branch" >&2
+    print_rebase_suggestion "$branch" " --based-on <branche>" >&2
     return 1
   fi
 
@@ -1052,13 +1125,15 @@ util_check_rebase() {
 }
 
 # Affiche la commande à lancer, quand le nom de la branche permet de la déduire.
+# $2 : options à accoler, le cas échéant (« --based-on <branche> »).
 print_rebase_suggestion() {
   local branch="$1"
+  local options="${2:-}"
   local type="${branch%%/*}"
   local ticket="${branch#*/}"
 
   if [[ "$type" == "feature" || "$type" == "hotfix" ]] && [[ -n "$ticket" && "$ticket" != "$branch" ]]; then
-    printf "  jgit %s rebase %s\n" "$type" "$ticket"
+    printf "  jgit %s rebase %s%s\n" "$type" "$ticket" "$options"
   fi
 }
 

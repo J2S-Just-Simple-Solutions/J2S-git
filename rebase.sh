@@ -53,8 +53,12 @@ feature_rebase() {
     branch_in_local=$( git branch --list ${branch} )
     branch_PR_in_local=$( git branch --list ${branch_PR} )
 
+    local relaunch="jgit $feature_type rebase $feature_name"
+    local base_provenance="reference"
+
     if [[ -n "$BASED_ON" ]]; then
         reference_branch="$BASED_ON"
+        base_provenance="option"
     else
         if ! reference_branch=$(get_reference_branch "$feature_type"); then
             exit_safe 1
@@ -68,27 +72,34 @@ feature_rebase() {
         local recorded_base
         recorded_base=$(read_based_on "$branch" "$branch") || recorded_base=""
 
-        if [[ -n "$recorded_base" && "$recorded_base" != "$reference_branch" ]]; then
-            if ! branch_exists "$recorded_base"; then
-                printf "%sLa branche %s%s%s%s est partie de %s%s%s%s, qui n'existe plus. Le rebase visera %s%s%s.%s\n" \
-                    "$(tput setaf 3)" "$(tput setaf 1)" "$branch" "$(tput sgr0)" "$(tput setaf 3)" \
-                    "$(tput setaf 1)" "$recorded_base" "$(tput sgr0)" "$(tput setaf 3)" \
-                    "$(tput setaf 1)" "$reference_branch" "$(tput setaf 3)" "$(tput sgr0)"
-            else
+        if [[ -n "$recorded_base" ]]; then
+            # La base enregistrée est une valeur par défaut comme une autre : on
+            # la contrôle avant de la proposer, sinon la question porterait sur
+            # une branche disparue et la réponse par défaut mènerait droit dans
+            # le mur.
+            if ! ensure_base_branch "$recorded_base" "record" "$feature_type" "$relaunch" "$branch"; then
+                printf "\nPour retrouver d'où part la branche :\n" >&2
+                printf "  jgit util check_rebase --from %s\n" "$branch" >&2
+                exit_safe 1
+            fi
+
+            if [[ "$recorded_base" != "$reference_branch" ]]; then
                 printf "%sLa branche %s%s%s%s est partie de %s%s%s%s, et non de la référence du projet %s%s%s.%s\n" \
                     "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)" "$(tput setaf 2)" \
                     "$(tput setaf 1)" "$recorded_base" "$(tput sgr0)" "$(tput setaf 2)" \
                     "$(tput setaf 1)" "$reference_branch" "$(tput setaf 2)" "$(tput sgr0)"
                 if confirm_action "Rebaser sur $recorded_base ?" "y"; then
                     reference_branch="$recorded_base"
+                    base_provenance="record"
                 fi
             fi
         fi
     fi
 
-    # Vérifier si la branche référence existe, en local ou sur le remote
-    if ! branch_exists "$reference_branch"; then
-        echo "Erreur : La branche référence '$reference_branch' n'existe pas."
+    # Le contrôle final porte sur la valeur retenue, d'où qu'elle vienne : une
+    # saisie --based-on erronée et une référence de projet introuvable donnent
+    # le même refus.
+    if ! ensure_base_branch "$reference_branch" "$base_provenance" "$feature_type" "$relaunch" "$branch"; then
         exit_safe 1
     fi
 

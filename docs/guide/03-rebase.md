@@ -97,8 +97,12 @@ Dans tous les cas, le rebase **met la trace à jour** : après lui, la branche
 enregistre la base sur laquelle il vient de la reconstruire. C'est aussi ainsi
 qu'une branche d'avant ce mécanisme en acquiert une.
 
-> Si la base enregistrée n'existe plus — une release livrée, une démo supprimée —
-> `jgit` le signale et se rabat sur la référence du projet, sans poser de question.
+> **Si la base enregistrée n'existe plus** — une release livrée, une démo
+> supprimée — `jgit` **s'arrête** sans rien modifier et vous demande de nommer la
+> base vous-même. Il ne se rabat pas sur la référence du projet : ce serait
+> déplacer votre branche, puis pousser le résultat en force. Le message et le
+> remède sont les mêmes que pour un `--based-on` mal orthographié
+> ([07 — Règles communes](07-regles-communes.md#si-la-branche-de-base-nexiste-pas)).
 
 ---
 
@@ -246,11 +250,11 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 | Votre branche ou sa branche de PR n'existe pas sur le serveur | refuse en la nommant | il n'y a rien à republier |
 | Votre PR a **déjà été mergée** | refuse : *« n'est PAS un fast-forward … Cela peut se produire si vous avez déjà cloturé la PR »* | le cas n'est pas géré ; faites un `restart` à la place |
 | Un **commit de fusion** est présent dans l'historique | refuse en le nommant | une fusion ne se rejoue pas commit par commit ; ne mélangez pas merge et rebase |
-| La base enregistrée n'existe plus sur le serveur | le signale et se rabat sur la référence du projet | on ne rejoue pas sur une branche disparue |
+| La base enregistrée n'existe plus (ni en local ni sur le serveur) | **refuse**, sans rien modifier, et demande de nommer la base avec `--based-on` | se rabattre sur la référence du projet déplacerait la branche, et le résultat partirait en `push --force` |
+| `--based-on` sur une branche inconnue | **même refus, mot pour mot** | une saisie fausse et une base disparue sont le même problème |
 | Vous répondez `n` à la première question | s'arrête : rien n'a été touché | |
 | Vous répondez `n` à la seconde question | supprime les branches réécrites et récupère votre branche de travail du serveur | l'état d'avant est rétabli, le serveur n'a jamais bougé |
 | Conflit **avec** `--no-interaction` | s'arrête proprement, annule tout, restaure votre historique | un conflit demande un humain : il n'est jamais validé tout seul |
-| `--based-on` sur une branche inconnue | refuse en la nommant | |
 | Votre branche a divergé du serveur | s'arrête sans rien modifier | |
 
 > **Le remote n'est poussé qu'en toute dernière étape.** Quel que soit le motif
@@ -273,6 +277,9 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 - **Les branches créées avant ce mécanisme n'ont pas de base enregistrée.** Le
   rebase se comporte alors comme avant — il vise la référence du projet — et leur
   donne leur trace au passage.
+- **Une base enregistrée disparue bloque le rebase**, le temps de la relancer avec
+  `--based-on`. C'est délibéré : `jgit` ne choisit pas la branche de
+  remplacement à votre place.
 
 ---
 
