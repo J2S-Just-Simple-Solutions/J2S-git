@@ -57,14 +57,37 @@ Fonctionnalité: Utilitaires et garde-fous transverses
   Scénario: Une branche source inconnue est refusée
     Quand je lance "jgit util verify_rebase --from inconnue --into main"
     Alors jgit se termine en erreur
-    Et la sortie contient "la branche source 'inconnue' est introuvable."
+    Et la sortie contient "la branche source 'inconnue' est introuvable (ni en local ni sur origin)."
     Et la sortie contient "false"
 
   Scénario: Une branche cible inconnue est refusée
     Quand je lance "jgit util verify_rebase --from develop --into inconnue"
     Alors jgit se termine en erreur
-    Et la sortie contient "la branche cible 'inconnue' est introuvable."
+    Et la sortie contient "la branche cible 'inconnue' est introuvable (ni en local ni sur origin)."
     Et la sortie contient "false"
+
+  # « Introuvable » ne doit désigner qu'une branche qui n'existe vraiment nulle
+  # part. Une branche jamais sortie en local — le cas de tout clone frais — vit
+  # sur le serveur et doit être acceptée, sinon le refus est un mensonge.
+  Scénario: Une branche qui n'existe que sur le serveur est acceptée
+    Étant donné je lance "jgit feature start TEST-40 --no-interaction --no-open"
+    Et je commite le fichier "src/nouveau.txt" contenant "sans conflit" avec le message "Ajoute un fichier"
+    Et je pousse la branche courante
+    Et je supprime la branche locale "develop"
+    Quand je lance "jgit util verify_rebase --from feature/TEST-40 --into develop"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "true"
+    Et la sortie ne contient pas "introuvable"
+
+  Scénario: La source aussi peut n'exister que sur le serveur
+    Étant donné je lance "jgit feature start TEST-41 --no-interaction --no-open"
+    Et je commite le fichier "src/nouveau.txt" contenant "sans conflit" avec le message "Ajoute un fichier"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Et je supprime la branche locale "feature/TEST-41"
+    Quand je lance "jgit util verify_rebase --from feature/TEST-41 --into develop"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "true"
 
   Scénario: Un espace de travail sale interdit la vérification
     Étant donné je modifie le fichier "src/app.txt" avec "travail en cours"

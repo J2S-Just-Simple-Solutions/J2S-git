@@ -1,6 +1,6 @@
 # 01 — Les concepts
 
-Cinq notions suffisent à comprendre tout le reste. Prenez dix minutes ici, les
+Six notions suffisent à comprendre tout le reste. Prenez dix minutes ici, les
 autres fiches iront beaucoup plus vite.
 
 ---
@@ -146,6 +146,42 @@ les absorbe.
 
 ---
 
+## 6. La branche d'origine
+
+Une branche ne dit pas d'où elle vient. Git sait retrouver l'endroit où deux
+branches se séparent, jamais **laquelle a servi de point de départ** : six commits
+plus tard, une feature partie d'une démo ressemble en tout point à une feature
+partie de la préprod.
+
+`jgit` note donc le point de départ au moment où il crée la branche, dans le
+**corps** du commit `[jgit]` correspondant :
+
+```
+[jgit] INIT feature/MONPROJET-123 [empty_commit]
+
+jgit-branch: feature/MONPROJET-123
+jgit-based-on: develop
+```
+
+Vous ne verrez jamais ces deux lignes : ni dans `git log --oneline`, ni dans la
+liste des commits de GitHub. Elles voyagent avec la branche, résistent aux rebases
+et disparaissent avec le commit `[jgit]` quand la PR est mergée.
+
+Elles servent à deux choses :
+
+- **savoir où vous en êtes**, sans avoir à vous rappeler d'où vous étiez parti :
+  `jgit util check_rebase` ([06 — Utilitaires](06-utilitaires.md)) ;
+- **rebaser au bon endroit** : `jgit feature rebase` vous propose votre vraie base
+  plutôt que la référence du projet ([03 — Rebase](03-rebase.md)).
+
+> **Et les branches d'avant ?** Celles créées par une version antérieure de `jgit`
+> — ou à la main — n'ont pas cette trace, et `jgit` ne l'invente pas.
+> `util check_rebase` vous répond alors qu'il ne sait pas, plutôt que de supposer
+> la préprod et de vous donner une réponse fausse. Un `feature rebase` la leur
+> donne au passage : après lui, la branche redevient lisible.
+
+---
+
 ## Le vocabulaire en un coup d'œil
 
 | Terme | Ce que ça désigne |
@@ -157,6 +193,7 @@ les absorbe.
 | **production** | `main` par défaut — ce qui tourne réellement |
 | **branche de version** | `release/1.4.0` — la version en préparation |
 | **branche de démo** | `demo_sprint12` — un assemblage temporaire, jetable |
+| **branche d'origine** | la branche dont la vôtre est réellement partie, notée par `jgit` à la création |
 | **le serveur** | `origin`, c'est-à-dire GitHub |
 
 ---

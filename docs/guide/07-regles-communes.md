@@ -165,6 +165,51 @@ squash_threshold=8
 | `branch_preprod` | la branche de préprod | `develop` |
 | `squash_threshold` | à partir de combien de commits le squash est proposé | `8` |
 
+### Si la branche de base n'existe pas
+
+Une commande qui part d'une branche — `feature start`, `hotfix start`,
+`feature rebase`, `demo start` — tient cette branche de l'un de trois endroits :
+
+| D'où vient la valeur | Exemple |
+| --- | --- |
+| votre saisie | `--based-on demo_sprint12` |
+| la branche d'origine enregistrée à la création | un `feature rebase` sans `--based-on` |
+| le calcul automatique de la référence du projet | `develop` pour une feature |
+
+**Les trois peuvent désigner une branche qui n'existe pas** : une faute de frappe,
+une release livrée puis supprimée, une démo effacée après la démo. `jgit` les
+contrôle donc toutes les trois, au même endroit, et **refuse dans les mêmes
+termes** — seule la ligne qui dit d'où vient la valeur change :
+
+```
+La branche de base demo_sprint12 n'existe pas (ni en local ni sur origin).
+C'est la branche d'origine de feature/MONPROJET-412, enregistrée à sa création :
+elle a sans doute été livrée puis supprimée depuis.
+Rien n'a été modifié : ni vos branches, ni le serveur.
+
+jgit ne devine pas sur quelle branche vous vouliez partir, et ne se rabat pas sur
+une autre à votre place.
+
+Relancez en nommant une branche qui existe :
+  jgit feature rebase MONPROJET-412 --based-on <branche>
+
+La référence du projet est develop. Si c'est bien elle que vous voulez :
+  jgit feature rebase MONPROJET-412 --based-on develop
+```
+
+La ligne de provenance est la seule qui diffère :
+
+| Provenance | Ce que dit `jgit` |
+| --- | --- |
+| `--based-on` | *« Elle a été demandée par --based-on : vérifiez son orthographe. »* |
+| base enregistrée | *« C'est la branche d'origine de …, enregistrée à sa création : elle a sans doute été livrée puis supprimée depuis. »* |
+| référence du projet | *« C'est la référence du projet, choisie automatiquement. »* |
+
+**Pourquoi ne pas se rabattre sur `develop`.** Parce que ce n'est pas la même
+opération. Rejouer vos commits sur `develop` au lieu de la démo dont ils partent
+déplace la branche — et sur un `rebase`, le résultat part en `push --force`. Le
+choix vous appartient ; `jgit` s'arrête et vous le rend.
+
 ### Si aucune branche de référence n'est trouvée
 
 `jgit` cherche d'abord la branche configurée, puis se replie sur `develop`,

@@ -35,6 +35,10 @@ prefix_PR="__PR__"
 prefix_commit="[jgit]"
 prefix_init_commit="$prefix_commit INIT"
 suffix_init_commit="[empty_commit]"
+# Clés des trailers qui portent la branche d'origine dans le corps des commits
+# d'init. Les changer rendrait illisibles toutes les branches déjà créées.
+trailer_branch="jgit-branch"
+trailer_based_on="jgit-based-on"
 
 JGIT_NO_INTERACTION=false
 JGIT_SQUASH=false
@@ -84,6 +88,8 @@ help() {
 
     printf "\033[1;34mUtility:\033[0m\n"
     printf "  jgit util clean                Supprime les branches locales jgit_rebase_*, jgit_verify_rebase_* et __PR__*.\n"
+    printf "  jgit util check_rebase [--from <branche>]\n"
+    printf "                                 Dit si la branche est à jour sur sa branche d'origine et si le rebase passerait.\n"
     printf "  jgit util verify_rebase --from <branche_source> --into <branche_cible>\n\n"
 
     printf "\033[1;34mSyntaxes dépréciées\033[0m (encore acceptées, retirées à terme) :\n"
@@ -336,6 +342,15 @@ case "$JGIT_TYPE" in
         case "$JGIT_ACTION" in
             clean)
                 clean_branches
+                ;;
+            check_rebase)
+                # Le positionnel serait ignoré en silence : on préfère le dire.
+                if [[ -n "$JGIT_TARGET" ]]; then
+                    printf "\033[1;31mPour désigner une branche, utilisez --from %s.\033[0m\n" "$JGIT_TARGET" >&2
+                    exit_safe 1
+                fi
+                util_check_rebase ${JGIT_FROM_SOURCES[@]+"${JGIT_FROM_SOURCES[@]}"}
+                exit $?
                 ;;
             verify_rebase)
                 util_verify_rebase "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"

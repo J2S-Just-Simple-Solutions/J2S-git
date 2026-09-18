@@ -214,6 +214,85 @@ assert_jgit_failure() {
     fi
 }
 
+assert_jgit_exit_code() {
+    local expected="$1"
+    local label="${2:-code de sortie de jgit = $expected}"
+
+    if [[ $JGIT_STATUS -eq $expected ]]; then
+        assert_ok "$label"
+    else
+        assert_failed "$label" "code de sortie : $JGIT_STATUS" "--- sortie ---" "$JGIT_OUTPUT"
+    fi
+}
+
+###############################################
+#            Branche d'origine
+###############################################
+#
+# jgit inscrit la branche de depart dans le corps du commit d'init, sous forme
+# de trailers. Les assertions les relisent comme le fait read_based_on : le
+# commit le plus recent qui se declare porteur de CETTE branche. Chercher
+# seulement "jgit-based-on" repondrait avec la trace d'un ancetre, puisque les
+# commits d'init remontent dans les branches livrees.
+
+based_on_of_ref() {
+    local git_fn="$1"
+    local ref="$2"
+    local branch="$3"
+    local commit
+
+    commit=$($git_fn log -n 1 --format=%H --grep="^jgit-branch: $branch\$" "$ref" 2>/dev/null) || commit=""
+    [[ -n "$commit" ]] || return 1
+
+    $git_fn log -n 1 --format=%B "$commit" 2>/dev/null \
+        | sed -n 's/^jgit-based-on: *//p' | tail -n 1
+}
+
+assert_local_based_on() {
+    local branch="$1"
+    local expected="$2"
+    local label="${3:-la branche locale $branch est partie de $expected}"
+    local actual
+
+    actual=$(based_on_of_ref repo_git "$branch" "$branch") || actual=""
+    assert_equals "$expected" "$actual" "$label"
+}
+
+assert_remote_based_on() {
+    local branch="$1"
+    local expected="$2"
+    local label="${3:-la branche distante $branch est partie de $expected}"
+    local actual
+
+    actual=$(based_on_of_ref origin_git "refs/heads/$branch" "$branch") || actual=""
+    assert_equals "$expected" "$actual" "$label"
+}
+
+assert_remote_without_based_on() {
+    local branch="$1"
+    local label="${2:-la branche distante $branch ne porte aucune branche d origine}"
+    local actual
+
+    actual=$(based_on_of_ref origin_git "refs/heads/$branch" "$branch") || actual=""
+    if [[ -z "$actual" ]]; then
+        assert_ok "$label"
+    else
+        assert_failed "$label" "branche d origine trouvee : $actual"
+    fi
+}
+
+# Les trailers ne doivent pas remonter dans les sujets : c'est ce qui les rend
+# invisibles en --oneline comme dans la liste des commits de GitHub.
+assert_remote_subject_without_based_on() {
+    local branch="$1"
+    local label="${2:-aucun sujet de $branch ne porte les trailers}"
+    local subjects
+
+    subjects=$(origin_git log --pretty=%s "refs/heads/$branch" 2>/dev/null) || subjects=""
+    assert_not_contains "$subjects" "jgit-based-on" "$label"
+    assert_not_contains "$subjects" "jgit-branch" "$label"
+}
+
 assert_jgit_output_contains() {
     assert_contains "$JGIT_OUTPUT" "$1" "${2:-sortie de jgit contient [$1]}"
 }
