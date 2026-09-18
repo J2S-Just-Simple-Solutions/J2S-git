@@ -53,15 +53,53 @@ feature_rebase() {
     branch_in_local=$( git branch --list ${branch} )
     branch_PR_in_local=$( git branch --list ${branch_PR} )
 
+    local relaunch="jgit $feature_type rebase $feature_name"
+    local base_provenance="reference"
+
     if [[ -n "$BASED_ON" ]]; then
         reference_branch="$BASED_ON"
-    elif ! reference_branch=$(get_reference_branch "$feature_type"); then
-        exit_safe 1
+        base_provenance="option"
+    else
+        if ! reference_branch=$(get_reference_branch "$feature_type"); then
+            exit_safe 1
+        fi
+
+        # Une feature partie d'une démo ou d'une release n'a rien à faire sur
+        # develop sous prétexte que c'est la référence du projet : jusqu'ici le
+        # rebase l'y envoyait sans rien dire. La branche d'origine enregistrée à
+        # la création est donc proposée, et comme c'est la réponse par défaut,
+        # c'est aussi celle que --no-interaction applique.
+        local recorded_base
+        recorded_base=$(read_based_on "$branch" "$branch") || recorded_base=""
+
+        if [[ -n "$recorded_base" ]]; then
+            # La base enregistrée est une valeur par défaut comme une autre : on
+            # la contrôle avant de la proposer, sinon la question porterait sur
+            # une branche disparue et la réponse par défaut mènerait droit dans
+            # le mur.
+            if ! ensure_base_branch "$recorded_base" "record" "$feature_type" "$relaunch" "$branch"; then
+                printf "\nPour retrouver d'où part la branche :\n" >&2
+                printf "  jgit util check_rebase --from %s\n" "$branch" >&2
+                exit_safe 1
+            fi
+
+            if [[ "$recorded_base" != "$reference_branch" ]]; then
+                printf "%sLa branche %s%s%s%s est partie de %s%s%s%s, et non de la référence du projet %s%s%s.%s\n" \
+                    "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)" "$(tput setaf 2)" \
+                    "$(tput setaf 1)" "$recorded_base" "$(tput sgr0)" "$(tput setaf 2)" \
+                    "$(tput setaf 1)" "$reference_branch" "$(tput setaf 2)" "$(tput sgr0)"
+                if confirm_action "Rebaser sur $recorded_base ?" "y"; then
+                    reference_branch="$recorded_base"
+                    base_provenance="record"
+                fi
+            fi
+        fi
     fi
 
-    # Vérifier si la branche référence existe, en local ou sur le remote
-    if ! branch_exists "$reference_branch"; then
-        echo "Erreur : La branche référence '$reference_branch' n'existe pas."
+    # Le contrôle final porte sur la valeur retenue, d'où qu'elle vienne : une
+    # saisie --based-on erronée et une référence de projet introuvable donnent
+    # le même refus.
+    if ! ensure_base_branch "$reference_branch" "$base_provenance" "$feature_type" "$relaunch" "$branch"; then
         exit_safe 1
     fi
 
@@ -226,6 +264,13 @@ feature_rebase() {
     echo "Checkout and pull $reference_branch branch"
     switch_branch "$reference_branch"
 
+    # Les deux branches sont reconstruites sur $reference_branch : les commits
+    # d'init rejoués doivent désigner cette base, pas celle d'il y a trois
+    # semaines. cherry_pick_commits s'en charge au moment où il les repose, et
+    # chaque boucle ne rejoue que les commits d'init de sa propre branche.
+    JGIT_RESTAMP_BASED_ON="$reference_branch"
+    JGIT_RESTAMP_BRANCH="$branch_PR"
+
     # rebase de la branche PR par application des commits déjà présents sur l'ancienne branche PR en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
     switch_branch "$branch_PR_rebase" create
@@ -234,6 +279,8 @@ feature_rebase() {
         exit_safe 1
     fi
 
+    JGIT_RESTAMP_BRANCH="$branch"
+
     # rebase de la branche principal par application de tous les commits en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
     switch_branch "$branch_rebase" create
@@ -241,6 +288,9 @@ feature_rebase() {
         abort_rebase "$branch" "$reference_branch" "$branch_rebase" "$branch_PR_rebase" "$original_head" "$squash_done"
         exit_safe 1
     fi
+
+    JGIT_RESTAMP_BASED_ON=""
+    JGIT_RESTAMP_BRANCH=""
 
     # On vient écraser les branches historiques par les branches que l'on vient de rebase
     switch_branch "$reference_branch"

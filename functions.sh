@@ -28,6 +28,27 @@ if [[ -z "${JGIT_SQUASH_THRESHOLD+x}" ]]; then
   JGIT_SQUASH_THRESHOLD=8
 fi
 
+# Clés des trailers qui portent la branche d'origine dans les commits d'init
+# jgit. Normalement définies par jgit.sh ; reprises ici pour que functions.sh
+# reste utilisable seule.
+if [[ -z "${trailer_branch+x}" ]]; then
+  trailer_branch="jgit-branch"
+fi
+
+if [[ -z "${trailer_based_on+x}" ]]; then
+  trailer_based_on="jgit-based-on"
+fi
+
+# Branche reconstruite et base visée par le rebase en cours. Vides en dehors
+# d'un rebase : cherry_pick_commits ne touche alors à aucun message.
+if [[ -z "${JGIT_RESTAMP_BRANCH+x}" ]]; then
+  JGIT_RESTAMP_BRANCH=""
+fi
+
+if [[ -z "${JGIT_RESTAMP_BASED_ON+x}" ]]; then
+  JGIT_RESTAMP_BASED_ON=""
+fi
+
 declare -a JGIT_FROM_SOURCES
 
 ###############################################
@@ -113,6 +134,12 @@ confirm_action() {
 }
 
 # Résout un nom de branche/réf en une référence git exploitable.
+#
+# Cherche aux mêmes endroits que branch_exists, et dans le même ordre que
+# switch_branch : la version locale d'abord, celle du serveur ensuite. Sans ce
+# second essai, « util verify_rebase --into develop » répondait « introuvable »
+# sur tout dépôt où develop n'a jamais été sortie en local — soit tout clone
+# frais — alors que la branche est parfaitement vivante sur le serveur.
 resolve_git_ref() {
   local ref="$1"
 
@@ -122,6 +149,11 @@ resolve_git_ref() {
 
   if git show-ref --verify --quiet "refs/heads/$ref"; then
     echo "$ref"
+    return 0
+  fi
+
+  if git show-ref --verify --quiet "refs/remotes/$j2s_remote/$ref"; then
+    echo "$j2s_remote/$ref"
     return 0
   fi
 
@@ -300,6 +332,175 @@ list_commits_since() {
 }
 
 ###############################################
+#            Branche d'origine
+###############################################
+#
+# Toute branche fabriquée par jgit part d'une autre branche, et cette
+# information se perd aussitôt : `git merge-base` sait dire où deux branches se
+# séparent, jamais laquelle des deux a servi de point de départ. Une feature
+# partie d'une démo ou d'une release ressemble alors, six commits plus tard, à
+# une feature partie de develop.
+#
+# jgit l'inscrit donc là où elle voyage toute seule : dans le corps du commit
+# d'initialisation, sous forme de trailers.
+#
+#   [jgit] INIT feature/TEST-1 [empty_commit]
+#
+#   jgit-branch: feature/TEST-1
+#   jgit-based-on: develop
+#
+# Ils suivent le clone et le fetch sans configuration, restent invisibles en
+# `--oneline` comme dans la liste des commits de GitHub, sont rejoués tels quels
+# par les cherry-picks du rebase, et disparaissent avec le commit d'init au
+# squash-and-merge de la PR. Des `git notes` auraient été plus propres mais ne
+# sont poussées ni récupérées par défaut : l'information n'aurait existé que sur
+# la machine qui l'a écrite.
+#
+# Le premier trailer n'est pas un doublon du sujet : c'est lui qui rend la
+# lecture sûre. Les commits d'init remontent dans les branches livrées — une
+# release intègre l'historique des branches __PR__, puis main intègre celui de
+# la release — si bien qu'une branche quelconque compte, dans ses ancêtres,
+# quantité de commits porteurs d'une origine qui n'est pas la sienne. Sans
+# jgit-branch, une vieille branche sans trace se verrait attribuer celle du
+# voisin au lieu d'être reconnue comme ancienne.
+#
+# Conséquence à ne pas perdre de vue : le message complet (%B) d'un commit
+# d'init ne vaut plus son sujet. Toute comparaison porte sur %s.
+
+# Échappe les caractères spéciaux d'une expression régulière basique, pour
+# chercher un nom de branche au caractère près (release/1.1.0 ne doit pas
+# répondre pour release/1a1b0).
+escape_basic_regex() {
+  printf '%s' "$1" | sed 's/[][\.*^$]/\\&/g'
+}
+
+# Crée un commit vide d'initialisation jgit portant sa branche d'origine.
+# Les arguments supplémentaires sont passés tels quels à git commit (--quiet…).
+# Une base vide produit le commit d'avant ce mécanisme, sans trailer : on
+# n'invente pas une origine que l'on ne connaît pas.
+commit_init_with_based_on() {
+  local subject="$1"
+  local branch="$2"
+  local base="$3"
+  shift 3
+
+  if [[ -z "$base" ]]; then
+    git commit --allow-empty -m "$subject" "$@"
+    return $?
+  fi
+
+  git commit --allow-empty -m "$subject" \
+    -m "$trailer_branch: $branch
+$trailer_based_on: $base" "$@"
+}
+
+# Renvoie la branche d'origine enregistrée pour une branche, ou 1 si celle-ci
+# est antérieure au mécanisme.
+#
+#   read_based_on <ref> [branche]
+#
+# <ref> est l'historique à parcourir, <branche> le nom dont on cherche la trace
+# (par défaut la ref elle-même) : ils diffèrent dès qu'on lit une branche par sa
+# copie distante, origin/feature/X portant la trace de feature/X.
+#
+# Appelée en substitution de commande : rien n'est écrit sur stdout en dehors du
+# nom de la branche (règle de codage n°7).
+read_based_on() {
+  local ref="${1:-HEAD}"
+  local branch="${2:-$ref}"
+  local commit base
+
+  commit=$(git log -n 1 --format="%H" \
+    --grep="^$trailer_branch: $(escape_basic_regex "$branch")\$" "$ref" 2>/dev/null)
+  [[ -n "$commit" ]] || return 1
+
+  # Le dernier trailer du message fait foi : un commit réécrit ne doit jamais
+  # laisser croire qu'il a deux origines.
+  base=$(git log -n 1 --format="%B" "$commit" 2>/dev/null \
+    | sed -n "s/^$trailer_based_on: *//p" | tail -n 1)
+  [[ -n "$base" ]] || return 1
+
+  printf '%s\n' "$base"
+}
+
+# Valide la branche de base d'une commande, quelle que soit sa provenance, et
+# refuse de la même façon dans tous les cas.
+#
+#   ensure_base_branch <base> <provenance> <type> <commande_à_relancer> [branche]
+#
+# Une base peut venir de trois endroits : l'option --based-on, la branche
+# d'origine enregistrée à la création, ou le calcul automatique de la référence
+# du projet. Les trois peuvent désigner une branche qui n'existe pas — une faute
+# de frappe, une release livrée puis supprimée, une démo effacée — et les trois
+# doivent donner le même refus : un seul message à lire, un seul remède à
+# appliquer. Seule la ligne qui dit d'où vient la valeur change.
+#
+# La règle qui compte : jgit ne se rabat jamais sur une autre base. La première
+# version de ce contrôle laissait le rebase continuer sur la référence du projet
+# quand la base enregistrée avait disparu — il déplaçait donc la branche, puis
+# poussait le résultat en force.
+#
+# provenance : option | record | reference
+ensure_base_branch() {
+  local base="$1"
+  local provenance="$2"
+  local feature_type="$3"
+  local relaunch="$4"
+  local work_branch="${5:-}"
+
+  if [[ -n "$base" ]] && branch_exists "$base"; then
+    return 0
+  fi
+
+  printf "\033[1;31mLa branche de base %s n'existe pas (ni en local ni sur %s).\033[0m\n" \
+    "${base:-<vide>}" "$j2s_remote" >&2
+
+  case "$provenance" in
+    option)
+      printf "Elle a été demandée par --based-on : vérifiez son orthographe.\n" >&2
+      ;;
+    record)
+      printf "C'est la branche d'origine de %s, enregistrée à sa création : elle a sans doute été livrée puis supprimée depuis.\n" \
+        "$work_branch" >&2
+      ;;
+    *)
+      printf "C'est la référence du projet, choisie automatiquement.\n" >&2
+      ;;
+  esac
+
+  printf "Rien n'a été modifié : ni vos branches, ni le serveur.\n" >&2
+  printf "\njgit ne devine pas sur quelle branche vous vouliez partir, et ne se rabat pas sur une autre à votre place.\n" >&2
+  printf "\nRelancez en nommant une branche qui existe :\n" >&2
+  printf "  %s --based-on <branche>\n" "$relaunch" >&2
+
+  local project_reference
+  if project_reference=$(get_reference_branch "$feature_type" 2>/dev/null) \
+     && [[ -n "$project_reference" && "$project_reference" != "$base" ]]; then
+    printf "\nLa référence du projet est %s. Si c'est bien elle que vous voulez :\n" "$project_reference" >&2
+    printf "  %s --based-on %s\n" "$relaunch" "$project_reference" >&2
+  fi
+
+  return 1
+}
+
+# Réécrit les trailers du commit HEAD. Appelée pendant un rebase : le commit
+# d'init rejoué doit désigner la base sur laquelle la branche vient d'être
+# reconstruite, pas celle d'il y a trois semaines. Une branche d'avant ce
+# mécanisme gagne donc sa trace en se faisant rebaser.
+restamp_based_on_head() {
+  local branch="$1"
+  local base="$2"
+
+  [[ -n "$branch" && -n "$base" ]] || return 0
+
+  {
+    git log -n 1 --format=%B HEAD \
+      | sed -e "/^$trailer_branch: /d" -e "/^$trailer_based_on: /d"
+    printf '\n%s: %s\n%s: %s\n' "$trailer_branch" "$branch" "$trailer_based_on" "$base"
+  } | git commit --amend --allow-empty --quiet --cleanup=whitespace -F -
+}
+
+###############################################
 #            Squash des commits
 ###############################################
 
@@ -370,10 +571,24 @@ squash_commits_after() {
 # de restaurer l'état local.
 cherry_pick_commits() {
   local commits=("$@")
+  local head_before subject
 
   for commit in "${commits[@]}"; do
+    head_before=$(git rev-parse HEAD)
+
     if ! cherry_pick "$commit"; then
       return 1
+    fi
+
+    # Un commit d'init rejoué porte encore l'origine d'avant le rebase. On la
+    # remplace au moment où on le repose, seul instant où il est en tête.
+    # Le garde-fou sur HEAD évite de toucher au commit de résolution de conflit
+    # du développeur, ou à un commit déjà présent que cherry_pick a sauté.
+    if [[ -n "$JGIT_RESTAMP_BRANCH" && "$(git rev-parse HEAD)" != "$head_before" ]]; then
+      subject=$(git log -n 1 --format=%s HEAD)
+      if [[ "$subject" == *"$suffix_init_commit"* ]]; then
+        restamp_based_on_head "$JGIT_RESTAMP_BRANCH" "$JGIT_RESTAMP_BASED_ON"
+      fi
     fi
   done
 
@@ -723,19 +938,40 @@ util_verify_rebase() {
   local target_ref
 
   source_ref=$(resolve_git_ref "$source_branch") || {
-    echo "Erreur : la branche source '$source_branch' est introuvable." >&2
+    echo "Erreur : la branche source '$source_branch' est introuvable (ni en local ni sur $j2s_remote)." >&2
     echo "false"
     return 1
   }
 
   target_ref=$(resolve_git_ref "$target_branch") || {
-    echo "Erreur : la branche cible '$target_branch' est introuvable." >&2
+    echo "Erreur : la branche cible '$target_branch' est introuvable (ni en local ni sur $j2s_remote)." >&2
     echo "false"
     return 1
   }
 
-  if [[ "$source_ref" == "$target_ref" ]]; then
+  if rebase_dry_run "$source_branch" "$source_ref" "$target_branch" "$target_ref"; then
     echo "true"
+    return 0
+  fi
+
+  echo "false"
+  return 1
+}
+
+# Rejoue le rebase de <source> sur <cible> sur une copie jetable, puis efface
+# toute trace : rien n'est modifié, ni en local ni sur le serveur.
+# Renvoie 0 si le rebase passerait, 1 sinon (conflit, ou préparation impossible).
+#
+# N'écrit rien sur stdout : c'est l'appelant qui décide de ce qu'il en dit —
+# « true »/« false » pour util verify_rebase, une phrase pour util check_rebase.
+# Suppose l'espace de travail propre, que ses deux appelants vérifient.
+rebase_dry_run() {
+  local source_branch="$1"
+  local source_ref="$2"
+  local target_branch="$3"
+  local target_ref="$4"
+
+  if [[ "$source_ref" == "$target_ref" ]]; then
     return 0
   fi
 
@@ -750,26 +986,26 @@ util_verify_rebase() {
   if git show-ref --verify --quiet "refs/heads/$temp_branch"; then
     git branch -D "$temp_branch" >/dev/null 2>&1 || {
       echo "Erreur : impossible de nettoyer la branche temporaire existante '$temp_branch'." >&2
-      echo "false"
       return 1
     }
   fi
 
   if ! git branch "$temp_branch" "$source_ref" >/dev/null 2>&1; then
     echo "Erreur : impossible de créer la branche temporaire '$temp_branch'." >&2
-    echo "false"
     return 1
   fi
 
   if ! switch_branch "$temp_branch" try; then
     git branch -D "$temp_branch" >/dev/null 2>&1 || true
     echo "Erreur : impossible de basculer sur la branche temporaire." >&2
-    echo "false"
     return 1
   fi
 
   local rebase_ok=true
-  if ! git rebase --quiet "$target_ref"; then
+  # Le détail d'un conflit qui n'aura peut-être jamais lieu n'apprend rien et
+  # noie la réponse : les deux appelants posent une question, ils n'agissent
+  # pas. Le vrai rebase, lui, affichera tout.
+  if ! git rebase --quiet "$target_ref" >/dev/null 2>&1; then
     rebase_ok=false
     git rebase --abort >/dev/null 2>&1 || true
   fi
@@ -777,12 +1013,127 @@ util_verify_rebase() {
   switch_branch "$start_branch" recover
   git branch -D "$temp_branch" >/dev/null 2>&1 || true
 
-  if [[ "$rebase_ok" == true ]]; then
-    echo "true"
-    return 0
-  else
-    echo "false"
+  [[ "$rebase_ok" == true ]]
+}
+
+# Répond à « est-ce que ma branche est encore à jour sur celle dont elle est
+# partie, et puis-je la rebaser sans conflit ? ».
+#
+# La branche d'origine n'est pas devinée : c'est celle que jgit a inscrite dans
+# le commit d'init au moment de la création. Sans cette trace, la commande
+# refuse plutôt que de supposer develop.
+#
+# Codes de sortie, pensés pour un script ou un tableau de bord :
+#   0  à jour, il n'y a rien à faire
+#   1  impossible de répondre (demande invalide, dépôt sale, origine inconnue)
+#   2  en retard, le rebase passerait sans conflit
+#   3  en retard, des conflits sont à prévoir
+util_check_rebase() {
+  local sources=("$@")
+  local branch
+
+  if [[ ${#sources[@]} -gt 1 ]]; then
+    printf "\033[1;31mErreur : une seule branche à la fois, via --from.\033[0m\n" >&2
     return 1
+  fi
+
+  if [[ ${#sources[@]} -eq 1 ]]; then
+    branch="${sources[0]}"
+  else
+    branch=$(git rev-parse --abbrev-ref HEAD)
+  fi
+
+  # Le rebase à blanc bascule de branche : il lui faut un dépôt propre. On le
+  # dit avant de travailler, pas au milieu.
+  if [[ -n $(git status --porcelain) ]]; then
+    printf "\033[1;31mVotre espace de travail contient des modifications non commitées.\033[0m\n" >&2
+    printf "La vérification rejoue un rebase à blanc : elle a besoin d'un dépôt propre.\n" >&2
+    printf "\nMettez-les de côté puis relancez :\n" >&2
+    printf "  git stash push -u -m \"avant jgit\"\n" >&2
+    return 1
+  fi
+
+  jgit_fetch_once || return 1
+
+  local branch_ref=""
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    branch_ref="$branch"
+  elif git show-ref --verify --quiet "refs/remotes/$j2s_remote/$branch"; then
+    branch_ref="$j2s_remote/$branch"
+  else
+    printf "\033[1;31mLa branche %s n'existe pas (ni en local ni sur %s).\033[0m\n" "$branch" "$j2s_remote" >&2
+    return 1
+  fi
+
+  local base
+  if ! base=$(read_based_on "$branch_ref" "$branch"); then
+    printf "\033[1;31mDésolé : jgit ne sait pas répondre pour les anciennes branches.\033[0m\n" >&2
+    printf "La branche %s ne porte pas sa branche d'origine : elle a été créée avant que jgit ne l'enregistre.\n" "$branch" >&2
+    printf "\nSeules les branches créées ou rebasées par une version récente de jgit portent cette trace.\n" >&2
+    printf "En attendant, la question se pose à la main, en nommant la base vous-même :\n" >&2
+    printf "  jgit util verify_rebase --from %s --into <branche_de_base>\n" "$branch" >&2
+    return 1
+  fi
+
+  local base_ref=""
+  if git show-ref --verify --quiet "refs/remotes/$j2s_remote/$base"; then
+    # C'est la version du serveur qui fait référence : être à jour sur une copie
+    # locale périmée ne veut rien dire.
+    base_ref="$j2s_remote/$base"
+  elif git show-ref --verify --quiet "refs/heads/$base"; then
+    base_ref="$base"
+  else
+    printf "\033[1;31mLa branche d'origine %s n'existe plus (ni en local ni sur %s).\033[0m\n" "$base" "$j2s_remote" >&2
+    printf "%s en est pourtant partie : la base a sans doute été livrée puis supprimée.\n" "$branch" >&2
+    printf "\nIl n'y a plus rien à quoi se comparer. Choisissez une base vivante :\n" >&2
+    printf "  jgit util verify_rebase --from %s --into <branche>   # la question, sans rien modifier\n" "$branch" >&2
+    print_rebase_suggestion "$branch" " --based-on <branche>" >&2
+    return 1
+  fi
+
+  local counts behind ahead
+  if ! counts=$(git rev-list --left-right --count "$base_ref...$branch_ref" 2>/dev/null); then
+    printf "\033[1;31mImpossible de comparer %s à %s.\033[0m\n" "$branch" "$base_ref" >&2
+    return 1
+  fi
+  behind=$(awk '{print $1}' <<< "$counts")
+  ahead=$(awk '{print $2}' <<< "$counts")
+
+  printf "%sBranche   :%s %s\n" "$(tput setaf 2)" "$(tput sgr0)" "$branch"
+  printf "%sBasée sur :%s %s (%s)\n" "$(tput setaf 2)" "$(tput sgr0)" "$base" "$base_ref"
+  printf "%sAvance    :%s %s commit(s) absents de %s\n" "$(tput setaf 2)" "$(tput sgr0)" "$ahead" "$base"
+
+  if [[ $behind -eq 0 ]]; then
+    printf "%sÉtat      : à jour sur %s, il n'y a rien à rebaser.%s\n" \
+      "$(tput setaf 2)" "$base" "$(tput sgr0)"
+    return 0
+  fi
+
+  printf "%sÉtat      : en retard de %s commit(s) sur %s.%s\n" \
+    "$(tput setaf 3)" "$behind" "$base" "$(tput sgr0)"
+
+  if rebase_dry_run "$branch" "$branch_ref" "$base" "$base_ref"; then
+    printf "%sRebase    : passerait sans conflit.%s\n" "$(tput setaf 2)" "$(tput sgr0)"
+    print_rebase_suggestion "$branch"
+    return 2
+  fi
+
+  printf "%sRebase    : des conflits sont à prévoir.%s\n" "$(tput setaf 1)" "$(tput sgr0)"
+  print_rebase_suggestion "$branch"
+  printf "L'option --squash ramène tous vos commits à un seul, donc les conflits à un seul.\n"
+  return 3
+}
+
+# Affiche la commande à lancer, quand le nom de la branche permet de la déduire.
+# $2 : options à accoler, le cas échéant (« --based-on <branche> »).
+print_rebase_suggestion() {
+  local branch="$1"
+  local options="${2:-}"
+  local type="${branch%%/*}"
+  local ticket="${branch#*/}"
+
+  if [[ "$type" == "feature" || "$type" == "hotfix" ]] && [[ -n "$ticket" && "$ticket" != "$branch" ]]; then
+    printf "  jgit %s rebase %s%s\n" "$type" "$ticket" "$options"
   fi
 }
 

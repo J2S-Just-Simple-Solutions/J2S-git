@@ -16,14 +16,19 @@ is_demo_branch() {
 demo_start() {
     local requested_name="$1"
     local based_on="$2"
+    # Le nom demandé est repris plus bas à partir de la base quand il est omis :
+    # on garde celui que l'utilisateur a réellement tapé pour le lui réafficher.
+    local requested_name_arg="$1"
     local _unused_into="$3"
     local current_local_branch=$(git rev-parse --abbrev-ref HEAD)
 
     jgit_fetch_once || exit_safe 1
 
     local base_branch
+    local base_provenance="reference"
     if [[ -n "$based_on" ]]; then
         base_branch="$based_on"
+        base_provenance="option"
     elif ! base_branch=$(get_reference_branch); then
         exit_safe 1
     fi
@@ -56,8 +61,10 @@ demo_start() {
         exit_safe 1
     fi
 
-    if ! branch_exists "$base_branch"; then
-        printf "\033[1;31mLa branche de référence %s est introuvable en local ou sur %s.\033[0m\n" "$base_branch" "$j2s_remote" >&2
+    # Même contrôle, même message que pour une feature : une base introuvable se
+    # lit de la même façon quelle que soit la commande qui l'a demandée.
+    if ! ensure_base_branch "$base_branch" "$base_provenance" "feature" \
+         "jgit demo start${requested_name_arg:+ $requested_name_arg}"; then
         exit_safe 1
     fi
 
@@ -75,7 +82,7 @@ demo_start() {
 
     switch_branch "$base_branch"
     switch_branch "$demo_branch" create
-    git commit --allow-empty -m "$prefix_init_commit demo $demo_branch $suffix_init_commit" --quiet
+    commit_init_with_based_on "$prefix_init_commit demo $demo_branch $suffix_init_commit" "$demo_branch" "$base_branch" --quiet
     git push --set-upstream "$j2s_remote" "$demo_branch" --quiet
 
     current_branch="$demo_branch"

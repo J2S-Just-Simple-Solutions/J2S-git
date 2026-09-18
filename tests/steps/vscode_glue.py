@@ -71,6 +71,10 @@ def step_jgit_ok(context):
 def step_jgit_ko(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("jgit se termine avec le code {int}")
+def step_jgit_code(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("la sortie contient {string}")
 def step_sortie_contient(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -125,6 +129,22 @@ def step_dernier_commit_contient(context):
 
 @given("l'historique de {string} contient {string}")
 def step_historique_contient(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la branche locale {string} est partie de {string}")
+def step_locale_partie_de(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la branche distante {string} est partie de {string}")
+def step_distante_partie_de(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la branche distante {string} ne porte aucune branche d'origine")
+def step_distante_sans_origine(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("aucun sujet de commit de la branche distante {string} ne montre la branche d'origine")
+def step_origine_invisible(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("GitHub a reçu {string}")
