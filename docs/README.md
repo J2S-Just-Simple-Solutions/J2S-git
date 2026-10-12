@@ -15,7 +15,7 @@ les limites connues. Lisible sans être expert Git.
 | [02 — Feature et hotfix](guide/02-feature-et-hotfix.md) | Démarrer et relancer un ticket |
 | [03 — Rebase](guide/03-rebase.md) | Rattraper la préprod sans casser sa PR, le squash |
 | [04 — Release](guide/04-release.md) | Préparer, alimenter et livrer une version |
-| [05 — Démo](guide/05-demo.md) | Assembler des tickets pour les montrer |
+| [05 — Démo](guide/05-demo.md) | Assembler des tickets pour les montrer : créer, lire, ajouter, retirer, remettre à jour |
 | [06 — Utilitaires](guide/06-utilitaires.md) | Nettoyage, vérification de rebase à blanc |
 | [07 — Règles communes](guide/07-regles-communes.md) | Options, questions, refus, configuration |
 

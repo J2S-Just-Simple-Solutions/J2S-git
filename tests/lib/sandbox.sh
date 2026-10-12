@@ -190,6 +190,33 @@ repo_use_non_standard_branches() {
     info "le projet n'a plus que la branche $trunk"
 }
 
+# Simule la livraison d'un ticket dans une branche de base : sa branche de PR
+# y est fusionnee avec le message de traçabilite d'une release jgit. C'est ce
+# que la base recoit quand la release qui contient le ticket y est reportee.
+github_deliver_pr() {
+    local branch="$1"
+    local base="$2"
+    local pr_branch="${JGIT_PREFIX_PR:-__PR__}$branch"
+
+    github_git fetch --quiet origin
+    github_git checkout --quiet -B "$base" "origin/$base"
+    github_git merge --no-ff --quiet "origin/$pr_branch" \
+        -m "[jgit] Release merge feature branch : $pr_branch" || \
+        assert_failed "livraison de $branch" "le merge de $pr_branch dans $base a echoue"
+    github_git push --quiet origin "$base"
+    info "GitHub : $pr_branch livree dans $base"
+}
+
+# Tickets d'une demo, dans l'ordre, lus directement sur le remote a partir des
+# reperes qui closent chaque segment.
+remote_demo_tickets() {
+    local branch="$1"
+
+    origin_git log --first-parent --reverse --format=%s "refs/heads/$branch" 2>/dev/null \
+        | sed -n 's/^\[jgit\] DEMO ticket \([^ ]*\) \[empty_commit\]$/\1/p' \
+        | awk '!seen[$0]++'
+}
+
 github_delete_branch() {
     local branch="$1"
     github_git push --quiet origin --delete "$branch"

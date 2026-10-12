@@ -130,8 +130,95 @@ chaque fichier pour retirer les marqueurs, `git add` chaque fichier, puis lancer
 `commands.continue` (avec `--json`). Un nouveau `jgit.conflict/1` peut revenir :
 c'est le commit suivant qui conflicte à son tour.
 
-Les documents propres aux démos (`jgit.demo.list/1`, `jgit.demo.show/1`…) sont
-décrits avec les commandes de démo.
+### `jgit.demo.list/1` — `jgit demo list`
+
+```json
+{"schema":"jgit.demo.list/1","ok":true,"command":"demo list","remote":"origin","scope":"active",
+ "demos":[{"name":"sprint12","branch":"demo/sprint12","format":"v2",
+           "archived":false,"archived_on":null,"read_only":false,
+           "base":"develop","base_exists":true,"behind_base":4,
+           "tip_sha":"…","updated_at":"2026-10-12T09:14:03+02:00","updated_by":"Yann",
+           "ticket_count":3,"tickets_needing_attention":1,"foreign_commit_count":0,
+           "needs_rebase":true,"operation_in_progress":false}],
+ "archived_count":2}
+```
+
+| Champ d'une démo | Sens |
+| --- | --- |
+| `format` | `v2` (format actuel) ou `legacy` (ancienne démo `demo_<nom>`, lecture seule) |
+| `read_only` | `true` pour une archive ou une ancienne démo |
+| `behind_base` | commits de la base absents de la démo ; `null` si la base n'existe plus |
+| `tickets_needing_attention` | tickets dont l'action suggérée n'est pas `none` |
+| `foreign_commit_count` | commits poussés à la main, hors de tout ticket |
+| `operation_in_progress` | une opération en pause concerne cette démo |
+
+### `jgit.demo.show/1` — `jgit demo show`
+
+```json
+{"schema":"jgit.demo.show/1","ok":true,"command":"demo show",
+ "demo":{ "…le même objet que dans la liste…" },
+ "tickets":[{"ticket":"feature/MONPROJET-88","type":"feature","id":"MONPROJET-88","position":2,
+             "status":"ahead","delivered":false,"delivered_with_pending_work":false,
+             "remote_exists":true,"commits_in_demo":3,"commits_not_in_demo":2,
+             "commits_only_in_demo":0,"segments":1,"suggested_action":"add"}],
+ "foreign_commits":[{"sha":"…","subject":"Rustine","author":"Yann"}],
+ "release_command":"jgit release merge --from feature/MONPROJET-412 --from feature/MONPROJET-88"}
+```
+
+| Champ d'un ticket | Valeurs |
+| --- | --- |
+| `status` | `up_to_date`, `ahead` (nouveaux commits pas encore dans la démo), `diverged` (ticket réécrit depuis son ajout), `missing` (branche supprimée du serveur), `unknown` (ancien format) |
+| `delivered` | le ticket est livré dans la base de la démo |
+| `delivered_with_pending_work` | livré, mais la branche de travail porte du code que la PR livrée n'a pas |
+| `suggested_action` | `none`, `add`, `refresh` ou `drop` |
+| `commits_*` | comptés à l'empreinte (auteur, date, sujet) ; `null` pour l'ancien format |
+
+### `jgit.demo.candidates/1` — `jgit demo candidates`
+
+```json
+{"schema":"jgit.demo.candidates/1","ok":true,"command":"demo candidates",
+ "demo":"sprint12","base":"develop",
+ "candidates":[{"ticket":"feature/MONPROJET-90","type":"feature","id":"MONPROJET-90",
+                "updated_at":"2026-10-12T08:01:00+02:00","last_subject":"…",
+                "author":"Camille","delivered":false}]}
+```
+
+### `jgit.demo.result/1` — `create`, `add`, `drop`, `refresh`, `rebase`, `continue`
+
+```json
+{"schema":"jgit.demo.result/1","ok":true,"command":"demo rebase","operation":"rebase",
+ "demo":"sprint12","branch":"demo/sprint12",
+ "changed":true,"pushed":true,"dry_run":false,
+ "base":"develop","old_sha":"…","new_sha":"…",
+ "added":[],"updated":[],
+ "dropped":[{"ticket":"feature/MONPROJET-412","reason":"delivered"}],
+ "warnings":[{"code":"foreign_commits_kept","ticket":null}]}
+```
+
+| Champ | Sens |
+| --- | --- |
+| `changed` | `false` : la démo était déjà dans l'état demandé, rien n'a été publié |
+| `pushed` | `false` en `--dry-run` ou quand rien ne change |
+| `dropped[].reason` | `requested`, `delivered`, `missing`, `foreign` (ticket `-` : les commits ajoutés à la main) |
+| `warnings[].code` | `foreign_commits_kept`, `delivered_with_pending_work`, `local_branch_stale` |
+
+Un conflit produit `jgit.conflict/1`, avec `context.demo` et `context.ticket`.
+
+### Codes d'erreur des démos
+
+| `error.code` | Code de sortie | Situation |
+| --- | --- | --- |
+| `usage` | 1 | nom ou `--from` manquant |
+| `invalid_name`, `already_exists`, `demo_not_found`, `not_a_demo` | 2 | la démo elle-même |
+| `base_not_found`, `base_not_published` | 2 | la base |
+| `bad_ticket_format`, `ticket_not_found`, `ticket_not_in_demo`, `ticket_diverged`, `ticket_delivered` | 2 | un ticket |
+| `archived`, `legacy_format` | 2 | démo en lecture seule |
+| `foreign_merge` | 2 | un commit de fusion poussé à la main empêche la reconstruction |
+| `worktree_dirty` | 1 | l'espace de travail n'est pas propre |
+| `conflict`, `unresolved_files`, `conflict_markers_left` | 3 | conflit |
+| `lease_rejected` | 4 | la démo a été modifiée sur le serveur pendant l'opération |
+| `operation_in_progress` | 5 | une opération est en pause |
+| `remote_unreachable` | 6 | serveur injoignable |
 
 ---
 

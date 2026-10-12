@@ -77,6 +77,11 @@ trailer_based_on="jgit-based-on"
 JGIT_NO_INTERACTION=false
 JGIT_NO_FETCH=false
 JGIT_ON_CONFLICT=""
+JGIT_DEMO_SCOPE="active"
+JGIT_DRY_RUN=false
+JGIT_KEEP_DELIVERED=false
+JGIT_KEEP_MISSING=false
+JGIT_DROP_FOREIGN=false
 JGIT_SQUASH=false
 JGIT_SQUASH_THRESHOLD=$squash_threshold
 JGIT_NO_OPEN=false
@@ -124,6 +129,17 @@ help() {
     printf "  jgit release finish [--into <x.y.z>]\n\n"
 
     printf "${C_BLUE}Demo:${C_RESET}\n"
+    printf "  jgit demo list [--archived | --all]   Les démos du projet et leur état.\n"
+    printf "  jgit demo show [<nom>]                Le contenu d'une démo, ticket par ticket.\n"
+    printf "  jgit demo candidates [<nom>]          Les tickets que l'on peut ajouter à une démo.\n"
+    printf "  jgit demo create <nom> [--based-on <branch>] [--from <ticket>]...\n"
+    printf "  jgit demo add [<nom>] --from <ticket>...      Ajoute des tickets, ou leurs nouveaux commits.\n"
+    printf "  jgit demo drop [<nom>] --from <ticket>...     Reconstruit la démo sans ces tickets.\n"
+    printf "  jgit demo refresh [<nom>] --from <ticket>...  Reprend ces tickets en entier depuis leur branche.\n"
+    printf "  jgit demo rebase [<nom>] [--based-on <branch>] [--keep-delivered] [--keep-missing]\n"
+    printf "                                        Reconstruit la démo sur la version actuelle de sa base.\n"
+    printf "  jgit demo continue [<nom>] | abort [<nom>]   Reprend ou annule une opération en pause.\n"
+    printf "  Options des commandes qui modifient : --dry-run, --drop-foreign, --on-conflict <mode>\n"
     printf "  jgit demo start [<demo_name>] [--based-on <branch>]\n"
     printf "  jgit demo merge [--from feature/<ticket>]... [--into <branch>]\n"
     printf "  jgit demo list\n"
@@ -203,6 +219,30 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-fetch)
             JGIT_NO_FETCH=true
+            shift
+            ;;
+        --archived)
+            JGIT_DEMO_SCOPE="archived"
+            shift
+            ;;
+        --dry-run)
+            JGIT_DRY_RUN=true
+            shift
+            ;;
+        --keep-delivered)
+            JGIT_KEEP_DELIVERED=true
+            shift
+            ;;
+        --keep-missing)
+            JGIT_KEEP_MISSING=true
+            shift
+            ;;
+        --drop-foreign)
+            JGIT_DROP_FOREIGN=true
+            shift
+            ;;
+        --all)
+            JGIT_DEMO_SCOPE="all"
             shift
             ;;
         --on-conflict|--on-conflict=*)
@@ -303,17 +343,27 @@ ensure_supported_platform || exit_safe 1
 ensure_remote
 ensure_full_history || exit_safe 1
 
+# Commandes qui ne font que lire : elles ne commitent rien, ne touchent ni à
+# l'espace de travail ni à la branche courante.
+jgit_command_is_read_only() {
+    case "$JGIT_TYPE $JGIT_ACTION" in
+        "demo list"|"demo show"|"demo candidates") return 0 ;;
+    esac
+    return 1
+}
+
 # Seules les commandes qui ne commitent jamais se passent d'identité git.
 case "$JGIT_TYPE $JGIT_ACTION" in
     "util clean"|"clean "*) ;;
-    *) ensure_git_identity || exit_safe 1 ;;
+    *) jgit_command_is_read_only || ensure_git_identity || exit_safe 1 ;;
 esac
 
 # Une opération en pause sur un conflit occupe l'espace de travail : seules la
-# reprise et l'annulation peuvent tourner tant qu'elle n'est pas terminée.
+# reprise, l'annulation et les commandes de lecture peuvent tourner tant
+# qu'elle n'est pas terminée.
 case "$JGIT_ACTION" in
     continue|abort) ;;
-    *) refuse_if_operation_paused ;;
+    *) jgit_command_is_read_only || refuse_if_operation_paused ;;
 esac
 
 case "$JGIT_TYPE" in
@@ -422,7 +472,47 @@ case "$JGIT_TYPE" in
                 demo_merge "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
                 ;;
             list)
-                demo_list
+                if [[ -n "$JGIT_TARGET" ]]; then
+                    jgit_fail usage "$JGIT_EXIT_ERROR" \
+                        "demo list n'attend pas de nom de démo." \
+                        "Le contenu d'une démo : jgit demo show $JGIT_TARGET"
+                fi
+                # Rétrocompatibilité : lancée depuis une démo à l'ancien format,
+                # « demo list » affichait le contenu de cette démo.
+                if [[ "$JGIT_DEMO_SCOPE" == "active" ]] && is_demo_branch "$current_branch"; then
+                    warn_deprecated_syntax "jgit demo list (depuis $current_branch)" "jgit demo show ${current_branch#demo_}"
+                    demo_list
+                fi
+                demo_list_cmd "$JGIT_DEMO_SCOPE"
+                ;;
+            show)
+                demo_show_cmd "$JGIT_TARGET"
+                ;;
+            create)
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
+                demo_create_cmd "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE" ${JGIT_FROM_SOURCES[@]+"${JGIT_FROM_SOURCES[@]}"}
+                ;;
+            add|drop|refresh)
+                if [[ ${#JGIT_FROM_SOURCES[@]} -eq 0 ]]; then
+                    jgit_fail usage "$JGIT_EXIT_ERROR" \
+                        "Précisez au moins un ticket avec --from." \
+                        "jgit demo $JGIT_ACTION ${JGIT_TARGET:-<nom>} --from feature/<ticket>"
+                fi
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
+                "demo_${JGIT_ACTION}_cmd" "$JGIT_TARGET" "${JGIT_FROM_SOURCES[@]}"
+                ;;
+            rebase)
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
+                demo_rebase_cmd "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
+                ;;
+            continue)
+                demo_continue_cmd "$JGIT_TARGET"
+                ;;
+            abort)
+                demo_abort_cmd "$JGIT_TARGET"
+                ;;
+            candidates)
+                demo_candidates_cmd "$JGIT_TARGET"
                 ;;
             remove)
                 refuse_if_worktree_dirty "Une démo" || exit_safe 1

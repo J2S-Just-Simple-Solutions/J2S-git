@@ -87,6 +87,10 @@ def step_appel_par_lien(context):
 def step_terminal_non_defini(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("la PR de {string} est livrée dans {string}")
+def step_pr_livree(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("la branche {string} est supprimée sur GitHub")
 def step_github_supprime_branche(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -153,6 +157,14 @@ def step_json_longueur(context):
 
 @given("le JSON n'a pas de {string}")
 def step_json_absent(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la démo distante {string} contient dans l'ordre les tickets :")
+def step_demo_tickets(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la démo distante {string} ne contient aucun ticket")
+def step_demo_sans_ticket(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("une opération jgit est en pause")
@@ -277,6 +289,10 @@ def step_note_etat_branche_distante(context):
 
 @given("la branche distante {string} est inchangée")
 def step_branche_distante_inchangee(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la branche distante {string} a avancé sans réécriture")
+def step_branche_distante_avance_rapide(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("la branche distante {string} a changé")

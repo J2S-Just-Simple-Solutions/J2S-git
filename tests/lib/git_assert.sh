@@ -370,6 +370,19 @@ assert_json_missing() {
 }
 
 ###############################################
+#            Demos
+###############################################
+
+assert_remote_demo_tickets() {
+    local branch="$1"
+    local expected="$2"
+    local actual
+
+    actual=$(remote_demo_tickets "$branch")
+    assert_equals "$expected" "$actual" "tickets de la demo $branch, dans l'ordre"
+}
+
+###############################################
 #            Operation en pause
 ###############################################
 
@@ -467,6 +480,20 @@ assert_remote_branch_unchanged() {
     fi
     actual=$(origin_git rev-parse "refs/heads/$branch" 2>/dev/null) || actual="(branche absente)"
     assert_equals "$expected" "$actual" "$label"
+}
+
+# La branche a avance sans reecriture : l'etat note en est un ancetre.
+assert_remote_branch_fast_forwarded() {
+    local branch="$1"
+    local before current
+
+    before=$(remote_snapshot_read "$branch")
+    current=$(origin_git rev-parse "refs/heads/$branch" 2>/dev/null)
+    if [[ -n "$before" && "$before" != "$current" ]] && origin_git merge-base --is-ancestor "$before" "$current"; then
+        assert_ok "$branch a avance sans reecriture"
+    else
+        assert_failed "$branch a avance sans reecriture" "avant : $before" "apres : $current"
+    fi
 }
 
 assert_remote_branch_changed() {

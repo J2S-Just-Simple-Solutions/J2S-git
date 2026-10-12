@@ -285,10 +285,26 @@ Dans les deux cas l'espace de travail est rendu propre : rien n'est perdu.
 
 ### Demo
 
-- `jgit demo start [<nom_demo>] [--based-on <branche>]` : prépare une branche `demo_<nom>` existante (checkout + fast-forward) ou en crée une nouvelle à partir de la branche fournie après confirmation.
-- `jgit demo merge [--into <branche_demo>] --from feature/<ticket> [--from hotfix/<ticket>]...` : intègre successivement chaque branche listée dans la démo cible (branche courante par défaut). L'intégration procède par **rebase de la branche de démo sur la source**, suivi d'un `push --force-with-lease` : l'historique de la démo est réécrit à chaque ajout, ce qui le garde linéaire. Une branche de démo est jetable et ne doit servir qu'à la démonstration. En cas de conflit, `jgit` s'arrête et vous laisse la main (`git rebase --continue` ou `git rebase --abort`).
-- `jgit demo list` : parcourt les commits `[jgit] DEMO …`, affiche les branches déjà fusionnées et suggère les commandes `jgit release merge --from ...` correspondantes.
-- `jgit demo remove [--no-interaction]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
+Une démo est une **recette** : une base et une liste ordonnée de tickets, écrite dans la branche `demo/<nom>` elle-même. Les commits de chaque ticket y sont recopiés tels quels (cherry-pick), puis un commit repère clôt le ticket. Le guide complet, avec les états de chaque ticket, est dans [`docs/guide/05-demo.md`](docs/guide/05-demo.md).
+
+Lire (ne touche ni à l'espace de travail ni à la branche courante) :
+
+- `jgit demo list [--archived | --all]` : les démos du projet, leur base et leur état.
+- `jgit demo show [<nom>]` : le détail d'une démo, ticket par ticket (à jour, a avancé, réécrit, branche supprimée, livré), avec la commande à lancer pour chaque action utile et la commande `jgit release merge` correspondante.
+- `jgit demo candidates [<nom>]` : les tickets que l'on peut ajouter.
+
+Fabriquer (sur une branche temporaire `jgit_demo_<nom>`, à partir de la version du serveur, publication finale par `--force-with-lease`, rien n'est publié si rien ne change, `--dry-run` disponible) :
+
+- `jgit demo create <nom> [--based-on <branche>] [--from <ticket>]...`
+- `jgit demo add [<nom>] --from <ticket>...` : ajoute des tickets à la suite, ou les nouveaux commits d'un ticket déjà présent, sans rien réécrire.
+- `jgit demo drop [<nom>] --from <ticket>...` : reconstruit la démo sans ces tickets, à partir d'elle-même.
+- `jgit demo refresh [<nom>] --from <ticket>...` : reprend en entier un ticket réécrit (squash), à sa place.
+- `jgit demo rebase [<nom>] [--based-on <branche>] [--keep-delivered] [--keep-missing] [--drop-foreign]` : reconstruit la démo sur la version actuelle de sa base ; les tickets livrés et ceux dont la branche a disparu sont retirés.
+- `jgit demo continue [<nom>]` / `jgit demo abort [<nom>]` : reprise ou annulation après un conflit mis en pause (`--on-conflict pause`).
+
+Les résolutions de conflit sont des commits de la démo : les reconstructions suivantes les rejouent sans les redemander.
+
+Les anciennes démos `demo_<nom>` restent lisibles par `list` et `show` ; `jgit demo start`, `merge` et `remove` les manipulent encore, le temps de la transition.
 
 ### Espace de travail et stash automatique
 

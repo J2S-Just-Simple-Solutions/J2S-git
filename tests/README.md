@@ -176,6 +176,7 @@ Les valeurs sont toujours entre guillemets.
 | --- |
 | `Quand la PR de "…" est squash-mergée sur GitHub avec le message "…"` |
 | `Quand la branche "…" est supprimée sur GitHub` |
+| `Quand la PR de "…" est livrée dans "…"` (la branche de PR est fusionnée dans la base avec le message d'une release jgit) |
 | `Quand un autre développeur pousse le fichier "…" contenant "…" sur la branche "…" avec le message "…"` |
 | `Quand le client gh échoue pour les commandes "…"` (motif `grep -E`) |
 
@@ -188,6 +189,9 @@ Les valeurs sont toujours entre guillemets.
 | `Et la sortie contient "…"` / `ne contient pas "…"` |
 | `Et la sortie ne contient aucune séquence de couleur` (ni séquence ANSI, ni erreur de `tput`) |
 | `Et une opération jgit est en pause` / `Et aucune opération jgit n'est en pause` |
+| `Et la démo distante "…" contient dans l'ordre les tickets :` + tableau d'une colonne |
+| `Et la démo distante "…" ne contient aucun ticket` |
+| `Et la branche distante "…" a avancé sans réécriture` (l'état noté en est un ancêtre) |
 | `Et la sortie standard est un unique document JSON` |
 | `Et le JSON a "chemin" égal à "…"` / `égal au nombre N` / `vrai` / `faux` / `nul` / `qui contient "…"` |
 | `Et le JSON n'a pas de "chemin"` |
@@ -288,6 +292,9 @@ Les fonctions utilisables dans une définition d'étape :
 | `assert_json_document`, `assert_json_equals`, `assert_json_type`, `assert_json_length`, `assert_json_missing` | vérifications sur le document |
 | `repo_resolve_file <chemin> <contenu>`, `repo_mark_resolved <chemin>` | résolution d'un conflit dans le dépôt de travail |
 | `assert_operation_paused` / `assert_no_operation_paused` | état `.git/jgit/operation.state` |
+| `github_deliver_pr <branche> <base>` | simule la livraison d'un ticket dans une base |
+| `remote_demo_tickets <branche>`, `assert_remote_demo_tickets` | tickets d'une démo lus sur le remote, à partir des repères |
+| `assert_remote_branch_fast_forwarded <branche>` | la branche a avancé sans réécriture depuis l'état noté |
 | `jgit_use_symlink` | appelle `jgit` par un lien symbolique jusqu'à la fin du scénario |
 | `repo_reclone <options git clone…>` | remplace le dépôt de travail par un nouveau clone (`--depth`, `--single-branch`…) |
 | `repo_remove_git_identity` | retire toute identité git et interdit à git d'en deviner une |
@@ -345,7 +352,7 @@ test_passed
 
 ## Scénarios existants
 
-219 scénarios répartis par domaine fonctionnel.
+283 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -355,7 +362,7 @@ test_passed
 | `04_feature_restart.feature` | restart après squash-merge, refus si le code diffère, refus d'une feature inconnue, `--no-open`, hotfix |
 | `05_feature_rebase.feature` | rebase nominal, hotfix, `--based-on`, `--squash`, seuil de squash, refus des deux confirmations, conflits, PR déjà mergée, commit de fusion, branches non publiées |
 | `06_release.feature` | `release start` (calcul de version, version explicite, sans tag, reprise, **refus** d'un dépôt sale ou de commits non poussés sur `main`), `release merge` (`--from`, `--into`, sources multiples, PR non mergée, **conflit**), `release finish` (tag, merge, release vide, bascule de branche, **conflit**, **refus** de commits non poussés) |
-| `07_demo.feature` | `demo start` (nom par défaut, `--based-on`, reprise, refus d'un dépôt sale ou d'une base non publiée), `demo merge` (sources multiples, doublon, formats invalides, `--into`, **conflit**), `demo list`, `demo remove` |
+| `07_demo.feature` | démos à l'ancien format `demo_<nom>` : `demo start` (nom par défaut, `--based-on`, reprise, refus d'un dépôt sale ou d'une base non publiée), `demo merge` (sources multiples, doublon, formats invalides, `--into`, **conflit**), `demo list` depuis une ancienne démo, leur place dans `demo list`, `demo remove` |
 | `08_util_et_stash.feature` | `util clean`, `util verify_rebase` (tous les refus, true/false, absence de trace, branches n'existant que sur le serveur), stash automatique accepté et refusé sur `feature`, et son remplacement par un refus sur `release` et `demo` |
 | `09_parcours_complets.feature` | hotfix de bout en bout, feature rebasée puis redémarrée puis livrée, démo servant de répétition, deux releases successives |
 | `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
@@ -365,6 +372,10 @@ test_passed
 | `14_confirmation.feature` | réponses aux confirmations sans tenir compte de la casse : `Y`, `YES`, `oui`, `O` acceptent ; `N` et une réponse inconnue refusent |
 | `15_contrat_json.feature` | `--json` : document unique de résultat ou d'erreur, `--no-interaction` implicite, erreurs d'usage et refus identifiés, échappement des caractères spéciaux, aide, absence de couleur, `--no-fetch` |
 | `16_rebase_pause_reprise.feature` | `--on-conflict pause` : conflit décrit, résolution puis `continue`, conflits successifs, résolution inachevée ou marqueurs restants, `abort`, refus des autres commandes pendant la pause, lease au moment de publier, abandon sans interaction, valeur inconnue |
+| `17_demo_creation_et_lecture.feature` | `demo create` (base, tickets, `--based-on`, confirmation, `--dry-run`, refus), `demo list`, `demo show` (chaque état de ticket, retard sur la base, commit ajouté à la main), `demo candidates` |
+| `18_demo_tickets.feature` | `demo add` (à la suite, sans réécriture ; nouveaux commits d'un ticket ; à jour ; réécrit ; livré), `demo drop` (ordre conservé, premier ticket, confirmation, `--dry-run`, commits ajoutés à la main, `--drop-foreign`), `demo refresh` |
+| `19_demo_rebase.feature` | `demo rebase` : base qui a avancé, démo à jour non republiée, tickets livrés ou disparus retirés (`--keep-*`), `--based-on`, commits ajoutés à la main, `--dry-run`, base inconnue |
+| `20_demo_conflits.feature` | conflit de démo en pause, `continue`, résolution rejouée par les reconstructions suivantes, `abort`, abandon sans interaction, lecture pendant la pause, lease, mauvaise démo |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

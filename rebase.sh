@@ -267,7 +267,7 @@ feature_rebase() {
     OP_type="$feature_type"
     OP_ticket="$feature_name"
     OP_target="$branch"
-    OP_label="rebase de $branch sur $reference_branch"
+    OP_label="le rebase de $branch sur $reference_branch"
     OP_continue_command="jgit $feature_type continue $feature_name"
     OP_abort_command="jgit $feature_type abort $feature_name"
     OP_work_branch="$branch"
@@ -370,7 +370,7 @@ feature_rebase_replay() {
             OP_head_before="$REPLAY_HEAD_BEFORE"
             OP_branch=$(git rev-parse --abbrev-ref HEAD)
             jgit_state_save "${FEATURE_REBASE_STATE[@]}"
-            replay_pause_exit conflict "Conflit pendant le $OP_label."
+            replay_pause_exit conflict "Conflit pendant $OP_label."
             ;;
     esac
 
@@ -378,7 +378,7 @@ feature_rebase_replay() {
     jgit_state_clear
 
     if [[ $status -eq 2 ]]; then
-        replay_report_aborted_conflict "Conflit pendant le $OP_label : le rebase a été annulé."
+        replay_report_aborted_conflict "Conflit pendant $OP_label : le rebase a été annulé."
         exit_safe "$JGIT_EXIT_CONFLICT"
     fi
 
@@ -484,7 +484,7 @@ feature_rebase_load_paused() {
 
     if [[ "$OP_operation" != "feature_rebase" || "$OP_type" != "$feature_type" || "$OP_ticket" != "$feature_name" ]]; then
         jgit_fail operation_mismatch "$JGIT_EXIT_REFUSED" \
-            "L'opération en pause n'est pas celle-ci : c'est le $OP_label." \
+            "L'opération en pause n'est pas celle-ci : c'est $OP_label." \
             "$OP_continue_command   (ou : $OP_abort_command)"
     fi
 

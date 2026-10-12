@@ -356,3 +356,52 @@ chaque branche.
   disparaît sans que personne le sache.
 - `--json` impliquant `pause` : Jenkins utilise `--json` et ne doit jamais
   laisser un dépôt au milieu d'une opération.
+
+---
+
+## 15. Une démo est une recette écrite dans sa propre branche
+
+**Contexte.** La première version des démos rejouait la démo par-dessus chaque
+ticket ajouté (`git rebase origin/feature/X`). La base dérivait vers celle du
+dernier ticket, les SHA changeaient à chaque ajout, et la détection « déjà
+présent » reposait sur des SHA que `jgit feature rebase` recalcule de toute
+façon. Il n'y avait pas de vue d'ensemble, pas de retrait possible.
+
+**Décision.**
+- Une démo est une base et une liste ordonnée de tickets, **écrite dans la
+  branche** `demo/<nom>` : commit d'init (trailers `jgit-branch`,
+  `jgit-based-on`, `jgit-demo-format: 2`), puis, pour chaque ticket, ses commits
+  cherry-pickés tels quels et un **repère qui clôt le segment**
+  (`[jgit] DEMO ticket <T> [empty_commit]`). Le repère ferme le segment plutôt
+  que de l'ouvrir : ce qui suit le dernier repère est, sans ambiguïté, un commit
+  poussé à la main.
+- Un ticket est identifié par ses repères ; un commit, par son **empreinte**
+  (adresse de l'auteur, date d'auteur, sujet), que le cherry-pick conserve — et
+  donc aussi le rebase de `jgit`. Jamais par un SHA.
+- « Livré » se lit dans les traces jgit que la release fait remonter dans la
+  base : le commit d'init de la branche de PR, le merge de release.
+- Toute modification passe par un plan (`init`, `pick`, `marker`) déroulé sur une
+  branche temporaire par le moteur de rejeu commun (choix n°14), puis un seul
+  `push --force-with-lease=<ref>:<sha lu>`. Ajouter est une avance rapide ;
+  retirer, reprendre et rebaser reconstruisent **à partir de la démo
+  elle-même**, ce qui rejoue les résolutions de conflit déjà faites.
+- Une démo inchangée n'est jamais republiée.
+
+**Conséquences.** La démo se lit sans autre source ; `show` sait dire, ticket par
+ticket, ce qui est à jour, ce qui a avancé, ce qui a été réécrit ou livré. Une IA
+ou Jenkins pilote le tout par `--json`. En contrepartie, un ticket squashé ou
+réécrit à la main n'est plus reconnu commit par commit : il passe en
+« réécrit », et `refresh` le reprend.
+
+**Écarté.**
+- Des commits de fusion (`merge --no-ff` de chaque ticket) : un ticket rebasé par
+  `jgit` n'est plus un ancêtre de sa version précédente, et le rebase de feature
+  existant procède par cherry-pick — deux mécaniques pour un même métier.
+- Un fichier de recette à part (branche de métadonnées) : une seconde source de
+  vérité, susceptible de diverger de la branche réelle.
+- `git rerere` comme mémoire des résolutions : son cache est local au poste ;
+  Jenkins et les collègues ne l'auraient pas. La résolution vit dans la démo.
+- Une copie de travail séparée (`git worktree`) : la règle n°3 (un seul point de
+  bascule de branche) et le rebase existant travaillent dans l'espace de travail ;
+  une seule façon de faire.
+

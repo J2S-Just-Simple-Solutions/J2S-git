@@ -163,6 +163,11 @@ step_terminal_non_defini() {
 }
 step_def "le terminal n'est pas défini" step_terminal_non_defini
 
+step_pr_livree() {
+    github_deliver_pr "$1" "$2"
+}
+step_def "la PR de {chaine} est livrée dans {chaine}" step_pr_livree
+
 step_github_supprime_branche() {
     github_delete_branch "$1"
 }
@@ -261,6 +266,28 @@ step_json_absent() {
     assert_json_missing "$1"
 }
 step_def "le JSON n'a pas de {chaine}" step_json_absent
+
+###############################################
+#            Verifications : demos
+###############################################
+
+# Le tableau liste les tickets attendus, un par ligne, dans l'ordre.
+step_demo_tickets() {
+    local rows row=1 expected=""
+
+    rows=$(step_table_row_count)
+    while [[ $row -le $rows ]]; do
+        expected="$expected$(step_table_cell "$row" 1)"$'\n'
+        row=$((row + 1))
+    done
+    assert_remote_demo_tickets "$1" "${expected%$'\n'}"
+}
+step_def "la démo distante {chaine} contient dans l'ordre les tickets :" step_demo_tickets
+
+step_demo_sans_ticket() {
+    assert_remote_demo_tickets "$1" ""
+}
+step_def "la démo distante {chaine} ne contient aucun ticket" step_demo_sans_ticket
 
 ###############################################
 #            Verifications : operation en pause
@@ -448,6 +475,11 @@ step_branche_distante_inchangee() {
     assert_remote_branch_unchanged "$1"
 }
 step_def "la branche distante {chaine} est inchangée" step_branche_distante_inchangee
+
+step_branche_distante_avance_rapide() {
+    assert_remote_branch_fast_forwarded "$1"
+}
+step_def "la branche distante {chaine} a avancé sans réécriture" step_branche_distante_avance_rapide
 
 step_branche_distante_modifiee() {
     assert_remote_branch_changed "$1"

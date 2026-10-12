@@ -738,3 +738,79 @@ d'un seul geste, et seulement s'il n'a pas bougé.
 | Une commande qui changerait de branche au milieu d'un conflit en pause |
 | `--json` qui laisserait un dépôt au milieu d'une opération sans qu'on l'ait demandé |
 
+---
+
+## Parcours 17 — Créer une démo, puis la lire
+
+Fichier : [`tests/features/17_demo_creation_et_lecture.feature`](../tests/features/17_demo_creation_et_lecture.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `demo create` | branche `demo/<nom>` sur la version serveur de la base, commit d'init avec sa base ; on reste sur sa branche |
+| `demo create --from …` | les tickets dans l'ordre demandé, leurs commits de travail sans leurs commits d'init |
+| `--based-on`, confirmation refusée, `--dry-run` | base choisie ; rien créé ; rien créé mais le plan est annoncé |
+| Démo existante, nom invalide, nom manquant, base inconnue, ticket mal formé ou absent, espace de travail sale | refus identifiés, rien créé |
+| `demo list` | chaque démo, sa base, ses tickets, son état ; « Aucune démo » ; aucune identité git nécessaire |
+| `demo show` | ticket à jour, qui a avancé, **rebasé par jgit (toujours à jour)**, squashé (réécrit), supprimé, livré ; démo en retard sur sa base ; commit poussé à la main ; démo de la branche courante ; refus d'une démo inconnue |
+| `demo candidates` | tickets absents de la démo, livrés mis à part ; sans démo, tous les tickets |
+
+---
+
+## Parcours 18 — Ajouter, retirer, reprendre des tickets
+
+Fichier : [`tests/features/18_demo_tickets.feature`](../tests/features/18_demo_tickets.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `demo add` d'un ou plusieurs tickets | ajoutés à la suite, dans l'ordre, **sans réécriture** |
+| `demo add` d'un ticket qui a avancé | seuls ses nouveaux commits, à la suite ; le ticket garde sa place |
+| `demo add` d'un ticket à jour | rien n'est publié |
+| `demo add` d'un ticket réécrit ou déjà livré | refus, avec la commande à lancer |
+| `demo drop` | reconstruction sans le ticket, ordre conservé ; premier ticket compris ; confirmation ; `--dry-run` ; ticket absent refusé |
+| Commit poussé à la main | survit au retrait ; `--drop-foreign` l'écarte |
+| `demo refresh` | un ticket squashé est repris en entier, à sa place ; à jour : rien n'est publié |
+
+---
+
+## Parcours 19 — Rebaser une démo
+
+Fichier : [`tests/features/19_demo_rebase.feature`](../tests/features/19_demo_rebase.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Base qui a avancé | la démo est reconstruite dessus, tickets à jour |
+| Démo déjà à jour | **rien n'est publié** — un déploiement planifié ne se relance pas pour rien |
+| Ticket livré dans la base | retiré (`--keep-delivered` le garde) |
+| Branche de ticket supprimée | retiré (`--keep-missing` le garde, ses commits sont dans la démo) |
+| `--based-on` | la démo change de base |
+| Commits poussés à la main | rejoués à la fin et signalés ; `--drop-foreign` les écarte |
+| `--dry-run` | le plan est annoncé, rien n'est publié |
+| Base inconnue | même refus que partout ailleurs |
+
+---
+
+## Parcours 20 — Les conflits d'une démo
+
+Fichier : [`tests/features/20_demo_conflits.feature`](../tests/features/20_demo_conflits.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Conflit en pause | `jgit.conflict/1` avec la démo et le ticket en cause ; serveur inchangé |
+| Résolution puis `demo continue` | la démo est publiée avec la résolution ; le ticket est reconnu à jour |
+| Reconstruction ultérieure (`drop` d'un autre ticket, `rebase`) | **la résolution est rejouée, sans nouveau conflit** |
+| `demo abort` | rien n'est publié, on revient sur sa branche, espace de travail propre |
+| `continue` sans résolution | reste en pause |
+| Sans interaction | abandon décrit, rien laissé en cours |
+| Pendant la pause | `list` et `show` fonctionnent, `rebase` refuse (code 5) |
+| Un collègue modifie la démo pendant la pause | `continue` ne publie rien (code 4), son commit est intact |
+| `continue` d'une autre démo | refus |
+
+| Régression qui serait attrapée |
+| --- |
+| Une démo qui dériverait vers la base de son dernier ticket |
+| Un ticket rebasé par `jgit` vu comme différent |
+| Une reconstruction qui redemanderait un conflit déjà résolu |
+| Une démo republiée sans changement, déclenchant un déploiement inutile |
+| Un collègue écrasé par un `push --force` |
+| Un commit poussé à la main perdu en silence |
+

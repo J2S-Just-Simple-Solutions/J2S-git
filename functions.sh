@@ -937,7 +937,7 @@ switch_branch() {
 clean_branches() {
   # Récupérer toutes les branches locales correspondant aux préfixes
   local branches_to_delete
-  branches_to_delete=$(git branch | grep -E "^[[:space:]]*(jgit_rebase_|__PR__|jgit_verify_rebase)")
+  branches_to_delete=$(git branch | grep -E "^[[:space:]]*(jgit_rebase_|jgit_demo_|__PR__|jgit_verify_rebase)")
 
   # Vérifier si des branches correspondent
   if [[ -z "$branches_to_delete" ]]; then

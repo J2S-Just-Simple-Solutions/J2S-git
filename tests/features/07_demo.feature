@@ -187,12 +187,19 @@ Fonctionnalité: Branches de démonstration
     Quand je lance "jgit demo list"
     Alors jgit se termine sans erreur
     Et la sortie contient "Aucune branche mergée détectée pour demo_sprint12."
+    Et la sortie contient "[déprécié] « jgit demo list (depuis demo_sprint12) » : utilisez désormais « jgit demo show sprint12 »."
 
-  Scénario: demo list ne fonctionne que depuis une branche demo_*
-    Étant donné je me place sur la branche "develop"
-    Quand je lance "jgit demo list"
-    Alors jgit se termine en erreur
-    Et la sortie contient "Cette commande doit être exécutée depuis une branche demo_*."
+  # Hors d'une démo à l'ancien format, « demo list » liste les démos du projet
+  # (voir 17_demo_creation_et_lecture) ; une démo à l'ancien format y figure.
+  Scénario: Hors d'une démo, demo list liste les démos du projet
+    Étant donné je lance "jgit demo start sprint12 --no-interaction"
+    Et je me place sur la branche "develop"
+    Quand je lance "jgit demo list --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "demos[0].name" égal à "sprint12"
+    Et le JSON a "demos[0].branch" égal à "demo_sprint12"
+    Et le JSON a "demos[0].format" égal à "legacy"
+    Et la sortie contient "ancien format : jgit demo migrate sprint12"
 
   # Le marqueur de démo compte six mots :
   #   [jgit] DEMO merge <type> <type>/<ticket> [empty_commit]

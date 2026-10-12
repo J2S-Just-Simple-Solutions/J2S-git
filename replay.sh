@@ -32,6 +32,10 @@
 
 JGIT_ON_CONFLICT="${JGIT_ON_CONFLICT:-}"
 
+# Rejeu discret (démos) : la sortie de git est tue, seul le constat de conflit
+# reste. jgit en fait de toute façon son propre résumé.
+REPLAY_QUIET="${REPLAY_QUIET:-false}"
+
 # Conduite effective face à un conflit. « ask » sans personne pour répondre
 # reviendrait à valider un conflit tout seul : il devient « abort ».
 jgit_conflict_mode() {
@@ -247,9 +251,15 @@ cherry_pick() {
       return 0
     fi
 
-    echo "Cherry-picking commit: $commit"
-    if git -c rerere.enabled=true cherry-pick "$commit" --allow-empty --keep-redundant-commits; then
-      return 0
+    if [[ $REPLAY_QUIET == true ]]; then
+      if git -c rerere.enabled=true cherry-pick "$commit" --allow-empty --keep-redundant-commits >/dev/null 2>&1; then
+        return 0
+      fi
+    else
+      echo "Cherry-picking commit: $commit"
+      if git -c rerere.enabled=true cherry-pick "$commit" --allow-empty --keep-redundant-commits; then
+        return 0
+      fi
     fi
 
     # Le cherry-pick a échoué : un conflit doit être résolu.
