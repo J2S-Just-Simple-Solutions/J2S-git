@@ -1,6 +1,6 @@
 # 05 — Démo
 
-> `jgit demo list` · `show` · `candidates` · `create` · `add` · `drop` · `refresh` · `rebase` · `continue` · `abort`
+> `jgit demo list` · `show` · `candidates` · `create` · `add` · `drop` · `refresh` · `rebase` · `continue` · `abort` · `archive` · `unarchive` · `delete` · `migrate`
 
 ---
 
@@ -235,6 +235,71 @@ rebaser la démo sur une préprod qui a avancé, la rejoue sans vous la redemand
 
 ---
 
+## Archiver, restaurer, supprimer
+
+### `demo archive` — mettre une démo de côté
+
+```bash
+jgit demo archive client-a
+```
+
+La démo est renommée `demo-archive/2026-10-12_client-a` : **son nom est libéré**
+pour une nouvelle démo, et la précédente reste consultable (`jgit demo show
+demo-archive/2026-10-12_client-a`, `jgit demo list --archived`). Une seconde
+archive du même nom le même jour devient `demo-archive/2026-10-12.2_client-a`.
+
+Rien n'est réécrit : la branche change de nom, pas de contenu. Une archive est
+**en lecture seule**.
+
+### `demo unarchive` — reprendre une démo archivée
+
+```bash
+jgit demo unarchive client-a                          # s'il n'y a qu'une archive de ce nom
+jgit demo unarchive demo-archive/2026-10-12_client-a  # sinon, en la nommant
+```
+
+Refusé si une démo active porte déjà ce nom : archivez-la d'abord. Une démo
+restaurée est peut-être en retard sur sa base : `jgit demo show` le dit.
+
+### `demo delete` — supprimer une démo
+
+```bash
+jgit demo delete client-a
+jgit demo delete demo-archive/2026-10-12_client-a
+```
+
+Après confirmation, la démo disparaît du serveur, et votre copie locale avec elle
+si elle n'a rien de plus. Pour une démo active, `jgit` rappelle que l'archive est
+souvent préférable.
+
+### Les anciennes démos `demo_<nom>` : `demo migrate`
+
+Les démos fabriquées par la première version de `jgit` (`demo_<nom>`) restent
+lisibles, mais ne se modifient plus. `migrate` les recrée au format actuel, avec
+les mêmes tickets à jour :
+
+```bash
+jgit demo migrate vitrine
+jgit demo migrate vitrine --based-on develop    # si l'ancienne ne dit pas de quelle base elle est partie
+```
+
+L'ancienne est conservée : `jgit demo delete demo_vitrine` quand vous n'en avez
+plus besoin.
+
+### Les anciennes commandes
+
+`jgit demo start`, `merge` et `remove` restent acceptées, avec un avertissement,
+et fabriquent des démos au format actuel :
+
+| Ancienne forme | Forme actuelle |
+| --- | --- |
+| `jgit demo start [<nom>]` | `jgit demo create <nom>` (sans nom : celui de la base) |
+| `jgit demo merge --from <ticket> [--into <nom>]` | `jgit demo add <nom> --from <ticket>` |
+| `jgit demo remove` (depuis la démo) | `jgit demo delete <nom>` |
+| `jgit demo list` (depuis la démo) | `jgit demo show <nom>` |
+
+---
+
 ## Scénarios
 
 ### Scénario 1 — Préparer la démo du sprint
@@ -293,6 +358,18 @@ jgit demo show sprint12
 **Ce qui part en version n'est pas ce qui était dans la démo**, mais le code
 relu et validé des mêmes tickets.
 
+### Scénario 6 — Remplacer une démo sans perdre la précédente
+
+> Le client veut une nouvelle démo `client-a`, mais on garde l'ancienne sous le
+> coude.
+
+```bash
+jgit demo archive client-a
+jgit demo create client-a --from feature/MONPROJET-120
+```
+
+L'ancienne reste consultable dans `jgit demo list --archived`.
+
 ---
 
 ## Ce qui bloque
@@ -311,6 +388,11 @@ relu et validé des mêmes tickets.
 | Quelqu'un a modifié la démo pendant l'opération | ne publie rien (code 4) | son travail n'est jamais écrasé |
 | Une opération est en pause sur un conflit | toute commande qui modifie refuse (code 5) ; les commandes de lecture restent possibles | l'opération occupe l'espace de travail |
 | Conflit avec `--no-interaction` | annule tout, rien n'a été publié (code 3) | un conflit demande quelqu'un pour le résoudre |
+| Modifier une archive | refuse, et donne la commande `unarchive` | une archive est en lecture seule |
+| Modifier une démo `demo_<nom>` | refuse, et donne la commande `migrate` | l'ancien format ne se modifie plus |
+| `unarchive` d'un nom qui a plusieurs archives | refuse en les listant | |
+| `unarchive` alors qu'une démo active porte le nom | refuse | archivez d'abord celle-ci |
+| `migrate` d'une démo sans base enregistrée | refuse et demande `--based-on` | `jgit` ne devine pas une base |
 
 ---
 
@@ -326,7 +408,9 @@ relu et validé des mêmes tickets.
   base. Un ticket fusionné autrement (à la main, hors jgit) n'est pas reconnu
   comme livré.
 - **Les anciennes démos `demo_<nom>`** restent lisibles (`demo list`, `demo
-  show`) mais ne se modifient plus avec ces commandes.
+  show`) mais ne se modifient plus : `migrate` les convertit. Un ticket dont la
+  branche a disparu depuis ne peut pas être repris par `migrate`.
+- **L'archive porte la date du jour du poste** qui archive.
 
 ---
 

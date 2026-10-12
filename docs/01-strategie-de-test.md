@@ -87,7 +87,8 @@ Deux choses distinctes sont simulées côté GitHub :
 | `feature restart` | oui — [parcours 04](02-parcours-couverts.md) |
 | `feature rebase` (avec et sans `--squash`, avec conflit) | oui |
 | `hotfix restart` / `hotfix rebase` | oui |
-| `demo start / merge / list / remove` | oui |
+| Démos à l'ancien format : lecture, refus de modification, `migrate`, anciennes commandes | oui — parcours [07](02-parcours-couverts.md) et [10](02-parcours-couverts.md) |
+| `demo archive / unarchive / delete` | oui — [parcours 21](02-parcours-couverts.md) |
 | `util clean`, `util verify_rebase`, `util check_rebase` | oui |
 | Syntaxes dépréciées | oui — [parcours 10](02-parcours-couverts.md) |
 | Fraîcheur des branches (retard, avance, divergence) | oui — [parcours 11](02-parcours-couverts.md) |

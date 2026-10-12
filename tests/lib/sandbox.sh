@@ -207,6 +207,38 @@ github_deliver_pr() {
     info "GitHub : $pr_branch livree dans $base"
 }
 
+# Reproduit une demo telle que la fabriquait la premiere version de jgit
+# (branche demo_<nom>) : commit d'init, puis pour chaque ticket un marqueur
+# « [jgit] DEMO merge » suivi d'un rebase de la demo PAR-DESSUS le ticket.
+# Ces demos existent sur les depots : jgit doit savoir les lire et les migrer.
+#
+#   github_create_legacy_demo <nom> <base> <base enregistree : true|false> <ticket>...
+github_create_legacy_demo() {
+    local name="$1"
+    local base="$2"
+    local record="$3"
+    shift 3
+    local branch="demo_$name"
+    local ticket
+
+    github_git fetch --quiet origin
+    github_git checkout --quiet -B "$branch" "origin/$base"
+    if [[ "$record" == true ]]; then
+        github_git commit --quiet --allow-empty -m "[jgit] INIT demo $branch [empty_commit]" \
+            -m "jgit-branch: $branch
+jgit-based-on: $base"
+    else
+        github_git commit --quiet --allow-empty -m "[jgit] INIT demo $branch [empty_commit]"
+    fi
+    for ticket in "$@"; do
+        github_git commit --quiet --allow-empty -m "[jgit] DEMO merge ${ticket%%/*} $ticket [empty_commit]"
+        github_git rebase --quiet "origin/$ticket" >/dev/null 2>&1 || \
+            assert_failed "demo a l'ancien format" "le rebase sur $ticket a echoue"
+    done
+    github_git push --quiet origin "$branch"
+    info "GitHub : demo a l'ancien format $branch ($*)"
+}
+
 # Tickets d'une demo, dans l'ordre, lus directement sur le remote a partir des
 # reperes qui closent chaque segment.
 remote_demo_tickets() {

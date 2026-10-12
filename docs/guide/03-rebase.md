@@ -75,14 +75,14 @@ comportement des versions précédentes.
 quand il diffère :
 
 ```
-La branche feature/MONPROJET-412 est partie de demo_sprint12, et non de la
+La branche feature/MONPROJET-412 est partie de demo/sprint12, et non de la
 référence du projet develop.
-Rebaser sur demo_sprint12 ? (Y/n)
+Rebaser sur demo/sprint12 ? (Y/n)
 ```
 
 | Votre réponse | Ce qui se passe |
 | --- | --- |
-| Entrée ou `y` | le rebase vise `demo_sprint12`, votre vraie base |
+| Entrée ou `y` | le rebase vise `demo/sprint12`, votre vraie base |
 | `n` | le rebase vise `develop`, la référence du projet — votre branche change officiellement de base |
 
 La majuscule le dit : **votre base d'origine est la réponse par défaut**, et c'est

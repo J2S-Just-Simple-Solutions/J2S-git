@@ -163,6 +163,18 @@ step_terminal_non_defini() {
 }
 step_def "le terminal n'est pas défini" step_terminal_non_defini
 
+step_demo_ancien_format() {
+    # shellcheck disable=SC2086
+    github_create_legacy_demo "$1" "$2" true $3
+}
+step_def "une démo à l'ancien format {chaine} basée sur {chaine} contient les tickets {chaine}" step_demo_ancien_format
+
+step_demo_ancien_format_sans_base() {
+    # shellcheck disable=SC2086
+    github_create_legacy_demo "$1" develop false $2
+}
+step_def "une démo à l'ancien format {chaine} sans base enregistrée contient les tickets {chaine}" step_demo_ancien_format_sans_base
+
 step_pr_livree() {
     github_deliver_pr "$1" "$2"
 }

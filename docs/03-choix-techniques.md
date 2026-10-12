@@ -386,6 +386,12 @@ façon. Il n'y avait pas de vue d'ensemble, pas de retrait possible.
   retirer, reprendre et rebaser reconstruisent **à partir de la démo
   elle-même**, ce qui rejoue les résolutions de conflit déjà faites.
 - Une démo inchangée n'est jamais republiée.
+- Archiver renomme la branche `demo-archive/<AAAA-MM-JJ>_<nom>` (`<AAAA-MM-JJ>.<n>_<nom>`
+  pour la n-ième du jour) : le suffixe porte sur la date, jamais sur le nom, pour
+  qu'un nom qui finit par `-2` reste lisible. Chaque renommage est un seul push
+  `--atomic`, protégé par lease des deux côtés.
+- Les démos `demo_<nom>` de la première version sont lues (marqueurs
+  `[jgit] DEMO merge …`) mais ne se modifient plus : `migrate` les recrée.
 
 **Conséquences.** La démo se lit sans autre source ; `show` sait dire, ticket par
 ticket, ce qui est à jour, ce qui a avancé, ce qui a été réécrit ou livré. Une IA

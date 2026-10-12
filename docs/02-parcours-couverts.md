@@ -340,52 +340,25 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 
 ---
 
-## Parcours 07 — Les branches de démonstration
+## Parcours 07 — Les démos à l'ancien format
 
 Fichier : [`tests/features/07_demo.feature`](../tests/features/07_demo.feature)
 
-Une branche `demo_*` sert à **montrer** plusieurs features ensemble avant de les
-livrer. Elle est jetable : contrairement à une release, son historique est
-réécrit à chaque ajout.
-
-> `demo merge` porte le nom de « merge » mais procède par **rebase de la branche
-> de démo sur la source**, suivi d'un `push --force-with-lease`. C'est ce qui
-> garde l'historique linéaire ; c'est aussi pourquoi une démo ne doit jamais
-> servir de base à autre chose qu'une démonstration.
-
-### Ce que le parcours vérifie
+La première version des démos fabriquait des branches `demo_<nom>`, rejouées
+par-dessus chaque ticket. Il en reste sur les dépôts : le scénario les reproduit
+avec les mêmes commandes git que l'ancien `jgit`.
 
 | Situation | Comportement attendu |
 | --- | --- |
-| Espace de travail sale | refus explicite : une démo se fabrique, elle ne se travaille pas |
-| Branche de base porteuse de commits non poussés | refus, **avant** la demande de confirmation |
-| `demo start` sans nom | la démo prend le nom de la branche de référence (`demo_develop`) |
-| `demo start <nom>` / `--based-on` | nom et base imposés, ce qui n'est pas dans la base n'y entre pas |
-| Relancer `start` sur une démo publiée | elle est simplement remise à jour |
-| Démo présente en local mais supprimée du serveur | refus, avec la marche à suivre |
-| Confirmation refusée | aucune branche, ni locale ni distante |
-| `demo merge` | la feature arrive dans la démo, avec son commit marqueur `[jgit] DEMO merge …` |
-| Plusieurs `--from`, `feature` et `hotfix` mélangés | intégrées en série |
-| `--into` | désigne la démo à alimenter depuis n'importe quelle branche |
-| Intégrer deux fois la même feature | détecté, la branche distante ne bouge pas |
-| Source au mauvais format, ou absente du serveur | refus, la démo ne bouge pas |
-| `merge`, `list`, `remove` hors d'une branche `demo_*` | refus explicite |
-| **Conflit pendant l'intégration** | la main est rendue au développeur : le rebase reste en cours, rien n'est poussé |
-| `demo list` | affiche le **nom complet** des branches intégrées et les commandes `release merge` correspondantes |
-| Démo vide | signalée comme telle |
-| `demo remove` | supprimée du remote puis du local, retour sur la branche de référence |
-| Refus de la suppression / démo déjà supprimée sur GitHub | respectivement conservée, et nettoyée en local |
-
-### Ce que ce parcours protège
-
-Le point historiquement fragile est `demo list` : le nom des branches était
-tronqué (issue #37), rendant inutilisables les commandes `release merge`
-suggérées — c'est-à-dire la seule raison d'être de la commande. Le scénario
-vérifie désormais le nom complet.
-
-Le second est le **traitement des conflits** : contrairement aux commandes de
-release, `demo merge` laisse délibérément le rebase en cours. Le scénario fige ce
-choix pour qu'il reste un choix, et non un oubli.
+| `demo list` | l'ancienne démo figure, au format `legacy`, en lecture seule, avec sa base |
+| `demo show` | ses tickets, la commande de release, la suggestion `migrate` |
+| Une commande qui modifie | refus `legacy_format`, avec la commande `migrate` |
+| `demo migrate` | une démo `demo/<nom>` est recréée avec les mêmes tickets, à jour, sur la même base ; l'ancienne est conservée |
+| Ticket disparu depuis | non repris, signalé |
+| Pas de base enregistrée | refus, puis succès avec `--based-on` |
+| Démo déjà au format actuel | refus `not_legacy` |
+| `demo delete demo_<nom>` | supprimée |
+| `demo list` depuis l'ancienne démo | la montre, avec l'avertissement de dépréciation |
 
 ---
 
@@ -462,13 +435,16 @@ du mauvais tag, un hotfix qui remonterait de la préprod en production.
 
 Fichier : [`tests/features/10_syntaxes_depreciees.feature`](../tests/features/10_syntaxes_depreciees.feature)
 
-Deux commandes ont changé de forme. Les anciennes restent acceptées le temps que
-les habitudes et les scripts de chacun rattrapent.
+Plusieurs commandes ont changé de forme. Les anciennes restent acceptées le temps
+que les habitudes et les scripts de chacun rattrapent.
 
 | Ancienne forme | Forme actuelle |
 | --- | --- |
 | `jgit release merge <branche>` | `jgit release merge --from <branche>` |
 | `jgit clean` | `jgit util clean` |
+| `jgit demo start [<nom>]` | `jgit demo create <nom>` |
+| `jgit demo merge --from <ticket> [--into <nom>]` | `jgit demo add <nom> --from <ticket>` |
+| `jgit demo remove` | `jgit demo delete <nom>` |
 
 ### Ce que le parcours vérifie
 
@@ -480,7 +456,10 @@ les habitudes et les scripts de chacun rattrapent.
 | `release merge 4.2.0` ou `release/5.1.0` | reste une **version cible**, pas une source |
 | Sans source ni version | l'erreur est celle de la nouvelle syntaxe, sans avertissement parasite |
 | Mélanger les deux formes | refus explicite, qui nomme la bonne option à utiliser |
-| L'aide | documente les deux formes dépréciées |
+| L'aide | documente les formes dépréciées |
+| `demo start` | crée une démo au format actuel (`demo/<nom>`) ; sans nom, celui de la base |
+| `demo merge` | ajoute à la démo nommée par `--into`, ou à celle de la branche courante |
+| `demo remove` | supprime la démo de la branche courante et revient sur la référence ; hors d'une démo, refus |
 
 ### Ce que ce parcours protège
 
@@ -813,4 +792,22 @@ Fichier : [`tests/features/20_demo_conflits.feature`](../tests/features/20_demo_
 | Une démo republiée sans changement, déclenchant un déploiement inutile |
 | Un collègue écrasé par un `push --force` |
 | Un commit poussé à la main perdu en silence |
+
+---
+
+## Parcours 21 — Archiver, restaurer, supprimer une démo
+
+Fichier : [`tests/features/21_demo_archive.feature`](../tests/features/21_demo_archive.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `demo archive` | la démo devient `demo-archive/<date>_<nom>`, son contenu est intact, le nom est libéré |
+| Liste | les archives sont à part (`--archived`), comptées dans la liste des actives, consultables par `show` |
+| Nouvelle démo du même nom | possible ; la seconde archive du jour est numérotée |
+| Archive | en lecture seule, avec la commande `unarchive` |
+| Démo absente mais archivée | le refus liste ses archives |
+| `demo unarchive` | restaure sous le nom d'origine ; plusieurs archives : il faut préciser ; nom déjà pris : refus |
+| `--dry-run` | rien ne change |
+| Copie locale | supprimée si identique, conservée (et signalée) si elle porte des commits non publiés |
+| `demo delete` | après confirmation ; refus : la démo reste ; une archive se supprime aussi ; démo inconnue refusée |
 

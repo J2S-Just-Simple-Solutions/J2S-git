@@ -186,7 +186,7 @@ et disparaissent avec le commit d'initialisation au squash-and-merge de la PR.
 
 Sont concernées : `feature start`, `hotfix start`, `feature restart` (qui reprend
 la base portée par la branche de PR), `feature rebase` (qui inscrit la base sur
-laquelle il vient de reconstruire), `release start` et `demo start`.
+laquelle il vient de reconstruire), `release start` et `demo create`.
 
 Deux usages :
 
@@ -213,7 +213,7 @@ base : rejouer des commits ailleurs n'est pas la même opération, et sur un
 `rebase` le résultat part en `push --force`.
 
 ```
-La branche de base demo_sprint12 n'existe pas (ni en local ni sur origin).
+La branche de base demo/sprint12 n'existe pas (ni en local ni sur origin).
 C'est la branche d'origine de feature/MONPROJET-412, enregistrée à sa création :
 elle a sans doute été livrée puis supprimée depuis.
 Rien n'a été modifié : ni vos branches, ni le serveur.
@@ -302,9 +302,16 @@ Fabriquer (sur une branche temporaire `jgit_demo_<nom>`, à partir de la version
 - `jgit demo rebase [<nom>] [--based-on <branche>] [--keep-delivered] [--keep-missing] [--drop-foreign]` : reconstruit la démo sur la version actuelle de sa base ; les tickets livrés et ceux dont la branche a disparu sont retirés.
 - `jgit demo continue [<nom>]` / `jgit demo abort [<nom>]` : reprise ou annulation après un conflit mis en pause (`--on-conflict pause`).
 
+Cycle de vie (chaque changement de nom est un seul push `--atomic`, protégé par lease) :
+
+- `jgit demo archive <nom>` : renomme la démo `demo-archive/<AAAA-MM-JJ>_<nom>` (`<AAAA-MM-JJ>.2_<nom>` pour une seconde archive le même jour). Son nom est libéré pour une nouvelle démo ; l'archive reste consultable, en lecture seule.
+- `jgit demo unarchive <archive>` : la restaure sous son nom (refusé si une démo active le porte).
+- `jgit demo delete <nom|archive>` : la supprime du serveur, après confirmation.
+- `jgit demo migrate <nom> [--based-on <branche>]` : recrée une démo `demo_<nom>` (ancien format) au format actuel, avec les mêmes tickets ; l'ancienne est conservée.
+
 Les résolutions de conflit sont des commits de la démo : les reconstructions suivantes les rejouent sans les redemander.
 
-Les anciennes démos `demo_<nom>` restent lisibles par `list` et `show` ; `jgit demo start`, `merge` et `remove` les manipulent encore, le temps de la transition.
+Les anciennes démos `demo_<nom>` restent lisibles par `list` et `show`, en lecture seule ; `migrate` les convertit.
 
 ### Espace de travail et stash automatique
 
@@ -328,7 +335,7 @@ parvenir reviendrait à prendre une décision qui ne revient pas à `jgit`.
 
 ### Utilitaires
 
-- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_verify_rebase_*`, `__PR__*`).
+- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_demo_*`, `jgit_verify_rebase_*`, `__PR__*`). Refusé tant qu'une opération est en pause sur un conflit.
 - `jgit util check_rebase [--from <branche>]` : dit si la branche (par défaut la branche courante) est encore à jour sur [sa branche d'origine](#branche-dorigine) et si le rebase passerait. Ne modifie rien.
 - `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
 
@@ -357,7 +364,7 @@ tout seul, là où `verify_rebase` attend qu'on lui nomme les deux branches.
 
 ### Syntaxes dépréciées
 
-Deux commandes ont changé de forme. Les anciennes restent acceptées et
+Plusieurs commandes ont changé de forme. Les anciennes restent acceptées et
 fonctionnent à l'identique, mais affichent un avertissement et seront retirées
 dans une prochaine version.
 
@@ -365,6 +372,10 @@ dans une prochaine version.
 | --- | --- |
 | `jgit release merge <branche>` | `jgit release merge --from <branche>` |
 | `jgit clean` | `jgit util clean` |
+| `jgit demo start [<nom>]` | `jgit demo create <nom>` (sans nom : celui de la base) |
+| `jgit demo merge --from <ticket> [--into <nom>]` | `jgit demo add <nom> --from <ticket>` (sans `--into` : la démo de la branche courante) |
+| `jgit demo remove` | `jgit demo delete <nom>` (depuis la branche de la démo) |
+| `jgit demo list` depuis une démo | `jgit demo show <nom>` |
 
 La distinction entre les deux formes de `release merge` se fait sur le format de
 l'argument : `1.2.0` ou `release/1.2.0` est une version cible, tout le reste est

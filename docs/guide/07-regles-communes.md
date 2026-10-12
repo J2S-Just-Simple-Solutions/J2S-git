@@ -9,9 +9,9 @@ ses questions, ce qu'il exige de votre dépôt, et comment l'adapter à votre pr
 
 | Option | Ce qu'elle fait | Où elle sert |
 | --- | --- | --- |
-| `--based-on <branche>` | impose le point de départ | `feature start`, `feature rebase`, `demo start` |
-| `--from <branche>` | désigne une source à intégrer — **répétable** | `release merge`, `demo merge`, `util verify_rebase` |
-| `--into <branche>` | désigne explicitement la cible | `release merge`, `release finish`, `demo merge`, `util verify_rebase` |
+| `--based-on <branche>` | impose le point de départ | `feature start`, `feature rebase`, `demo create`, `demo rebase`, `demo migrate` |
+| `--from <branche>` | désigne une source à intégrer — **répétable** | `release merge`, `demo create`, `demo add`, `demo drop`, `demo refresh`, `util verify_rebase` |
+| `--into <branche>` | désigne explicitement la cible | `release merge`, `release finish`, `util verify_rebase` |
 | `--no-open` | ne pas ouvrir de pull request | `feature start`, `feature restart` |
 | `--squash` | regrouper les commits avant de rejouer | `feature rebase` |
 | `--no-interaction` | ne poser aucune question | partout |
@@ -190,11 +190,11 @@ squash_threshold=8
 ### Si la branche de base n'existe pas
 
 Une commande qui part d'une branche — `feature start`, `hotfix start`,
-`feature rebase`, `demo start` — tient cette branche de l'un de trois endroits :
+`feature rebase`, `demo create` — tient cette branche de l'un de trois endroits :
 
 | D'où vient la valeur | Exemple |
 | --- | --- |
-| votre saisie | `--based-on demo_sprint12` |
+| votre saisie | `--based-on demo/sprint12` |
 | la branche d'origine enregistrée à la création | un `feature rebase` sans `--based-on` |
 | le calcul automatique de la référence du projet | `develop` pour une feature |
 
@@ -204,7 +204,7 @@ contrôle donc toutes les trois, au même endroit, et **refuse dans les mêmes
 termes** — seule la ligne qui dit d'où vient la valeur change :
 
 ```
-La branche de base demo_sprint12 n'existe pas (ni en local ni sur origin).
+La branche de base demo/sprint12 n'existe pas (ni en local ni sur origin).
 C'est la branche d'origine de feature/MONPROJET-412, enregistrée à sa création :
 elle a sans doute été livrée puis supprimée depuis.
 Rien n'a été modifié : ni vos branches, ni le serveur.

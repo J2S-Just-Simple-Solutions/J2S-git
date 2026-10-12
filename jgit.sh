@@ -139,21 +139,26 @@ help() {
     printf "  jgit demo rebase [<nom>] [--based-on <branch>] [--keep-delivered] [--keep-missing]\n"
     printf "                                        Reconstruit la démo sur la version actuelle de sa base.\n"
     printf "  jgit demo continue [<nom>] | abort [<nom>]   Reprend ou annule une opération en pause.\n"
-    printf "  Options des commandes qui modifient : --dry-run, --drop-foreign, --on-conflict <mode>\n"
-    printf "  jgit demo start [<demo_name>] [--based-on <branch>]\n"
-    printf "  jgit demo merge [--from feature/<ticket>]... [--into <branch>]\n"
-    printf "  jgit demo list\n"
-    printf "  jgit demo remove [--no-interaction]\n\n"
+    printf "  jgit demo archive <nom>               Archive la démo (demo-archive/<date>_<nom>) et libère son nom.\n"
+    printf "  jgit demo unarchive <archive>         Restaure une démo archivée sous son nom.\n"
+    printf "  jgit demo delete <nom|archive>        Supprime une démo du serveur.\n"
+    printf "  jgit demo migrate <nom> [--based-on <branch>]\n"
+    printf "                                        Recrée une démo demo_<nom> (ancien format) au format actuel.\n"
+    printf "  Options des commandes qui modifient : --dry-run, --drop-foreign, --on-conflict <mode>\n\n"
 
     printf "${C_BLUE}Utility:${C_RESET}\n"
-    printf "  jgit util clean                Supprime les branches locales jgit_rebase_*, jgit_verify_rebase_* et __PR__*.\n"
+    printf "  jgit util clean                Supprime les branches locales jgit_rebase_*, jgit_demo_*, jgit_verify_rebase_* et __PR__*.\n"
     printf "  jgit util check_rebase [--from <branche>]\n"
     printf "                                 Dit si la branche est à jour sur sa branche d'origine et si le rebase passerait.\n"
     printf "  jgit util verify_rebase --from <branche_source> --into <branche_cible>\n\n"
 
     printf "${C_BLUE}Syntaxes dépréciées${C_RESET} (encore acceptées, retirées à terme) :\n"
     printf "  jgit release merge <branche>   → jgit release merge --from <branche>\n"
-    printf "  jgit clean                     → jgit util clean\n\n"
+    printf "  jgit clean                     → jgit util clean\n"
+    printf "  jgit demo start [<nom>]        → jgit demo create <nom>\n"
+    printf "  jgit demo merge --from <ticket> [--into <nom>] → jgit demo add <nom> --from <ticket>\n"
+    printf "  jgit demo remove               → jgit demo delete <nom>\n"
+    printf "  jgit demo list (depuis une démo) → jgit demo show <nom>\n\n"
 }
 
 require_argument() {
@@ -461,15 +466,41 @@ case "$JGIT_TYPE" in
         fi
         case "$JGIT_ACTION" in
             start)
+                # Rétrocompatibilité : « demo start » est devenu « demo create ».
+                # Sans nom, la démo prenait celui de sa base : c'est conservé.
+                jgit_demo_name="$JGIT_TARGET"
+                if [[ -z "$jgit_demo_name" ]]; then
+                    jgit_demo_name="$JGIT_BASED_ON_OVERRIDE"
+                    [[ -n "$jgit_demo_name" ]] || jgit_demo_name=$(get_reference_branch feature) || exit_safe 1
+                fi
+                warn_deprecated_syntax "jgit demo start${JGIT_TARGET:+ $JGIT_TARGET}" "jgit demo create $jgit_demo_name"
                 refuse_if_worktree_dirty "Une démo" || exit_safe 1
-                demo_start "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
+                demo_create_cmd "$jgit_demo_name" "$JGIT_BASED_ON_OVERRIDE"
                 ;;
             merge)
+                # Rétrocompatibilité : « demo merge [--into <démo>] » est devenu
+                # « demo add <démo> ». Sans --into, la démo de la branche courante.
                 if [[ ${#JGIT_FROM_SOURCES[@]} -eq 0 ]]; then
                     jgit_fail usage "$JGIT_EXIT_ERROR" "Veuillez préciser au moins une source avec --from."
                 fi
+                jgit_demo_name="${JGIT_INTO_TARGET#demo_}"
+                jgit_demo_name="${jgit_demo_name#demo/}"
+                warn_deprecated_syntax "jgit demo merge --from …${JGIT_INTO_TARGET:+ --into $JGIT_INTO_TARGET}" \
+                    "jgit demo add ${jgit_demo_name:-<nom>} --from …"
                 refuse_if_worktree_dirty "Une démo" || exit_safe 1
-                demo_merge "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
+                demo_add_cmd "$jgit_demo_name" "${JGIT_FROM_SOURCES[@]}"
+                ;;
+            remove)
+                # Rétrocompatibilité : « demo remove » supprimait la démo de la
+                # branche courante. C'est « demo delete <nom> ».
+                warn_deprecated_syntax "jgit demo remove" "jgit demo delete <nom>"
+                if ! demo_parse_branch "$current_branch" 2>/dev/null; then
+                    jgit_fail usage "$JGIT_EXIT_ERROR" \
+                        "Cette commande doit être exécutée depuis une branche de démo (branche actuelle : $current_branch)." \
+                        "Nommez la démo : jgit demo delete <nom>"
+                fi
+                refuse_if_worktree_dirty "Une démo" || exit_safe 1
+                demo_delete_cmd "$current_branch"
                 ;;
             list)
                 if [[ -n "$JGIT_TARGET" ]]; then
@@ -477,13 +508,14 @@ case "$JGIT_TYPE" in
                         "demo list n'attend pas de nom de démo." \
                         "Le contenu d'une démo : jgit demo show $JGIT_TARGET"
                 fi
-                # Rétrocompatibilité : lancée depuis une démo à l'ancien format,
-                # « demo list » affichait le contenu de cette démo.
-                if [[ "$JGIT_DEMO_SCOPE" == "active" ]] && is_demo_branch "$current_branch"; then
-                    warn_deprecated_syntax "jgit demo list (depuis $current_branch)" "jgit demo show ${current_branch#demo_}"
-                    demo_list
+                # Rétrocompatibilité : lancée depuis une démo, « demo list »
+                # affichait le contenu de cette démo.
+                if [[ "$JGIT_DEMO_SCOPE" == "active" ]] && demo_parse_branch "$current_branch" 2>/dev/null; then
+                    warn_deprecated_syntax "jgit demo list (depuis $current_branch)" "jgit demo show $DEMO_NAME"
+                    demo_show_cmd "$current_branch"
+                else
+                    demo_list_cmd "$JGIT_DEMO_SCOPE"
                 fi
-                demo_list_cmd "$JGIT_DEMO_SCOPE"
                 ;;
             show)
                 demo_show_cmd "$JGIT_TARGET"
@@ -514,9 +546,18 @@ case "$JGIT_TYPE" in
             candidates)
                 demo_candidates_cmd "$JGIT_TARGET"
                 ;;
-            remove)
+            archive)
+                demo_archive_cmd "$JGIT_TARGET"
+                ;;
+            unarchive)
+                demo_unarchive_cmd "$JGIT_TARGET"
+                ;;
+            delete)
+                demo_delete_cmd "$JGIT_TARGET"
+                ;;
+            migrate)
                 refuse_if_worktree_dirty "Une démo" || exit_safe 1
-                demo_remove
+                demo_migrate_cmd "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
                 ;;
             *)
                 jgit_fail usage "$JGIT_EXIT_ERROR" "Action '$JGIT_ACTION' non supportée pour demo."

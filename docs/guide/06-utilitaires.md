@@ -24,9 +24,10 @@ jgit util clean
 | `__PR__…` | des branches de PR récupérées du serveur — elles n'ont pas à vivre chez vous |
 | `jgit_rebase_…` | des branches de travail d'un rebase, normalement effacées à la fin |
 | `jgit_verify_rebase_…` | des copies temporaires d'une vérification de rebase |
+| `jgit_demo_…` | des branches de fabrication d'une démo, normalement effacées à la fin |
 
 **Vos branches ne sont jamais touchées** : `feature/…`, `hotfix/…`, `release/…`,
-`demo_…`, la préprod et la production restent en place.
+`demo/…`, la préprod et la production restent en place.
 
 La commande n'agit **que sur votre machine** : rien n'est supprimé sur le serveur.
 
@@ -190,9 +191,9 @@ jgit util check_rebase
 
 ```
 Branche   : feature/MONPROJET-500
-Basée sur : demo_sprint12 (origin/demo_sprint12)
-Avance    : 3 commit(s) absents de demo_sprint12
-État      : à jour sur demo_sprint12, il n'y a rien à rebaser.
+Basée sur : demo/sprint12 (origin/demo/sprint12)
+Avance    : 3 commit(s) absents de demo/sprint12
+État      : à jour sur demo/sprint12, il n'y a rien à rebaser.
 ```
 
 Il avait oublié qu'il était parti d'une démo. Un `jgit feature rebase` classique

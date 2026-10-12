@@ -134,7 +134,7 @@ commence par `[jgit]`. Ils ne contiennent aucun code : ce sont des **repères**.
 | `[jgit] … RESTART …` | un nouveau lot de travail a démarré ici |
 | `[jgit] INIT release release/1.4.0.` | la branche de version a été créée ici |
 | `[jgit] Release merge feature branch : …` | ce ticket a été intégré à la version |
-| `[jgit] INIT demo demo_sprint12` | la branche de démo a été créée ici |
+| `[jgit] INIT demo demo/sprint12` | la branche de démo a été créée ici |
 | `[jgit] DEMO merge feature feature/… ` | ce ticket a été ajouté à la démo |
 
 Ils servent à `jgit` à se repérer — savoir où commence votre travail, ce qui a
@@ -192,7 +192,7 @@ Elles servent à deux choses :
 | **préprod** | `develop` par défaut — ce qui est en cours de validation |
 | **production** | `main` par défaut — ce qui tourne réellement |
 | **branche de version** | `release/1.4.0` — la version en préparation |
-| **branche de démo** | `demo_sprint12` — un assemblage temporaire, jetable |
+| **branche de démo** | `demo/sprint12` — un assemblage de tickets pour les montrer ; une recette que `jgit` sait relire, mettre à jour et archiver |
 | **branche d'origine** | la branche dont la vôtre est réellement partie, notée par `jgit` à la création |
 | **le serveur** | `origin`, c'est-à-dire GitHub |
 

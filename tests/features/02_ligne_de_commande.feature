@@ -61,17 +61,19 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "jgit demo rebase [<nom>] [--based-on <branch>] [--keep-delivered] [--keep-missing]"
     Et la sortie contient "jgit demo continue [<nom>] | abort [<nom>]"
     Et la sortie contient "--dry-run, --drop-foreign, --on-conflict <mode>"
-    Et la sortie contient "jgit demo start [<demo_name>] [--based-on <branch>]"
-    Et la sortie contient "jgit demo merge [--from feature/<ticket>]... [--into <branch>]"
-    Et la sortie contient "jgit demo list"
-    Et la sortie contient "jgit demo remove [--no-interaction]"
+    Et la sortie contient "jgit demo archive <nom>"
+    Et la sortie contient "jgit demo unarchive <archive>"
+    Et la sortie contient "jgit demo delete <nom|archive>"
+    Et la sortie contient "jgit demo migrate <nom> [--based-on <branch>]"
+    Et la sortie contient "jgit demo start [<nom>]        → jgit demo create <nom>"
+    Et la sortie contient "jgit demo remove               → jgit demo delete <nom>"
     # Util
     Et la sortie contient "jgit util clean"
     Et la sortie contient "jgit util check_rebase [--from <branche>]"
     Et la sortie contient "jgit util verify_rebase --from <branche_source> --into <branche_cible>"
     # L'aide doit dire ce que util clean supprime réellement, y compris les
     # branches laissées par util verify_rebase.
-    Et la sortie contient "jgit_rebase_*, jgit_verify_rebase_* et __PR__*"
+    Et la sortie contient "jgit_rebase_*, jgit_demo_*, jgit_verify_rebase_* et __PR__*"
 
   # RÈGLE : la réponse appliquée quand on valide sans rien saisir est toujours
   # signalée par la majuscule. Une question dont les deux lettres sont en

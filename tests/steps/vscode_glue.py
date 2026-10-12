@@ -87,6 +87,14 @@ def step_appel_par_lien(context):
 def step_terminal_non_defini(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("une démo à l'ancien format {string} basée sur {string} contient les tickets {string}")
+def step_demo_ancien_format(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("une démo à l'ancien format {string} sans base enregistrée contient les tickets {string}")
+def step_demo_ancien_format_sans_base(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("la PR de {string} est livrée dans {string}")
 def step_pr_livree(context):
     """Définie dans tests/steps/jgit.steps.sh."""

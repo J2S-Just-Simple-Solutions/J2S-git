@@ -204,6 +204,18 @@ c'est le commit suivant qui conflicte à son tour.
 
 Un conflit produit `jgit.conflict/1`, avec `context.demo` et `context.ticket`.
 
+`archive`, `unarchive` et `delete` produisent le même schéma, réduit à
+l'essentiel :
+
+```json
+{"schema":"jgit.demo.result/1","ok":true,"command":"demo archive","operation":"archive",
+ "demo":"sprint12","branch":"demo-archive/2026-10-12_sprint12","previous_branch":"demo/sprint12",
+ "changed":true,"pushed":true,"dry_run":false,"sha":"…"}
+```
+
+`branch` est le nouveau nom (`null` après `delete`), `previous_branch` l'ancien.
+`migrate` produit le schéma complet, comme `create`.
+
 ### Codes d'erreur des démos
 
 | `error.code` | Code de sortie | Situation |
@@ -213,6 +225,8 @@ Un conflit produit `jgit.conflict/1`, avec `context.demo` et `context.ticket`.
 | `base_not_found`, `base_not_published` | 2 | la base |
 | `bad_ticket_format`, `ticket_not_found`, `ticket_not_in_demo`, `ticket_diverged`, `ticket_delivered` | 2 | un ticket |
 | `archived`, `legacy_format` | 2 | démo en lecture seule |
+| `ambiguous` | 2 | `unarchive` d'un nom qui a plusieurs archives |
+| `not_legacy`, `base_unknown` | 2 | `migrate` d'une démo déjà au format actuel, ou sans base enregistrée |
 | `foreign_merge` | 2 | un commit de fusion poussé à la main empêche la reconstruction |
 | `worktree_dirty` | 1 | l'espace de travail n'est pas propre |
 | `conflict`, `unresolved_files`, `conflict_markers_left` | 3 | conflit |
