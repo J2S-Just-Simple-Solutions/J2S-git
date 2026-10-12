@@ -126,9 +126,13 @@ confirm_action() {
     user_input="$default_response"
   fi
 
-  if [[ "$user_input" == "y" ]]; then
-    return 0
-  fi
+  # Insensible à la casse : la majuscule du suffixe incite à taper « Y ».
+  # (tr plutôt que ${var,,}, absent du bash 3.2 de macOS)
+  user_input=$(printf '%s' "$user_input" | tr '[:upper:]' '[:lower:]')
+
+  case "$user_input" in
+    y|yes|o|oui) return 0 ;;
+  esac
 
   return 1
 }
