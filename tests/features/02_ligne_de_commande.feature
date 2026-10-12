@@ -39,10 +39,13 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "--squash"
     Et la sortie contient "--json"
     Et la sortie contient "--no-fetch"
+    Et la sortie contient "--on-conflict <mode>"
     # Feature & hotfix : chaque action avec les options qu'elle lit vraiment
     Et la sortie contient "jgit feature start <ticket> [--based-on <branch>] [--no-open]"
     Et la sortie contient "jgit feature restart <ticket> [--no-open]"
-    Et la sortie contient "jgit feature rebase <ticket> [--based-on <branch>] [--squash]"
+    Et la sortie contient "jgit feature rebase <ticket> [--based-on <branch>] [--squash] [--on-conflict <mode>]"
+    Et la sortie contient "jgit feature continue <ticket>"
+    Et la sortie contient "jgit feature abort <ticket>"
     # Release : finish accepte --into, au même titre que merge
     Et la sortie contient "jgit release start [<x.y.z>]"
     Et la sortie contient "jgit release merge [<x.y.z>] --from <branch> [--into <branch>]"

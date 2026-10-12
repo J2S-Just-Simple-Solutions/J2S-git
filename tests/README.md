@@ -146,6 +146,8 @@ Les valeurs sont toujours entre guillemets.
 | `Quand je commite le fichier "…" contenant "…" avec le message "…"` |
 | `Quand je modifie le fichier "…" avec "…"` (sans commit : espace de travail sale) |
 | `Quand je pousse la branche courante` |
+| `Quand je résous le conflit du fichier "…" avec "…"` (écrit la version retenue puis `git add`) |
+| `Quand je marque le fichier "…" résolu sans retirer les marqueurs` |
 | `Quand je me place sur la branche "…"` |
 | `Quand je récupère les nouveautés du remote` |
 | `Quand je merge la branche "…" dans la branche courante` (crée un commit de fusion) |
@@ -185,6 +187,7 @@ Les valeurs sont toujours entre guillemets.
 | `Alors jgit se termine avec le code N` (pour `util check_rebase`, qui répond par son code) |
 | `Et la sortie contient "…"` / `ne contient pas "…"` |
 | `Et la sortie ne contient aucune séquence de couleur` (ni séquence ANSI, ni erreur de `tput`) |
+| `Et une opération jgit est en pause` / `Et aucune opération jgit n'est en pause` |
 | `Et la sortie standard est un unique document JSON` |
 | `Et le JSON a "chemin" égal à "…"` / `égal au nombre N` / `vrai` / `faux` / `nul` / `qui contient "…"` |
 | `Et le JSON n'a pas de "chemin"` |
@@ -283,6 +286,8 @@ Les fonctions utilisables dans une définition d'étape :
 | `run_jgit_json <args…>` | lance `jgit` en gardant la sortie standard à part (`$JGIT_STDOUT`, `$SANDBOX/stdout.json`) |
 | `json_query check\|get\|len\|type <chemin>` | lit le document (`lib/json_query.py`) |
 | `assert_json_document`, `assert_json_equals`, `assert_json_type`, `assert_json_length`, `assert_json_missing` | vérifications sur le document |
+| `repo_resolve_file <chemin> <contenu>`, `repo_mark_resolved <chemin>` | résolution d'un conflit dans le dépôt de travail |
+| `assert_operation_paused` / `assert_no_operation_paused` | état `.git/jgit/operation.state` |
 | `jgit_use_symlink` | appelle `jgit` par un lien symbolique jusqu'à la fin du scénario |
 | `repo_reclone <options git clone…>` | remplace le dépôt de travail par un nouveau clone (`--depth`, `--single-branch`…) |
 | `repo_remove_git_identity` | retire toute identité git et interdit à git d'en deviner une |
@@ -340,7 +345,7 @@ test_passed
 
 ## Scénarios existants
 
-207 scénarios répartis par domaine fonctionnel.
+219 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -359,6 +364,7 @@ test_passed
 | `13_branche_origine.feature` | enregistrement de la branche d'origine (`feature`/`hotfix`/`demo`/`release`, `--based-on`, `restart`), `util check_rebase` (à jour, en retard, conflit, refus, codes de sortie), refus sur les anciennes branches — y compris quand un ancêtre porte la trace d'une autre branche —, le rebase qui propose la base enregistrée, et le refus commun quand la base n'existe pas, qu'elle vienne d'une saisie ou d'une valeur par défaut |
 | `14_confirmation.feature` | réponses aux confirmations sans tenir compte de la casse : `Y`, `YES`, `oui`, `O` acceptent ; `N` et une réponse inconnue refusent |
 | `15_contrat_json.feature` | `--json` : document unique de résultat ou d'erreur, `--no-interaction` implicite, erreurs d'usage et refus identifiés, échappement des caractères spéciaux, aide, absence de couleur, `--no-fetch` |
+| `16_rebase_pause_reprise.feature` | `--on-conflict pause` : conflit décrit, résolution puis `continue`, conflits successifs, résolution inachevée ou marqueurs restants, `abort`, refus des autres commandes pendant la pause, lease au moment de publier, abandon sans interaction, valeur inconnue |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

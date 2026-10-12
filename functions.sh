@@ -53,6 +53,8 @@ declare -a JGIT_FROM_SOURCES
 
 # Contrat de sortie --json : document unique, codes de sortie (json.sh).
 source "$(dirname "${BASH_SOURCE[0]}")/json.sh"
+# Rejeu de commits : cherry-pick, pause et reprise sur conflit (replay.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/replay.sh"
 
 ###############################################
 #            Couleurs
@@ -682,80 +684,6 @@ squash_commits_after() {
 
   printf "%sCommits squashés dans un unique commit : %s%s\n" "$(jgit_tput setaf 2)" "$message" "$(jgit_tput sgr0)"
   return 0
-}
-
-# Fonction pour effectuer un cherry-pick sur chaque commit du tableau
-# Renvoie 1 dès qu'un cherry-pick n'a pas pu aboutir, à charge de l'appelant
-# de restaurer l'état local.
-cherry_pick_commits() {
-  local commits=("$@")
-  local head_before subject
-
-  for commit in "${commits[@]}"; do
-    head_before=$(git rev-parse HEAD)
-
-    if ! cherry_pick "$commit"; then
-      return 1
-    fi
-
-    # Un commit d'init rejoué porte encore l'origine d'avant le rebase. On la
-    # remplace au moment où on le repose, seul instant où il est en tête.
-    # Le garde-fou sur HEAD évite de toucher au commit de résolution de conflit
-    # du développeur, ou à un commit déjà présent que cherry_pick a sauté.
-    if [[ -n "$JGIT_RESTAMP_BRANCH" && "$(git rev-parse HEAD)" != "$head_before" ]]; then
-      subject=$(git log -n 1 --format=%s HEAD)
-      if [[ "$subject" == *"$suffix_init_commit"* ]]; then
-        restamp_based_on_head "$JGIT_RESTAMP_BRANCH" "$JGIT_RESTAMP_BASED_ON"
-      fi
-    fi
-  done
-
-  return 0
-}
-
-# Fonction pour effectuer un cherry-pick sur le hash passé en argument si celui n'existe pas déjà.
-# Renvoie 0 si le commit a bien été appliqué, 1 si le cherry-pick a été abandonné.
-cherry_pick() {
-    local commit=$1
-
-    # Vérifier si le commit est déjà dans l'historique de la branche courante
-    if git merge-base --is-ancestor "$commit" HEAD; then
-      echo "Commit $commit déjà appliqué, passage au suivant..."
-      return 0
-    fi
-
-    echo "Cherry-picking commit: $commit"
-    if git cherry-pick "$commit" --allow-empty; then
-      return 0
-    fi
-
-    # Le cherry-pick a échoué : un conflit doit être résolu.
-    echo ""
-    printf "%sErreur lors du cherry-pick du commit %s. Conflit détecté.%s\n" \
-      "$(jgit_tput setaf 1)" "$commit" "$(jgit_tput sgr0)"
-
-    # Un conflit réclame une intervention humaine : il est hors de question de
-    # le "valider" tout seul en mode non interactif.
-    if [[ $JGIT_NO_INTERACTION == true ]]; then
-      printf "%sLe mode --no-interaction ne permet pas de résoudre un conflit.%s\n" \
-        "$(jgit_tput setaf 1)" "$(jgit_tput sgr0)"
-      printf "%sRelancez la même commande sans --no-interaction pour traiter ce conflit à la main.%s\n" \
-        "$(jgit_tput setaf 1)" "$(jgit_tput sgr0)"
-      git cherry-pick --abort >/dev/null 2>&1
-      return 1
-    fi
-
-    printf "%sMerci de ne rien faire ici tant que le conflit n'est pas résolu et commité%s\n" \
-      "$(jgit_tput setaf 1)" "$(jgit_tput sgr0)"
-
-    # Demander confirmation à l'utilisateur
-    if ! confirm_action "Avez vous résolu et commité la résolution de conflit ?" "y"; then
-        echo "Opération annulée."
-        git cherry-pick --abort >/dev/null 2>&1
-        return 1
-    fi
-
-    return 0
 }
 
 # Permet d'afficher le git log bien présenté depuis le dernier noeud en commun avec la $reference_branch et avec les couleurs et l'arbres des commits

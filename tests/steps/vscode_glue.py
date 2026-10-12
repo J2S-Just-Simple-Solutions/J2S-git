@@ -47,6 +47,14 @@ def step_pousse_branche_courante(context):
 def step_checkout(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("je résous le conflit du fichier {string} avec {string}")
+def step_resout_conflit(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("je marque le fichier {string} résolu sans retirer les marqueurs")
+def step_marque_resolu(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("la PR de {string} est squash-mergée sur GitHub avec le message {string}")
 def step_squash_merge_pr(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -145,6 +153,14 @@ def step_json_longueur(context):
 
 @given("le JSON n'a pas de {string}")
 def step_json_absent(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("une opération jgit est en pause")
+def step_operation_en_pause(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("aucune opération jgit n'est en pause")
+def step_aucune_operation_en_pause(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("la branche locale {string} existe")

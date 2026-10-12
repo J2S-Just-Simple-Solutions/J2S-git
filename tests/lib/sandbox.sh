@@ -272,6 +272,27 @@ repo_write_file() {
     info "fichier $path modifie sans commit"
 }
 
+# Resout un conflit comme le ferait un developpeur (ou une IA) : ecrit la
+# version retenue du fichier, puis le marque resolu.
+repo_resolve_file() {
+    local path="$1"
+    local content="$2"
+
+    printf '%s\n' "$content" > "$SANDBOX/repo/$path"
+    repo_git add "$path"
+    info "conflit resolu sur $path"
+}
+
+# Marque un fichier resolu tel quel, marqueurs de conflit compris.
+repo_mark_resolved() {
+    repo_git add "$1"
+    info "$1 marque resolu tel quel"
+}
+
+repo_operation_state_file() {
+    printf '%s/.git/jgit/operation.state' "$SANDBOX/repo"
+}
+
 # Cree une branche locale sans y basculer.
 repo_create_local_branch() {
     local branch="$1"

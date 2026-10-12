@@ -260,42 +260,143 @@ feature_rebase() {
     ###################################
     # Gestion du rebase en cherrypick
     ###################################
+    # Tout ce qu'il faut pour mener le rebase à son terme est rangé dans les
+    # variables OP_* : en cas de conflit avec --on-conflict pause, elles sont
+    # enregistrées telles quelles, et « jgit feature continue » repart d'elles.
+    OP_operation="feature_rebase"
+    OP_type="$feature_type"
+    OP_ticket="$feature_name"
+    OP_target="$branch"
+    OP_label="rebase de $branch sur $reference_branch"
+    OP_continue_command="jgit $feature_type continue $feature_name"
+    OP_abort_command="jgit $feature_type abort $feature_name"
+    OP_work_branch="$branch"
+    OP_pr_branch="$branch_PR"
+    OP_work_rebase="$branch_rebase"
+    OP_pr_rebase="$branch_PR_rebase"
+    OP_reference="$reference_branch"
+    OP_original_head="$original_head"
+    OP_original_head_pr=$(git rev-parse "$branch_PR")
+    OP_squash_done="$squash_done"
+    # Version serveur des deux branches au moment où on les a lues : le push
+    # final ne les écrasera que si personne ne les a déplacées entre-temps.
+    OP_lease_work=$(git rev-parse -q --verify "refs/remotes/$j2s_remote/$branch")
+    OP_lease_pr=$(git rev-parse -q --verify "refs/remotes/$j2s_remote/$branch_PR")
+    OP_phase="pr"
+    OP_pending="${commits_on_PR[*]}"
+    OP_pending_work="${commits[*]}"
+    OP_head_before=""
+    OP_done=0
+    OP_total=$(( ${#commits_on_PR[@]} + ${#commits[@]} ))
+    OP_return_branch="$current_branch"
+    OP_stash="$stash"
+    OP_branch=""
+    # La reprise garde la conduite choisie au départ face aux conflits.
+    OP_on_conflict=$(jgit_conflict_mode)
+
     # On met à jour la branche de référence par rapport au remote pour être bien à jour
     echo "Checkout and pull $reference_branch branch"
     switch_branch "$reference_branch"
 
-    # Les deux branches sont reconstruites sur $reference_branch : les commits
-    # d'init rejoués doivent désigner cette base, pas celle d'il y a trois
-    # semaines. cherry_pick_commits s'en charge au moment où il les repose, et
-    # chaque boucle ne rejoue que les commits d'init de sa propre branche.
-    JGIT_RESTAMP_BASED_ON="$reference_branch"
-    JGIT_RESTAMP_BRANCH="$branch_PR"
-
     # rebase de la branche PR par application des commits déjà présents sur l'ancienne branche PR en cherry pick
     echo "Starting cherry picking on $branch_PR_rebase branch"
     switch_branch "$branch_PR_rebase" create
-    if ! cherry_pick_commits "${commits_on_PR[@]}"; then
-        abort_rebase "$branch" "$reference_branch" "$branch_rebase" "$branch_PR_rebase" "$original_head" "$squash_done"
-        exit_safe 1
+
+    feature_rebase_run
+}
+
+# Variables d'un rebase, enregistrées quand il se met en pause sur un conflit.
+FEATURE_REBASE_STATE=(OP_operation OP_type OP_ticket OP_target OP_label
+    OP_continue_command OP_abort_command OP_work_branch OP_pr_branch
+    OP_work_rebase OP_pr_rebase OP_reference OP_original_head OP_original_head_pr
+    OP_squash_done OP_lease_work OP_lease_pr OP_phase OP_pending OP_pending_work
+    OP_head_before OP_done OP_total OP_return_branch OP_stash OP_branch
+    OP_on_conflict)
+
+# Déroule le rebase à partir de là où il en est (OP_phase) : branche de PR,
+# puis branche de travail, puis publication. Appelé au premier passage comme
+# à la reprise après un conflit.
+feature_rebase_run() {
+    # Les deux branches sont reconstruites sur la référence : les commits
+    # d'init rejoués doivent désigner cette base, pas celle d'il y a trois
+    # semaines. cherry_pick_commits s'en charge au moment où il les repose, et
+    # chaque phase ne rejoue que les commits d'init de sa propre branche.
+    JGIT_RESTAMP_BASED_ON="$OP_reference"
+
+    if [[ "$OP_phase" == "pr" ]]; then
+        JGIT_RESTAMP_BRANCH="$OP_pr_branch"
+        # shellcheck disable=SC2086
+        feature_rebase_replay $OP_pending
+
+        OP_phase="work"
+        OP_pending="$OP_pending_work"
+        OP_pending_work=""
+
+        # rebase de la branche principal par application de tous les commits en cherry pick
+        echo "Starting cherry picking on $OP_work_rebase branch"
+        switch_branch "$OP_work_rebase" create
     fi
 
-    JGIT_RESTAMP_BRANCH="$branch"
-
-    # rebase de la branche principal par application de tous les commits en cherry pick
-    echo "Starting cherry picking on $branch_PR_rebase branch"
-    switch_branch "$branch_rebase" create
-    if ! cherry_pick_commits "${commits[@]}"; then
-        abort_rebase "$branch" "$reference_branch" "$branch_rebase" "$branch_PR_rebase" "$original_head" "$squash_done"
-        exit_safe 1
-    fi
+    JGIT_RESTAMP_BRANCH="$OP_work_branch"
+    # shellcheck disable=SC2086
+    feature_rebase_replay $OP_pending
 
     JGIT_RESTAMP_BASED_ON=""
     JGIT_RESTAMP_BRANCH=""
 
+    feature_rebase_publish
+}
+
+# Rejoue une liste de commits de la phase en cours et traite l'issue d'un
+# conflit : pause enregistrée, abandon, ou annulation par le développeur.
+feature_rebase_replay() {
+    local commits=("$@")
+    local status
+
+    [[ ${#commits[@]} -gt 0 ]] || return 0
+
+    cherry_pick_commits "${commits[@]}"
+    status=$?
+
+    case $status in
+        0)
+            OP_done=$((OP_done + ${#commits[@]}))
+            OP_pending=""
+            return 0
+            ;;
+        3)
+            OP_done=$((OP_done + ${#commits[@]} - ${#REPLAY_PENDING[@]}))
+            OP_pending="${REPLAY_PENDING[*]}"
+            OP_head_before="$REPLAY_HEAD_BEFORE"
+            OP_branch=$(git rev-parse --abbrev-ref HEAD)
+            jgit_state_save "${FEATURE_REBASE_STATE[@]}"
+            replay_pause_exit conflict "Conflit pendant le $OP_label."
+            ;;
+    esac
+
+    abort_rebase "$OP_work_branch" "$OP_reference" "$OP_work_rebase" "$OP_pr_rebase" "$OP_original_head" "$OP_squash_done"
+    jgit_state_clear
+
+    if [[ $status -eq 2 ]]; then
+        replay_report_aborted_conflict "Conflit pendant le $OP_label : le rebase a été annulé."
+        exit_safe "$JGIT_EXIT_CONFLICT"
+    fi
+
+    jgit_error_set cancelled "Le rebase a été annulé à votre demande."
+    exit_safe 1
+}
+
+# Remplace les branches historiques par les branches reconstruites, fait
+# vérifier l'historique, puis publie les deux d'un seul geste.
+feature_rebase_publish() {
+    local branch="$OP_work_branch"
+    local branch_PR="$OP_pr_branch"
+    local reference_branch="$OP_reference"
+
     # On vient écraser les branches historiques par les branches que l'on vient de rebase
     switch_branch "$reference_branch"
-    rename_branch $branch_PR_rebase $branch_PR
-    rename_branch $branch_rebase $branch
+    rename_branch "$OP_pr_rebase" "$branch_PR"
+    rename_branch "$OP_work_rebase" "$branch"
 
     # À partir d'ici $branch et $branch_PR ont un historique réécrit : elles
     # divergent du serveur par construction, et c'est précisément ce qu'on
@@ -307,22 +408,155 @@ feature_rebase() {
 
     if ! confirm_action "Confirmez-vous que le rebase s'est bien passé, les branches vont être push --force ?" "y"; then
         echo "les branches locales ne sont plus correctes ($branch et $branch_PR), elles vont être supprimées en local."
+        jgit_state_clear
         switch_branch "$reference_branch"
         git branch -D $branch
         git branch -D $branch_PR
         echo "Pull de la branche $branch en local depuis Github."
         switch_branch "$branch"
+        jgit_error_set cancelled "Le rebase n'a pas été publié : vous ne l'avez pas confirmé."
         exit_safe 1
     fi
 
-    # on push force les nouvelles branches fraichement rebasée.
-    switch_branch "$branch_PR" nosync
-    git push --force --set-upstream $j2s_remote "$branch_PR"
+    # Les deux branches partent ensemble (--atomic), et seulement si le serveur
+    # est toujours dans l'état lu au départ (--force-with-lease explicite) : un
+    # collègue qui a poussé entre-temps n'est jamais écrasé.
+    if ! git push --atomic --set-upstream \
+            --force-with-lease="refs/heads/$branch_PR:$OP_lease_pr" \
+            --force-with-lease="refs/heads/$branch:$OP_lease_work" \
+            "$j2s_remote" "$branch_PR" "$branch"; then
+        feature_rebase_push_refused
+    fi
 
-    switch_branch "$branch" nosync
-    git push --force --set-upstream $j2s_remote "$branch"
-
+    jgit_state_clear
     current_branch="$branch"
     clean_branches
     printf "%sRebase terminé avec succès%s\n" "$(jgit_tput setaf 2)" "$(jgit_tput sgr0)"
+}
+
+# Le push a été refusé. Si le serveur a bougé, c'est qu'un collègue a poussé
+# pendant le rebase : on remet les branches locales comme avant et on le dit.
+feature_rebase_push_refused() {
+    local branch="$OP_work_branch"
+    local branch_PR="$OP_pr_branch"
+    local moved=false
+
+    jgit_state_clear
+
+    # Retour à l'état d'avant le rebase : la reconstruction se refera sur la
+    # version du serveur, au prochain lancement.
+    switch_branch "$OP_reference" discard
+    git branch -f "$branch" "$OP_original_head" >/dev/null 2>&1
+    git branch -f "$branch_PR" "$OP_original_head_pr" >/dev/null 2>&1
+    current_branch="$branch"
+
+    git fetch --quiet "$j2s_remote" \
+        "+refs/heads/$branch:refs/remotes/$j2s_remote/$branch" \
+        "+refs/heads/$branch_PR:refs/remotes/$j2s_remote/$branch_PR" 2>/dev/null
+    if [[ "$(git rev-parse -q --verify "refs/remotes/$j2s_remote/$branch")" != "$OP_lease_work" \
+          || "$(git rev-parse -q --verify "refs/remotes/$j2s_remote/$branch_PR")" != "$OP_lease_pr" ]]; then
+        moved=true
+    fi
+
+    if [[ $moved == true ]]; then
+        jgit_fail lease_rejected "$JGIT_EXIT_LEASE" \
+            "Quelqu'un a poussé sur $branch ou $branch_PR pendant le rebase : rien n'a été écrasé, rien n'a été poussé." \
+            "Vos branches locales sont revenues à leur état d'avant. Relancez : jgit $OP_type rebase $OP_ticket"
+    fi
+
+    jgit_fail push_failed "$JGIT_EXIT_ERROR" \
+        "La publication de $branch et $branch_PR a échoué : rien n'a été poussé." \
+        "Vos branches locales sont revenues à leur état d'avant. Vérifiez votre accès au serveur puis relancez : jgit $OP_type rebase $OP_ticket"
+}
+
+# Charge l'opération en pause et vérifie qu'elle correspond à la commande.
+#   feature_rebase_load_paused <type> <ticket>
+feature_rebase_load_paused() {
+    local feature_type="$1"
+    local feature_name="$2"
+
+    if ! jgit_state_exists; then
+        jgit_fail no_operation_in_progress "$JGIT_EXIT_REFUSED" \
+            "Aucune opération jgit n'est en pause dans ce dépôt : il n'y a rien à reprendre ni à annuler."
+    fi
+
+    jgit_state_load
+
+    if [[ "$OP_operation" != "feature_rebase" || "$OP_type" != "$feature_type" || "$OP_ticket" != "$feature_name" ]]; then
+        jgit_fail operation_mismatch "$JGIT_EXIT_REFUSED" \
+            "L'opération en pause n'est pas celle-ci : c'est le $OP_label." \
+            "$OP_continue_command   (ou : $OP_abort_command)"
+    fi
+
+    local head_branch
+    head_branch=$(git rev-parse --abbrev-ref HEAD)
+    if [[ "$head_branch" != "$OP_branch" ]]; then
+        jgit_fail state_mismatch "$JGIT_EXIT_REFUSED" \
+            "L'opération en pause travaille sur la branche $OP_branch, mais l'espace de travail est sur $head_branch." \
+            "Revenez sur $OP_branch (git switch $OP_branch) puis relancez."
+    fi
+
+    stash="$OP_stash"
+    current_branch="$OP_return_branch"
+
+    # Sauf avis contraire sur la ligne de commande, la reprise garde la
+    # conduite choisie au départ : un rebase lancé en pause se remet en pause
+    # au conflit suivant, même repris avec --json.
+    if [[ -z "$JGIT_ON_CONFLICT" ]]; then
+        JGIT_ON_CONFLICT="$OP_on_conflict"
+    fi
+}
+
+# Reprend un rebase en pause, une fois le conflit résolu.
+feature_rebase_continue() {
+    local feature_type="$1"
+    local feature_name="$2"
+    local first status
+
+    feature_rebase_load_paused "$feature_type" "$feature_name"
+
+    jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
+
+    JGIT_RESTAMP_BASED_ON="$OP_reference"
+    if [[ "$OP_phase" == "pr" ]]; then
+        JGIT_RESTAMP_BRANCH="$OP_pr_branch"
+    else
+        JGIT_RESTAMP_BRANCH="$OP_work_branch"
+    fi
+
+    first="${OP_pending%% *}"
+    replay_finish_paused_pick "$OP_head_before" "$first"
+    status=$?
+
+    case $status in
+        10) replay_pause_exit unresolved_files \
+                "Des fichiers sont encore en conflit : résolvez-les et marquez-les résolus (git add) avant de reprendre." ;;
+        11) REPLAY_CONFLICT_LINES=$(replay_conflict_marker_lines)
+            replay_pause_exit conflict_markers_left \
+                "Des marqueurs de conflit (<<<<<<<, =======, >>>>>>>) sont restés dans des fichiers marqués résolus." ;;
+        12) replay_pause_exit conflict \
+                "git n'a pas pu terminer le cherry-pick : vérifiez l'état du dépôt (git status) avant de reprendre." ;;
+    esac
+
+    OP_done=$((OP_done + 1))
+    if [[ "$OP_pending" == *" "* ]]; then
+        OP_pending="${OP_pending#* }"
+    else
+        OP_pending=""
+    fi
+
+    printf "%sConflit résolu, le rebase reprend.%s\n" "$C_GREEN" "$C_RESET"
+    feature_rebase_run
+}
+
+# Annule un rebase en pause : l'état d'avant est restauré, rien n'a été poussé.
+feature_rebase_abort() {
+    local feature_type="$1"
+    local feature_name="$2"
+
+    feature_rebase_load_paused "$feature_type" "$feature_name"
+
+    abort_rebase "$OP_work_branch" "$OP_reference" "$OP_work_rebase" "$OP_pr_rebase" "$OP_original_head" "$OP_squash_done"
+    jgit_state_clear
+    switch_branch "$OP_return_branch" recover
 }

@@ -98,6 +98,16 @@ step_checkout() {
 }
 step_def "je me place sur la branche {chaine}" step_checkout
 
+step_resout_conflit() {
+    repo_resolve_file "$1" "$2"
+}
+step_def "je résous le conflit du fichier {chaine} avec {texte}" step_resout_conflit
+
+step_marque_resolu() {
+    repo_mark_resolved "$1"
+}
+step_def "je marque le fichier {chaine} résolu sans retirer les marqueurs" step_marque_resolu
+
 ###############################################
 #            Actions : GitHub (simule)
 ###############################################
@@ -251,6 +261,20 @@ step_json_absent() {
     assert_json_missing "$1"
 }
 step_def "le JSON n'a pas de {chaine}" step_json_absent
+
+###############################################
+#            Verifications : operation en pause
+###############################################
+
+step_operation_en_pause() {
+    assert_operation_paused
+}
+step_def "une opération jgit est en pause" step_operation_en_pause
+
+step_aucune_operation_en_pause() {
+    assert_no_operation_paused
+}
+step_def "aucune opération jgit n'est en pause" step_aucune_operation_en_pause
 
 ###############################################
 #            Verifications : branches

@@ -318,3 +318,41 @@ lignes à toucher, pour un résultat identique.
 **Piège connu.** bash 5.2 donne un sens spécial à `&` dans le remplacement de
 `${s//motif/remplacement}` s'il n'est pas entre guillemets. Toutes les
 substitutions de `json_str` sont protégées.
+
+---
+
+## 14. Un conflit peut se mettre en pause, et la publication ne force rien
+
+**Contexte.** Le rebase gérait un conflit de deux façons : attendre que le
+développeur ait résolu et commité dans un autre terminal, ou tout annuler sans
+interaction. Une IA ne sait pas répondre à une question posée par un processus
+qui tourne : il lui faut une commande qui s'arrête, puis une commande qui
+reprend. Et la publication faisait deux `push --force` successifs.
+
+**Décision.** Un seul moteur de rejeu (`replay.sh`), commun au rebase et aux
+démos, avec trois conduites choisies par `--on-conflict` : `ask`, `abort`,
+`pause`. En pause, tout ce qu'il faut pour terminer est enregistré dans
+`.git/jgit/operation.state` (variables `OP_*`), le cherry-pick reste en cours,
+et `continue` / `abort` repartent de cet état. La publication est un seul
+`git push --atomic` avec `--force-with-lease=<ref>:<sha lu au départ>` pour
+chaque branche.
+
+**Conséquences.**
+- Une seule opération en pause par dépôt ; toute autre commande refuse (code 5).
+- La reprise garde la conduite choisie au départ : un rebase lancé en pause se
+  remet en pause au conflit suivant.
+- Un collègue qui pousse pendant un rebase n'est jamais écrasé : le push est
+  refusé, les branches locales reviennent à leur état d'avant (code 4).
+- `git rerere` est activé pendant le rejeu : une résolution déjà faite sur le
+  poste est réappliquée dans les fichiers. Rien n'en dépend.
+- Un commit qui devient vide au rejeu est conservé vide
+  (`--keep-redundant-commits`) au lieu d'interrompre le rebase.
+
+**Écarté.**
+- Un verrou : `jgit` tourne sur chaque poste, un verrou local ne protège de
+  personne. La seule protection partagée est celle du serveur, le lease.
+- `--force-with-lease` sans valeur : il compare à la référence de suivi locale,
+  qu'un `git fetch` d'arrière-plan (un IDE) met à jour en silence — la protection
+  disparaît sans que personne le sache.
+- `--json` impliquant `pause` : Jenkins utilise `--json` et ne doit jamais
+  laisser un dépôt au milieu d'une opération.

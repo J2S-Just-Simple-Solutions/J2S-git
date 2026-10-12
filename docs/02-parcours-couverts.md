@@ -704,3 +704,37 @@ partent sur la sortie d'erreur. Le contrat est dans
 | Deux documents émis par la même commande |
 | Une sortie sans document sur un `exit` imprévu |
 | Un message dont un caractère spécial rend le JSON invalide |
+
+---
+
+## Parcours 16 — Un conflit de rebase en pause, puis repris
+
+Fichier : [`tests/features/16_rebase_pause_reprise.feature`](../tests/features/16_rebase_pause_reprise.feature)
+
+Avec `--on-conflict pause`, le rebase s'arrête sur un conflit en le laissant à
+résoudre, puis `jgit feature continue` reprend là où il s'était arrêté. C'est
+ainsi qu'une IA résout un conflit. Le serveur n'est publié qu'à la toute fin,
+d'un seul geste, et seulement s'il n'a pas bougé.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Conflit en pause | code 3, document `jgit.conflict/1` (fichier, type de conflit, commit, progression, commandes), branche temporaire en cours, serveur inchangé |
+| Conflit résolu puis `continue` | le rebase se termine et publie, avec la résolution ; plus d'opération en pause |
+| Deux conflits successifs | `continue` se remet en pause sur le second, garde la conduite `pause` même lancé avec `--json` |
+| `continue` sans avoir résolu | reste en pause, `unresolved_files` |
+| Marqueurs de conflit marqués résolus | reste en pause, `conflict_markers_left` |
+| `abort` | tout revient comme avant, rien n'a été poussé, espace de travail propre |
+| Une autre commande pendant la pause (`feature start`, `util clean`) | refus, code 5, les deux issues rappelées ; les branches temporaires sont préservées |
+| `continue` sans rien en pause, ou pour un autre ticket | refus, code 2 |
+| Un collègue pousse pendant la pause | `continue` refuse de publier (code 4, `lease_rejected`) : son travail est intact, les branches locales sont revenues à leur état d'avant |
+| Sans interaction | le conflit est abandonné et décrit (`paused: false`), rien n'est laissé en cours |
+| `--on-conflict` inconnu | refus d'usage |
+
+| Régression qui serait attrapée |
+| --- |
+| Un `push --force` qui écraserait le travail d'un collègue |
+| Une publication en deux temps qui laisserait une branche rebasée et l'autre non |
+| Une reprise qui publierait une résolution inachevée |
+| Une commande qui changerait de branche au milieu d'un conflit en pause |
+| `--json` qui laisserait un dépôt au milieu d'une opération sans qu'on l'ait demandé |
+

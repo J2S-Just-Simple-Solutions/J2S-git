@@ -260,6 +260,10 @@ Le rebase rejoue les commits par cherry-pick : en cas de conflit, `jgit` s'inter
 
 Avec `--no-interaction`, un conflit ne peut pas être résolu : la commande s'arrête sur un message d'erreur explicite après avoir remis l'environnement en ordre — cherry-pick abandonné, branches temporaires `jgit_rebase_*` supprimées, historique de la branche de travail restauré si un squash avait été appliqué. Le remote n'étant poussé qu'en toute fin de rebase, il reste intact. Relancez alors la commande sans `--no-interaction` pour traiter le conflit à la main.
 
+`--on-conflict` choisit la conduite face à un conflit : `ask` (défaut en interactif), `abort` (défaut sans interaction) ou `pause`. En pause, `jgit` s'arrête (code 3) en laissant le conflit à résoudre dans l'espace de travail ; une fois les fichiers résolus et marqués (`git add`), `jgit feature continue <ticket>` reprend là où il s'était arrêté, et `jgit feature abort <ticket>` annule tout. C'est ainsi qu'une IA résout un conflit. Tant qu'une opération est en pause, toute autre commande refuse (code 5).
+
+La publication finale pousse les deux branches **ensemble** (`--atomic`) et **seulement si le serveur n'a pas bougé** depuis le début du rebase (`--force-with-lease` sur la version lue au départ). Si un collègue a poussé entre-temps, rien n'est écrasé : les branches locales reviennent à leur état d'avant et la commande sort en code 4.
+
 ### Release
 
 - `jgit release start [<x.y.z>]` : sans argument, calcule la prochaine version à partir du dernier tag, crée ou reprend `release/x.y.z` et pousse le commit initial. Avec `x.y.z`, prépare la branche correspondante.

@@ -369,6 +369,25 @@ assert_json_missing() {
     assert_ok "JSON $path absent"
 }
 
+###############################################
+#            Operation en pause
+###############################################
+
+assert_operation_paused() {
+    if [[ -f "$(repo_operation_state_file)" ]]; then
+        assert_ok "une operation jgit est en pause"
+    else
+        assert_failed "une operation jgit est en pause" "aucun fichier d'etat"
+    fi
+}
+
+assert_no_operation_paused() {
+    if [[ -f "$(repo_operation_state_file)" ]]; then
+        assert_failed "aucune operation jgit en pause" "$(cat "$(repo_operation_state_file)")"
+    fi
+    assert_ok "aucune operation jgit en pause"
+}
+
 # Ni sequence ANSI ni plainte de tput : ce que lit un journal Jenkins ou une IA.
 assert_jgit_output_plain() {
     local esc=$'\033'

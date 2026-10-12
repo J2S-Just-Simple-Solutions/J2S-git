@@ -50,7 +50,10 @@ echo $?                                           # famille du résultat
 Deux réserves, héritées de l'existant et conservées pour ne casser aucun script :
 
 - les commandes `feature`, `hotfix` et `release` sortent en `1` sur un refus,
-  comme avant ; leur document porte le code précis (`worktree_dirty`…) ;
+  comme avant ; leur document porte le code précis (`worktree_dirty`…). Le
+  rebase de feature suit en revanche la table pour ce qui est nouveau : `3`
+  conflit, `4` lease refusé, `5` opération en pause ; `continue` et `abort`
+  suivent la table complète ;
 - `util check_rebase` garde ses propres codes (`0` à jour, `1` impossible de
   répondre, `2` en retard sans conflit, `3` en retard avec conflits).
 
@@ -91,6 +94,42 @@ Produit par toute commande qui échoue, quelle que soit la façon dont elle
 | `error.message` | la phrase affichée à l'humain, en français |
 | `error.hint` | la commande ou l'action qui débloque la situation, ou `null` |
 
+### `jgit.conflict/1` — conflit
+
+Produit sur un conflit de rejeu (rebase de feature, reconstruction de démo),
+qu'il soit mis en pause (`--on-conflict pause`) ou abandonné (`abort`). Code de
+sortie `3`. Il porte un objet `error` comme `jgit.error/1`, pour qu'un lecteur
+qui ne connaît que les erreurs le comprenne quand même.
+
+```json
+{"schema":"jgit.conflict/1","ok":false,"command":"feature rebase",
+ "operation":"feature_rebase","target":"feature/TEST-1","paused":true,
+ "error":{"code":"conflict","exit_code":3,
+          "message":"Conflit pendant le rebase de feature/TEST-1 sur develop.",
+          "hint":"jgit feature continue TEST-1"},
+ "branch":"jgit_rebase_feature/TEST-1",
+ "commit":{"sha":"a1b2…","subject":"Modifie app.txt côté feature"},
+ "conflicted_files":[{"path":"src/app.txt","kind":"both_modified"}],
+ "progress":{"done":2,"total":3},
+ "commands":{"continue":"jgit feature continue TEST-1","abort":"jgit feature abort TEST-1"}}
+```
+
+| Champ | Sens |
+| --- | --- |
+| `paused` | `true` : le conflit attend dans l'espace de travail ; `false` : tout a été annulé |
+| `error.code` | `conflict` ; à la reprise, `unresolved_files` (des fichiers sont encore en conflit) ou `conflict_markers_left` (des marqueurs `<<<<<<<` ont été marqués résolus) |
+| `branch` | la branche temporaire sur laquelle résoudre, `null` si abandonné |
+| `commit` | le commit dont le rejeu a conflicté |
+| `conflicted_files[].kind` | `both_modified`, `both_added`, `both_deleted`, `added_by_us`, `added_by_them`, `deleted_by_us`, `deleted_by_them`, `conflict_markers` |
+| `progress` | commits rejoués / à rejouer au total |
+| `commands` | les deux issues, prêtes à lancer ; `null` si abandonné |
+| `context` | facultatif : détails propres à l'opération (le ticket, pour une démo) |
+
+**Procédure de résolution par un programme** : lire `conflicted_files`, éditer
+chaque fichier pour retirer les marqueurs, `git add` chaque fichier, puis lancer
+`commands.continue` (avec `--json`). Un nouveau `jgit.conflict/1` peut revenir :
+c'est le commit suivant qui conflicte à son tour.
+
 Les documents propres aux démos (`jgit.demo.list/1`, `jgit.demo.show/1`…) sont
 décrits avec les commandes de démo.
 
@@ -102,6 +141,7 @@ décrits avec les commandes de démo.
 | --- | --- |
 | `--no-interaction` | aucune question : la réponse par défaut est appliquée |
 | `--no-fetch` | ne contacte pas le serveur, travaille sur les références déjà rapatriées — pour un affichage répété |
+| `--on-conflict <ask\|abort\|pause>` | conduite face à un conflit. `--json` n'implique **pas** `pause` : sans interaction, le défaut reste `abort`, qui ne laisse jamais le dépôt au milieu d'une opération. Un programme qui sait résoudre (une IA) demande `pause` explicitement ; Jenkins garde le défaut |
 | `JGIT_COLOR=never` ou `NO_COLOR=1` | aucune séquence de couleur, même face à un terminal |
 
 ---

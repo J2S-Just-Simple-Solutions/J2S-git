@@ -76,6 +76,7 @@ trailer_based_on="jgit-based-on"
 
 JGIT_NO_INTERACTION=false
 JGIT_NO_FETCH=false
+JGIT_ON_CONFLICT=""
 JGIT_SQUASH=false
 JGIT_SQUASH_THRESHOLD=$squash_threshold
 JGIT_NO_OPEN=false
@@ -105,12 +106,16 @@ help() {
     printf "  --no-fetch            Ne contacte pas le serveur : travaille sur les références déjà rapatriées.\n"
     printf "  --no-open             N'ouvre pas automatiquement la PR.\n"
     printf "  --squash              Squash les commits de la branche en un seul avant le rebase.\n"
+    printf "  --on-conflict <mode>  Conduite face à un conflit de rebase : ask (défaut en interactif),\n"
+    printf "                        abort (défaut sans interaction) ou pause (reprise par continue).\n"
     printf "  -h | --help           Affiche cette aide.\n\n"
 
     printf "${C_BLUE}Feature & Hotfix:${C_RESET}\n"
     printf "  jgit feature start <ticket> [--based-on <branch>] [--no-open]\n"
     printf "  jgit feature restart <ticket> [--no-open]\n"
-    printf "  jgit feature rebase <ticket> [--based-on <branch>] [--squash]\n"
+    printf "  jgit feature rebase <ticket> [--based-on <branch>] [--squash] [--on-conflict <mode>]\n"
+    printf "  jgit feature continue <ticket>   Reprend un rebase mis en pause sur un conflit.\n"
+    printf "  jgit feature abort <ticket>      Annule un rebase mis en pause : rien n'a été poussé.\n"
     printf "  (idem avec hotfix)\n\n"
 
     printf "${C_BLUE}Release:${C_RESET}\n"
@@ -200,6 +205,22 @@ while [[ $# -gt 0 ]]; do
             JGIT_NO_FETCH=true
             shift
             ;;
+        --on-conflict|--on-conflict=*)
+            if [[ "$1" == --on-conflict=* ]]; then
+                JGIT_ON_CONFLICT="${1#--on-conflict=}"
+                shift
+            else
+                require_argument "--on-conflict" "$2"
+                JGIT_ON_CONFLICT="$2"
+                shift 2
+            fi
+            case "$JGIT_ON_CONFLICT" in
+                ask|abort|pause) ;;
+                *) jgit_fail usage "$JGIT_EXIT_ERROR" \
+                       "Valeur inconnue pour --on-conflict : '$JGIT_ON_CONFLICT'." \
+                       "Valeurs acceptées : ask, abort, pause." ;;
+            esac
+            ;;
         --no-open)
             JGIT_NO_OPEN=true
             shift
@@ -288,6 +309,13 @@ case "$JGIT_TYPE $JGIT_ACTION" in
     *) ensure_git_identity || exit_safe 1 ;;
 esac
 
+# Une opération en pause sur un conflit occupe l'espace de travail : seules la
+# reprise et l'annulation peuvent tourner tant qu'elle n'est pas terminée.
+case "$JGIT_ACTION" in
+    continue|abort) ;;
+    *) refuse_if_operation_paused ;;
+esac
+
 case "$JGIT_TYPE" in
     feature|hotfix)
         if [[ -z "$JGIT_ACTION" ]]; then
@@ -316,6 +344,17 @@ case "$JGIT_TYPE" in
                 fi
                 verify_stash
                 feature_rebase "$JGIT_TYPE" "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
+                ;;
+            continue|abort)
+                if [[ -z "$JGIT_TARGET" ]]; then
+                    jgit_fail usage "$JGIT_EXIT_ERROR" "Please set a $JGIT_TYPE identifier."
+                fi
+                # Pas de verify_stash : l'espace de travail est celui du conflit.
+                if [[ "$JGIT_ACTION" == "continue" ]]; then
+                    feature_rebase_continue "$JGIT_TYPE" "$JGIT_TARGET"
+                else
+                    feature_rebase_abort "$JGIT_TYPE" "$JGIT_TARGET"
+                fi
                 ;;
             *)
                 jgit_fail usage "$JGIT_EXIT_ERROR" "Action '$JGIT_ACTION' non supportée pour $JGIT_TYPE."

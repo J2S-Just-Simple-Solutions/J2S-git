@@ -122,6 +122,51 @@ répondez `y` dans celui de `jgit`, qui reprend où il en était.
 
 Si vous répondez `n`, tout est annulé : rien n'a été publié.
 
+### Mettre le conflit en pause : `--on-conflict pause`
+
+Plutôt que de garder `jgit` ouvert dans un terminal pendant que vous résolvez
+dans un autre, vous pouvez lui demander de **s'arrêter** sur le conflit et de
+reprendre plus tard. C'est aussi la façon dont une IA résout un conflit à votre
+place.
+
+```bash
+jgit feature rebase MONPROJET-123 --on-conflict pause
+```
+
+```
+Conflit pendant le rebase de feature/MONPROJET-123 sur develop.
+Commit en cause : a1b2c3d « Modifie la facturation » (branche jgit_rebase_feature/MONPROJET-123)
+Fichiers en conflit :
+  - src/facturation.php (modifié des deux côtés)
+
+L'opération est en pause : rien n'a été poussé.
+Résolvez les conflits dans les fichiers, marquez-les résolus (git add <fichier>), puis :
+  jgit feature continue MONPROJET-123
+Pour tout annuler :
+  jgit feature abort MONPROJET-123
+```
+
+Vous résolvez **dans le même terminal**, `git add` les fichiers, puis
+`jgit feature continue MONPROJET-123`. `jgit` termine le commit, rejoue les
+suivants — et se remet en pause s'il en rencontre un autre —, puis vous montre
+l'historique et publie.
+
+`jgit feature abort MONPROJET-123` remet tout comme avant : rien n'a été poussé.
+
+Tant que l'opération est en pause, **toute autre commande `jgit` refuse** : elle
+occupe votre espace de travail, et une bascule de branche la détruirait.
+
+| Conduite | Quand | Ce que fait `jgit` sur un conflit |
+| --- | --- | --- |
+| `ask` | défaut en interactif | attend que vous ayez résolu **et commité** ailleurs |
+| `abort` | défaut avec `--no-interaction` ou `--json` | annule tout ; rien n'a été poussé |
+| `pause` | sur demande | s'arrête, vous laisse résoudre, reprend avec `continue` |
+
+> **Un collègue a poussé pendant ce temps ?** Le rebase a lu la version du
+> serveur au départ, et ne publie que si elle n'a pas bougé
+> (`--force-with-lease`). Sinon, rien n'est écrasé : vos branches locales
+> reviennent à leur état d'avant, et il suffit de relancer le rebase.
+
 ### Réduire les conflits à un seul : `--squash`
 
 Sur une PR volumineuse, résoudre dix conflits d'affilée est pénible. L'option
@@ -160,6 +205,7 @@ sur un conflit impossible à résoudre — **votre historique d'origine est rest
 | `--based-on <branche>` | se rebaser sur une autre branche que la référence habituelle — fait autorité, aucune question n'est posée |
 | `--squash` | regrouper vos commits de travail en un seul avant de rejouer |
 | `--no-interaction` | ne rien demander — **ne déclenche jamais le squash** et **ne peut pas traiter un conflit** |
+| `--on-conflict <ask\|abort\|pause>` | la conduite face à un conflit (voir [Les conflits](#les-conflits)) |
 
 ---
 
@@ -256,9 +302,13 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 | Vous répondez `n` à la seconde question | supprime les branches réécrites et récupère votre branche de travail du serveur | l'état d'avant est rétabli, le serveur n'a jamais bougé |
 | Conflit **avec** `--no-interaction` | s'arrête proprement, annule tout, restaure votre historique | un conflit demande un humain : il n'est jamais validé tout seul |
 | Votre branche a divergé du serveur | s'arrête sans rien modifier | |
+| Un collègue a poussé sur votre branche ou sa branche de PR **pendant** le rebase | ne publie rien, remet vos branches locales comme avant, code de sortie `4` | son travail n'est jamais écrasé |
+| Une opération est en pause sur un conflit | toute autre commande refuse (code `5`) et rappelle `continue` / `abort` | l'opération occupe l'espace de travail |
+| `continue` alors que des fichiers sont encore en conflit, ou qu'il reste des marqueurs `<<<<<<<` | reste en pause et liste les fichiers (code `3`) | on ne publie pas une résolution inachevée |
 
-> **Le remote n'est poussé qu'en toute dernière étape.** Quel que soit le motif
-> d'arrêt avant cela, ce qui est sur le serveur est intact.
+> **Le remote n'est poussé qu'en toute dernière étape**, et les deux branches
+> partent ensemble ou pas du tout. Quel que soit le motif d'arrêt avant cela, ce
+> qui est sur le serveur est intact.
 
 ---
 
