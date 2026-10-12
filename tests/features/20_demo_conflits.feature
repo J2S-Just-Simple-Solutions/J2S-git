@@ -141,3 +141,27 @@ Fonctionnalité: Les conflits d'une démo, mis en pause, résolus et réutilisé
     Alors jgit se termine avec le code 2
     Et le JSON a "error.code" égal à "operation_mismatch"
     Et une opération jgit est en pause
+
+  # Quelqu'un — un collègue, une IA, l'interface — qui arrive au milieu doit
+  # pouvoir savoir ce qui attend, sans rien toucher.
+  Scénario: util status décrit l'opération en pause
+    Étant donné je lance "jgit demo add sprint12 --from feature/TEST-2 --on-conflict pause"
+    Quand je lance "jgit util status --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "schema" égal à "jgit.status/1"
+    Et le JSON a "current_branch" égal à "jgit_demo_sprint12"
+    Et le JSON a "operation_in_progress.operation" égal à "demo_add"
+    Et le JSON a "operation_in_progress.target" égal à "demo/sprint12"
+    Et le JSON a "operation_in_progress.context.ticket" égal à "feature/TEST-2"
+    Et le JSON a "operation_in_progress.commit.subject" égal à "Modifie app.txt pour la feature 2"
+    Et le JSON a "operation_in_progress.conflicted_files[0].path" égal à "src/app.txt"
+    Et le JSON a "operation_in_progress.commands.continue" égal à "jgit demo continue sprint12"
+    Et la sortie contient "Une opération attend la résolution d'un conflit"
+    Et une opération jgit est en pause
+
+  Scénario: util status sans rien en pause
+    Quand je lance "jgit util status --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "operation_in_progress" nul
+    Et le JSON a "current_branch" égal à "develop"
+    Et la sortie contient "Aucune opération jgit en pause."

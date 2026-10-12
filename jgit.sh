@@ -33,6 +33,7 @@ source "$JGIT_HOME/feature.sh"
 source "$JGIT_HOME/release.sh"
 source "$JGIT_HOME/rebase.sh"
 source "$JGIT_HOME/demo.sh"
+source "$JGIT_HOME/ui.sh"
 
 if [[ $JGIT_JSON_REQUESTED == true ]]; then
     jgit_json_enable
@@ -99,7 +100,7 @@ help() {
     printf "\n${C_BLUE}Usage:${C_RESET}\n"
     printf "  jgit ${C_GREEN}<scope>${C_RESET} ${C_CYAN}<action>${C_RESET} ${C_ORANGE}[<target>]${C_RESET} ${C_ORANGE}[options…]${C_RESET}\n\n"
 
-    printf "${C_BLUE}Scopes:${C_RESET} feature | hotfix | release | demo | util\n\n"
+    printf "${C_BLUE}Scopes:${C_RESET} feature | hotfix | release | demo | util | ui\n\n"
 
     printf "${C_BLUE}Options communes:${C_RESET}\n"
     printf "  --based-on <branch>   Branche de référence pour les créations / rebase.\n"
@@ -146,8 +147,12 @@ help() {
     printf "                                        Recrée une démo demo_<nom> (ancien format) au format actuel.\n"
     printf "  Options des commandes qui modifient : --dry-run, --drop-foreign, --on-conflict <mode>\n\n"
 
+    printf "${C_BLUE}Interface:${C_RESET}\n"
+    printf "  jgit ui                        Les démos dans une interface en terminal (Docker ; JGIT_UI=native sans Docker).\n\n"
+
     printf "${C_BLUE}Utility:${C_RESET}\n"
     printf "  jgit util clean                Supprime les branches locales jgit_rebase_*, jgit_demo_*, jgit_verify_rebase_* et __PR__*.\n"
+    printf "  jgit util status               Dit si une opération attend la résolution d'un conflit, et où elle en est.\n"
     printf "  jgit util check_rebase [--from <branche>]\n"
     printf "                                 Dit si la branche est à jour sur sa branche d'origine et si le rebase passerait.\n"
     printf "  jgit util verify_rebase --from <branche_source> --into <branche_cible>\n\n"
@@ -352,7 +357,8 @@ ensure_full_history || exit_safe 1
 # l'espace de travail ni à la branche courante.
 jgit_command_is_read_only() {
     case "$JGIT_TYPE $JGIT_ACTION" in
-        "demo list"|"demo show"|"demo candidates") return 0 ;;
+        "ui ") return 0 ;;
+        "demo list"|"demo show"|"demo candidates"|"util status") return 0 ;;
     esac
     return 1
 }
@@ -574,6 +580,9 @@ case "$JGIT_TYPE" in
             clean)
                 clean_branches
                 ;;
+            status)
+                util_status_cmd
+                ;;
             check_rebase)
                 # Le positionnel serait ignoré en silence : on préfère le dire.
                 if [[ -n "$JGIT_TARGET" ]]; then
@@ -590,6 +599,12 @@ case "$JGIT_TYPE" in
                 jgit_fail usage "$JGIT_EXIT_ERROR" "Action '$JGIT_ACTION' non supportée pour util."
                 ;;
         esac
+        ;;
+    ui)
+        if [[ -n "$JGIT_ACTION" ]]; then
+            jgit_fail usage "$JGIT_EXIT_ERROR" "jgit ui ne prend pas d'action : jgit ui"
+        fi
+        jgit_ui
         ;;
     clean)
         # Rétrocompatibilité : « jgit clean » est devenu « jgit util clean ».

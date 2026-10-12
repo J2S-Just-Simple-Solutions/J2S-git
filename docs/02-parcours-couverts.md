@@ -783,6 +783,7 @@ Fichier : [`tests/features/20_demo_conflits.feature`](../tests/features/20_demo_
 | Pendant la pause | `list` et `show` fonctionnent, `rebase` refuse (code 5) |
 | Un collègue modifie la démo pendant la pause | `continue` ne publie rien (code 4), son commit est intact |
 | `continue` d'une autre démo | refus |
+| `util status` | décrit l'opération en pause (démo, ticket, commit, fichiers, commandes) ; sans pause, le dit |
 
 | Régression qui serait attrapée |
 | --- |

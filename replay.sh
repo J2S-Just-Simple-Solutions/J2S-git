@@ -126,6 +126,76 @@ refuse_if_operation_paused() {
 }
 
 ###############################################
+#            jgit util status
+###############################################
+
+# Dit si une opération attend la résolution d'un conflit, et où elle en est :
+# ce qu'il faut à quelqu'un (ou à une IA, ou à l'interface) qui arrive au milieu.
+util_status_cmd() {
+  local commit="" first context="" subject=""
+  local current
+  current=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+  if ! jgit_state_exists; then
+    printf "Aucune opération jgit en pause.\n"
+    json_emit "$(json_object \
+      "$(json_kv_str schema "jgit.status/1")" \
+      "$(json_kv_bool ok true)" \
+      "$(json_kv_str command "util status")" \
+      "$(json_kv_str_or_null current_branch "$current")" \
+      "$(json_kv_null operation_in_progress)")"
+    return 0
+  fi
+
+  jgit_state_load
+
+  if [[ "$OP_operation" == demo_* ]]; then
+    first="${OP_plan%% *}"
+    first="${first#pick:}"
+    commit="${first%%:*}"
+    context=$(json_object \
+      "$(json_kv_str demo "$OP_name")" \
+      "$(json_kv_str_or_null ticket "$([[ "$OP_current_ticket" != "-" ]] && printf '%s' "$OP_current_ticket")")")
+  else
+    commit="${OP_pending%% *}"
+  fi
+  REPLAY_CONFLICT_COMMIT="$commit"
+  REPLAY_CONFLICT_LINES=$(replay_conflict_lines)
+  [[ -n "$commit" ]] && subject=$(git log -n 1 --format=%s "$commit" 2>/dev/null)
+
+  printf "${C_YELLOW}Une opération attend la résolution d'un conflit : %s.${C_RESET}\n" "$OP_label"
+  printf "Commit en cause : %s « %s » (branche %s)\n" "$(git rev-parse --short "$commit" 2>/dev/null)" "$subject" "$OP_branch"
+  if [[ -n "$REPLAY_CONFLICT_LINES" ]]; then
+    replay_print_conflict_files "$REPLAY_CONFLICT_LINES" 2>&1
+  else
+    printf "Plus aucun fichier en conflit : il reste à reprendre.\n"
+  fi
+  printf "\nReprendre : %s\nAnnuler   : %s\n" "$OP_continue_command" "$OP_abort_command"
+
+  json_emit "$(json_object \
+    "$(json_kv_str schema "jgit.status/1")" \
+    "$(json_kv_bool ok true)" \
+    "$(json_kv_str command "util status")" \
+    "$(json_kv_str_or_null current_branch "$current")" \
+    "$(json_kv operation_in_progress "$(json_object \
+        "$(json_kv_str operation "$OP_operation")" \
+        "$(json_kv_str target "$OP_target")" \
+        "$(json_kv_str label "$OP_label")" \
+        "$(json_kv_str branch "$OP_branch")" \
+        "$(json_kv commit "$(json_object \
+            "$(json_kv_str_or_null sha "$commit")" \
+            "$(json_kv_str_or_null subject "$subject")")")" \
+        "$(json_kv conflicted_files "$(replay_conflict_files_json "$REPLAY_CONFLICT_LINES")")" \
+        "$(json_kv progress "$(json_object \
+            "$(json_kv_num done "$OP_done")" \
+            "$(json_kv_num total "$OP_total")")")" \
+        "$(json_kv commands "$(json_object \
+            "$(json_kv_str continue "$OP_continue_command")" \
+            "$(json_kv_str abort "$OP_abort_command")")")" \
+        ${context:+"$(json_kv context "$context")"})")")"
+}
+
+###############################################
 #            Fichiers en conflit
 ###############################################
 

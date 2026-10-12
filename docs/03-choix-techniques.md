@@ -411,3 +411,47 @@ réécrit à la main n'est plus reconnu commit par commit : il passe en
   bascule de branche) et le rebase existant travaillent dans l'espace de travail ;
   une seule façon de faire.
 
+---
+
+## 16. Une interface en TypeScript et Ink, livrée dans Docker
+
+**Contexte.** Les démos doivent être pilotables par quelqu'un qui ne retient pas
+les commandes. L'équipe maîtrise TypeScript ; le bash, lui, ne sait pas faire
+d'interface au clavier digne de ce nom.
+
+**Décision.**
+- Une interface en terminal en TypeScript avec Ink (React pour le terminal),
+  dans `ui/`. Elle **n'a aucune logique git** : elle appelle `jgit … --json` et
+  lit les documents du contrat (choix n°13). Le bash reste le moteur, et la seule
+  source de vérité.
+- Les réécritures passent par `--dry-run` : le plan est montré avant d'être
+  appliqué. Toute modification est lancée avec `--on-conflict pause` : un
+  conflit ouvre un écran dédié plutôt qu'un échec.
+- Ouvrir un éditeur ou Claude Code demande le terminal : l'interface se démonte,
+  le lanceur (`cli.tsx`) exécute la commande, puis relance l'interface, qui
+  relit `jgit util status`.
+- Livraison dans Docker : image `j2s/jgit:local` (Debian, Node 22, git,
+  openssh, nano, tzdata), construite par `docker-compose.yml`, lancée par
+  `jgit ui` avec `docker run`. Le dépôt est monté au même chemin, le conteneur
+  tourne sous l'identité de l'hôte (un point d'entrée la déclare dans
+  `/etc/passwd`, sans quoi ssh refuse de démarrer), `safe.directory` est fixé par
+  variables d'environnement (`GIT_CONFIG_COUNT`), le fuseau horaire du poste est
+  transmis.
+- Sur Mac, l'agent SSH de Docker Desktop est un socket `root:root` en
+  `rw-rw----` : le conteneur reçoit le groupe root (`--group-add 0`) pour s'en
+  servir sans changer d'identité. `docker compose run` ne sait pas ajouter un
+  groupe : compose construit, `docker run` lance.
+
+**Conséquences.** Rien à installer sur un poste que Docker ; la même image sert
+la ligne de commande à un agent de CI. Les remotes doivent être en SSH (le
+trousseau macOS n'est pas visible du conteneur). `JGIT_UI=native` lance
+l'interface avec le Node du poste, sans Docker.
+
+**Écarté.**
+- Go et Bubble Tea : un binaire autonome, mais une technologie que l'équipe ne
+  pratique pas.
+- Une application web : un second produit à héberger et maintenir, sans gain
+  pour le premier usage.
+- Réécrire la logique des démos en TypeScript : deux moteurs à garder d'accord,
+  et la suite Gherkin à dupliquer.
+

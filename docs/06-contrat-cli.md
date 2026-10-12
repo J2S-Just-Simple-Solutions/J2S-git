@@ -130,6 +130,25 @@ chaque fichier pour retirer les marqueurs, `git add` chaque fichier, puis lancer
 `commands.continue` (avec `--json`). Un nouveau `jgit.conflict/1` peut revenir :
 c'est le commit suivant qui conflicte à son tour.
 
+### `jgit.status/1` — `jgit util status`
+
+Dit si une opération attend la résolution d'un conflit, sans rien toucher : ce
+qu'il faut à quelqu'un — un collègue, une IA, l'interface — qui arrive au milieu.
+
+```json
+{"schema":"jgit.status/1","ok":true,"command":"util status","current_branch":"jgit_demo_sprint12",
+ "operation_in_progress":{"operation":"demo_add","target":"demo/sprint12",
+   "label":"l'ajout de tickets à la démo demo/sprint12","branch":"jgit_demo_sprint12",
+   "commit":{"sha":"…","subject":"Modifie app.txt"},
+   "conflicted_files":[{"path":"src/app.txt","kind":"both_modified"}],
+   "progress":{"done":2,"total":3},
+   "commands":{"continue":"jgit demo continue sprint12","abort":"jgit demo abort sprint12"},
+   "context":{"demo":"sprint12","ticket":"feature/TEST-2"}}}
+```
+
+`operation_in_progress` est `null` quand rien n'est en pause. Une liste
+`conflicted_files` vide signifie que tout est résolu : il reste à reprendre.
+
 ### `jgit.demo.list/1` — `jgit demo list`
 
 ```json

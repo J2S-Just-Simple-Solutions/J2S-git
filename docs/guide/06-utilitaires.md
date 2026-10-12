@@ -1,8 +1,8 @@
 # 06 — Utilitaires
 
-> `jgit util clean` · `jgit util check_rebase` · `jgit util verify_rebase`
+> `jgit util clean` · `jgit util status` · `jgit util check_rebase` · `jgit util verify_rebase`
 
-Trois commandes d'appoint, sans effet sur le serveur.
+Quatre commandes d'appoint, sans effet sur le serveur.
 
 ---
 
@@ -48,6 +48,30 @@ S'il n'y a rien à nettoyer, elle vous le dit et s'arrête.
 
 > L'ancienne forme `jgit clean` fonctionne encore, avec un avertissement. Elle sera
 > retirée : prenez l'habitude de `jgit util clean`.
+
+---
+
+## `jgit util status` — une opération attend-elle ?
+
+### À quoi ça sert
+
+Un rebase ou une démo mis en pause sur un conflit (`--on-conflict pause`)
+occupent l'espace de travail jusqu'à leur reprise ou leur annulation. `util
+status` dit si c'est le cas, sur quel commit, quels fichiers restent à résoudre,
+et les deux commandes pour en sortir.
+
+```
+$ jgit util status
+Une opération attend la résolution d'un conflit : l'ajout de tickets à la démo demo/sprint12.
+Commit en cause : 4f5a6b7 « Refonte de la facturation » (branche jgit_demo_sprint12)
+Fichiers en conflit :
+  - src/facturation.php (modifié des deux côtés)
+
+Reprendre : jgit demo continue sprint12
+Annuler   : jgit demo abort sprint12
+```
+
+Elle ne modifie rien et fonctionne pendant la pause.
 
 ---
 

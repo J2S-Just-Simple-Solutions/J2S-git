@@ -309,6 +309,8 @@ Cycle de vie (chaque changement de nom est un seul push `--atomic`, protégé pa
 - `jgit demo delete <nom|archive>` : la supprime du serveur, après confirmation.
 - `jgit demo migrate <nom> [--based-on <branche>]` : recrée une démo `demo_<nom>` (ancien format) au format actuel, avec les mêmes tickets ; l'ancienne est conservée.
 
+Tout cela est aussi accessible au clavier, sans retenir les commandes : [`jgit ui`](#interface-en-terminal-jgit-ui).
+
 Les résolutions de conflit sont des commits de la démo : les reconstructions suivantes les rejouent sans les redemander.
 
 Les anciennes démos `demo_<nom>` restent lisibles par `list` et `show`, en lecture seule ; `migrate` les convertit.
@@ -336,6 +338,7 @@ parvenir reviendrait à prendre une décision qui ne revient pas à `jgit`.
 ### Utilitaires
 
 - `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_demo_*`, `jgit_verify_rebase_*`, `__PR__*`). Refusé tant qu'une opération est en pause sur un conflit.
+- `jgit util status` : dit si une opération attend la résolution d'un conflit, le fichier à résoudre et les deux commandes pour en sortir. Ne modifie rien.
 - `jgit util check_rebase [--from <branche>]` : dit si la branche (par défaut la branche courante) est encore à jour sur [sa branche d'origine](#branche-dorigine) et si le rebase passerait. Ne modifie rien.
 - `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
 
@@ -381,6 +384,48 @@ La distinction entre les deux formes de `release merge` se fait sur le format de
 l'argument : `1.2.0` ou `release/1.2.0` est une version cible, tout le reste est
 traité comme une branche source. Mélanger les deux — `jgit release merge
 feature/X --from feature/Y` — est refusé explicitement.
+
+## Interface en terminal (`jgit ui`)
+
+```bash
+jgit ui
+```
+
+Une interface au clavier pour les démos, pensée pour qui ne veut pas retenir les
+commandes : la liste des démos et leur état, le détail ticket par ticket, des
+cases à cocher pour ajouter ou retirer des tickets, la création d'une démo, le
+plan de chaque réécriture montré avant d'être appliqué (`--dry-run`), et un
+écran de conflit (fichiers à résoudre, ouverture dans l'éditeur, reprise,
+annulation, « résoudre avec Claude » quand Claude Code est installé).
+
+Elle est écrite en TypeScript avec [Ink](https://github.com/vadimdemedes/ink)
+(dossier [`ui/`](ui/)) et ne fait **aucune** opération git elle-même : tout passe
+par `jgit … --json`.
+
+**Elle tourne dans Docker** : rien à installer d'autre. `jgit ui` construit
+l'image `j2s/jgit:local` avec [`docker-compose.yml`](docker-compose.yml) (la
+première fois, puis seulement ce qui a changé), puis la lance :
+
+- le dépôt du projet est monté **au même chemin** que sur le poste ;
+- le conteneur tourne sous **votre identité** : les fichiers du dépôt restent les
+  vôtres ;
+- `~/.gitconfig` et `~/.ssh/known_hosts` sont montés en lecture, et **l'agent
+  SSH** du poste est transmis (Docker Desktop sur Mac, `$SSH_AUTH_SOCK` sous
+  Linux) : les remotes doivent être en SSH (`git@github.com:…`) ;
+- l'éditeur du conteneur est `nano`.
+
+Sans Docker, l'interface se lance avec le `node` du poste (Node 20 ou plus) :
+
+```bash
+(cd /chemin/vers/J2S-git/ui && npm ci && npm run build)
+JGIT_UI=native jgit ui
+```
+
+La même image fournit la ligne de commande, pour un agent de CI :
+
+```bash
+docker run --rm -v "$PWD:$PWD" -w "$PWD" j2s/jgit:local jgit demo list --json
+```
 
 ## Piloter jgit par une IA (Claude Code)
 

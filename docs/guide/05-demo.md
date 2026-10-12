@@ -14,6 +14,10 @@ Une démo vit longtemps : on y ajoute des tickets, on en retire, on la remet à
 jour quand la préprod avance. `jgit` s'occupe de la mécanique ; vous décidez de
 ce qu'elle contient.
 
+> **Au clavier plutôt qu'en commandes ?** `jgit ui` ouvre une interface en
+> terminal qui fait tout ce qui suit : liste, détail, cases à cocher pour ajouter
+> ou retirer des tickets, plan montré avant chaque réécriture, écran de conflit.
+
 ---
 
 ## Le principe : une démo est une recette

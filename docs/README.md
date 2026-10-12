@@ -28,6 +28,7 @@ les limites connues. Lisible sans être expert Git.
 | [03 — Choix techniques](03-choix-techniques.md) | Les décisions prises pour la suite de tests, leurs raisons et leurs conséquences |
 | [04 — Règles de codage](04-regles-de-codage.md) | Les règles à respecter en modifiant `jgit`, à commencer par l'alignement code / aide / doc |
 | [05 — Portabilité](05-portabilite.md) | macOS et Linux : ce qui a été levé pour Linux, les règles à respecter, et pourquoi tout autre système est refusé |
+| [07 — Feuille de route](07-feuille-de-route.md) | Temps 2 (Jenkins et environnements) et temps 3 (prototypes) : ce qui est déjà prêt, ce qu'il reste à trancher |
 | [06 — Contrat de la ligne de commande](06-contrat-cli.md) | `--json` : le document unique, les codes de sortie, les schémas — ce qu'une IA, l'interface ou Jenkins peuvent attendre de `jgit` |
 
 Le mode d'emploi opérationnel (lancer les tests, écrire un scénario, catalogue

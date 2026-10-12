@@ -16,6 +16,8 @@ le projet — code, messages, documentation, tests — est **en français**.
 | `demo.sh`, `demo_model.sh`, `demo_engine.sh`, `demo_lifecycle.sh` | démos : commandes et vues, lecture de la recette, fabrication, archive/migration |
 | `docs/` | contrat, choix techniques, règles de codage, parcours couverts ; `docs/guide/` pour les utilisateurs |
 | `tests/` | suite Gherkin en français, moteur maison en bash (`tests/README.md`) |
+| `ui.sh`, `ui/` | `jgit ui` : interface en terminal (TypeScript + Ink), qui n'appelle que `jgit … --json` |
+| `Dockerfile`, `docker-compose.yml`, `docker/` | image `j2s/jgit:local` : ligne de commande et interface |
 | `.claude/skills/jgit-demo/` | skill pour piloter les démos depuis Claude Code, dans un projet J2S |
 
 ## Règles qui ne se devinent pas
@@ -45,6 +47,7 @@ Elles sont détaillées dans `docs/04-regles-de-codage.md`. Les plus importantes
 ./tests/run.sh demo -v         # un sous-ensemble, avec le déroulé
 ./tests/run-in-docker.sh       # Linux, bash 5.2 (≈ 1 min) — même arguments
 ./tests/steps/generate_vscode_glue.sh   # après avoir ajouté une étape Gherkin
+(cd ui && npm ci && npm test)           # l'interface : build TypeScript + tests Ink
 ```
 
 Une modification n'est terminée que si les deux suites passent. Les scénarios

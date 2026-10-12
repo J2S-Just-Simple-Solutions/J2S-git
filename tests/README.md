@@ -52,6 +52,15 @@ joue, dans une image Debian (bash 5.2, outils GNU) construite à la volée :
 
 Le dépôt est monté en lecture seule ; seul Docker est requis.
 
+### L'interface (`ui/`)
+
+L'interface en terminal a ses propres tests, en TypeScript (`node:test` et
+`ink-testing-library`, avec un `jgit` simulé) :
+
+```bash
+(cd ui && npm ci && npm test)
+```
+
 ## Ce que voit un scénario
 
 L'étape `Étant donné un projet git initialisé pour jgit` construit un
@@ -358,7 +367,7 @@ test_passed
 
 ## Scénarios existants
 
-291 scénarios répartis par domaine fonctionnel.
+294 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -381,7 +390,7 @@ test_passed
 | `17_demo_creation_et_lecture.feature` | `demo create` (base, tickets, `--based-on`, confirmation, `--dry-run`, refus), `demo list`, `demo show` (chaque état de ticket, retard sur la base, commit ajouté à la main), `demo candidates` |
 | `18_demo_tickets.feature` | `demo add` (à la suite, sans réécriture ; nouveaux commits d'un ticket ; à jour ; réécrit ; livré), `demo drop` (ordre conservé, premier ticket, confirmation, `--dry-run`, commits ajoutés à la main, `--drop-foreign`), `demo refresh` |
 | `19_demo_rebase.feature` | `demo rebase` : base qui a avancé, démo à jour non republiée, tickets livrés ou disparus retirés (`--keep-*`), `--based-on`, commits ajoutés à la main, `--dry-run`, base inconnue |
-| `20_demo_conflits.feature` | conflit de démo en pause, `continue`, résolution rejouée par les reconstructions suivantes, `abort`, abandon sans interaction, lecture pendant la pause, lease, mauvaise démo |
+| `20_demo_conflits.feature` | conflit de démo en pause, `continue`, résolution rejouée par les reconstructions suivantes, `abort`, abandon sans interaction, lecture pendant la pause, lease, mauvaise démo, `util status` |
 | `21_demo_archive.feature` | `demo archive` (nom libéré, archives à part dans la liste, numérotation du jour, lecture seule, copie locale), `demo unarchive` (par nom, ambiguïté, nom déjà pris), `demo delete` |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer

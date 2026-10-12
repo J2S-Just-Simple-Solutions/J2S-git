@@ -69,6 +69,9 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "jgit demo remove               → jgit demo delete <nom>"
     # Util
     Et la sortie contient "jgit util clean"
+    Et la sortie contient "jgit util status"
+    # Interface
+    Et la sortie contient "jgit ui"
     Et la sortie contient "jgit util check_rebase [--from <branche>]"
     Et la sortie contient "jgit util verify_rebase --from <branche_source> --into <branche_cible>"
     # L'aide doit dire ce que util clean supprime réellement, y compris les
@@ -212,3 +215,11 @@ Fonctionnalité: Analyse de la ligne de commande
     Alors jgit se termine en erreur
     Et la sortie contient "Arguments supplémentaires non reconnus : --no-open"
     Et la branche distante "feature/TEST-1" n'existe pas
+
+  # L'interface se lance sans action : une action en trop est une faute de frappe.
+  Scénario: jgit ui n'accepte pas d'action
+    Quand je lance "jgit ui demo --json" en lisant le JSON
+    Alors jgit se termine avec le code 1
+    Et le JSON a "error.code" égal à "usage"
+    Et le JSON a "error.message" égal à "jgit ui ne prend pas d'action : jgit ui"
+
