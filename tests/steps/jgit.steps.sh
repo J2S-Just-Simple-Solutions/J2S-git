@@ -43,6 +43,14 @@ step_lance_commande() {
 }
 step_def "je lance {chaine}" step_lance_commande
 
+# Variante pour le contrat --json : la sortie standard (le document) est
+# capturee a part de la sortie d'erreur (les messages).
+step_lance_commande_json() {
+    jgit_args_from_command "$1"
+    run_jgit_json ${JGIT_ARGS[@]+"${JGIT_ARGS[@]}"}
+}
+step_def "je lance {chaine} en lisant le JSON" step_lance_commande_json
+
 # Variante interactive : le tableau fournit les questions attendues et les
 # reponses a taper.
 #
@@ -191,6 +199,58 @@ step_sortie_sans_couleur() {
     assert_jgit_output_plain
 }
 step_def "la sortie ne contient aucune séquence de couleur" step_sortie_sans_couleur
+
+###############################################
+#            Verifications : document JSON
+###############################################
+
+step_json_unique() {
+    assert_json_document
+}
+step_def "la sortie standard est un unique document JSON" step_json_unique
+
+step_json_egal() {
+    assert_json_equals "$1" "$2"
+}
+step_def "le JSON a {chaine} égal à {texte}" step_json_egal
+
+step_json_contient() {
+    local actual
+    actual=$(json_value_at "$1") || exit 1
+    assert_contains "$actual" "$2" "JSON $1 contient [$2]"
+}
+step_def "le JSON a {chaine} qui contient {chaine}" step_json_contient
+
+step_json_nombre() {
+    assert_json_equals "$1" "$2"
+    assert_json_type "$1" number
+}
+step_def "le JSON a {chaine} égal au nombre {nombre}" step_json_nombre
+
+step_json_vrai() {
+    assert_json_equals "$1" true
+}
+step_def "le JSON a {chaine} vrai" step_json_vrai
+
+step_json_faux() {
+    assert_json_equals "$1" false
+}
+step_def "le JSON a {chaine} faux" step_json_faux
+
+step_json_nul() {
+    assert_json_type "$1" null
+}
+step_def "le JSON a {chaine} nul" step_json_nul
+
+step_json_longueur() {
+    assert_json_length "$1" "$2"
+}
+step_def "la liste JSON {chaine} contient {nombre} éléments" step_json_longueur
+
+step_json_absent() {
+    assert_json_missing "$1"
+}
+step_def "le JSON n'a pas de {chaine}" step_json_absent
 
 ###############################################
 #            Verifications : branches

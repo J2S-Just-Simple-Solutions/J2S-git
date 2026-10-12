@@ -289,3 +289,32 @@ contenait quelque chose.
 **Migration.** Aucune. Les branches créées avant ce mécanisme n'ont pas la trace,
 et on ne la leur invente pas : `util check_rebase` refuse de répondre pour
 elles, et `feature rebase` la leur donne au passage.
+
+---
+
+## 13. Une sortie JSON en bash pur, sur un descripteur à part
+
+**Contexte.** `jgit` doit être pilotable par une IA, par une interface en
+terminal et par Jenkins. Ces programmes ont besoin d'un résultat structuré, pas
+de phrases colorées. Mais le code existant écrit ses messages sur la sortie
+standard, partout.
+
+**Décision.** Avec `--json`, `jgit.sh` duplique la sortie standard sur le
+descripteur 3 puis redirige la sortie standard vers la sortie d'erreur. Le code
+existant n'est pas touché : ses messages partent désormais sur la sortie
+d'erreur. Seul `json_emit` écrit sur le descripteur 3, une seule fois. Un
+`trap EXIT` garantit qu'il y a toujours un document, même sur un `exit` imprévu.
+Le JSON est fabriqué en bash pur (`json.sh`).
+
+**Conséquences.** Une commande existante devient pilotable sans réécriture : elle
+produit au minimum `jgit.result/1` ou `jgit.error/1`. Les commandes nouvelles
+(démos) produisent des documents riches. En contrepartie, les erreurs doivent être
+identifiées (`jgit_fail`) pour être utiles à un programme.
+
+**Écarté.** `jq` : absent des postes, et la règle n°8 interdit toute dépendance
+supplémentaire. Un mode « JSON » qui remplacerait chaque `echo` : des centaines de
+lignes à toucher, pour un résultat identique.
+
+**Piège connu.** bash 5.2 donne un sens spécial à `&` dans le remplacement de
+`${s//motif/remplacement}` s'il n'est pas entre guillemets. Toutes les
+substitutions de `json_str` sont protégées.

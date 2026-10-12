@@ -37,6 +37,8 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "--no-interaction"
     Et la sortie contient "--no-open"
     Et la sortie contient "--squash"
+    Et la sortie contient "--json"
+    Et la sortie contient "--no-fetch"
     # Feature & hotfix : chaque action avec les options qu'elle lit vraiment
     Et la sortie contient "jgit feature start <ticket> [--based-on <branch>] [--no-open]"
     Et la sortie contient "jgit feature restart <ticket> [--no-open]"

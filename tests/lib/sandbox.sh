@@ -238,6 +238,29 @@ run_jgit() {
     return 0
 }
 
+# Variante de run_jgit qui garde separees la sortie standard (le document JSON,
+# dans $SANDBOX/stdout.json) et la sortie d'erreur. $JGIT_OUTPUT contient les
+# deux, pour que les verifications habituelles sur la sortie restent valables.
+run_jgit_json() {
+    local status=0
+
+    printf '%s$ jgit %s   (sortie standard capturee a part)\n' "$ASSERT_INDENT" "$*"
+    # shellcheck disable=SC2086
+    (cd "$SANDBOX/repo" && $JGIT_LAUNCHER "$(jgit_invoked_path)" "$@" \
+        < /dev/null > "$SANDBOX/stdout.json" 2> "$SANDBOX/stderr.txt") || status=$?
+
+    JGIT_STDOUT=$(cat "$SANDBOX/stdout.json")
+    JGIT_STDERR=$(cat "$SANDBOX/stderr.txt")
+    JGIT_OUTPUT="$JGIT_STDERR
+$JGIT_STDOUT"
+    JGIT_STATUS=$status
+
+    printf '%s\n' "$JGIT_STDERR" | sed "s/^/${ASSERT_INDENT}| /"
+    printf '%s\n' "$JGIT_STDOUT" | sed "s/^/${ASSERT_INDENT}> /"
+    printf '%s(code de sortie : %s)\n' "$ASSERT_INDENT" "$status"
+    return 0
+}
+
 # Ecrit un fichier dans le depot de travail SANS le commiter : sert a simuler
 # un espace de travail sale (stash, refus de release start...).
 repo_write_file() {

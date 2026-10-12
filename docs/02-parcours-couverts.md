@@ -657,3 +657,50 @@ qu'un cas particulier se remette à parler sa propre langue.
 | Une ancienne branche à qui l'on attribue la trace d'un ancêtre au lieu de la reconnaître comme ancienne |
 | Un rebase qui laisse la trace d'avant : la branche prétendrait partir d'une base qui n'est plus la sienne |
 | `feature rebase` qui renvoie silencieusement sur `develop` une branche partie d'ailleurs |
+
+---
+
+## Parcours 14 — Les réponses aux questions
+
+Fichier : [`tests/features/14_confirmation.feature`](../tests/features/14_confirmation.feature)
+
+Le suffixe `(Y/n)` met la réponse par défaut en majuscule : un développeur qui
+tape cette majuscule doit être compris. Les réponses sont donc lues sans tenir
+compte de la casse, et « oui » / « o » valent « y ».
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `Y`, `YES`, `Yes` | acceptent |
+| `oui`, `O` | acceptent |
+| `N` | refuse : les branches distantes sont inchangées |
+| Une réponse inconnue (« peut-être ») | refuse |
+
+---
+
+## Parcours 15 — Le contrat de sortie `--json`
+
+Fichier : [`tests/features/15_contrat_json.feature`](../tests/features/15_contrat_json.feature)
+
+Une IA, l'interface en terminal ou Jenkins lisent un document, pas des phrases.
+Avec `--json`, la sortie standard porte un seul document JSON ; les messages
+partent sur la sortie d'erreur. Le contrat est dans
+[`06-contrat-cli.md`](06-contrat-cli.md).
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Commande réussie | un unique document `jgit.result/1`, `ok: true`, la commande nommée |
+| `--json` | implique `--no-interaction` : la réponse par défaut est appliquée et annoncée sur la sortie d'erreur |
+| Erreur d'usage | un unique document `jgit.error/1`, `error.code` = `usage`, code de sortie 1 |
+| Option inconnue placée **avant** `--json` | un document d'erreur tout de même : `--json` est repéré en premier |
+| Refus (espace de travail sale) | `error.code` précis (`worktree_dirty`) et `error.hint` portant le remède |
+| Guillemets, antislash, accents dans un message | document toujours valide |
+| `--help --json` | l'aide part sur la sortie d'erreur, un document de résultat reste |
+| Couleurs | aucune séquence ANSI |
+| `--no-fetch` | les références déjà rapatriées font foi : une livraison récente sur le serveur est ignorée |
+
+| Régression qui serait attrapée |
+| --- |
+| Un `echo` ajouté sur la sortie standard, qui casserait la lecture du document |
+| Deux documents émis par la même commande |
+| Une sortie sans document sur un `exit` imprévu |
+| Un message dont un caractère spécial rend le JSON invalide |

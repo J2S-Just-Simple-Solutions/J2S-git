@@ -15,6 +15,8 @@ ses questions, ce qu'il exige de votre dépôt, et comment l'adapter à votre pr
 | `--no-open` | ne pas ouvrir de pull request | `feature start`, `feature restart` |
 | `--squash` | regrouper les commits avant de rejouer | `feature rebase` |
 | `--no-interaction` | ne poser aucune question | partout |
+| `--json` | répondre par un document JSON, pour un programme (IA, interface, Jenkins) ; implique `--no-interaction` | partout |
+| `--no-fetch` | ne pas contacter le serveur, travailler sur ce qui a déjà été récupéré | partout |
 | `-h`, `--help` | afficher l'aide complète | partout |
 
 Une option donnée à une commande qui ne la lit pas est **ignorée en silence** :
@@ -24,6 +26,26 @@ aucun squash.
 En revanche, une option **inconnue** (`--bidule`) ou privée de sa valeur
 (`--based-on` en fin de ligne) fait échouer la commande immédiatement, avant toute
 action sur le dépôt.
+
+### Faire piloter `jgit` par un programme
+
+Avec `--json`, `jgit` répond par **un seul document JSON** sur sa sortie
+standard, et écrit ses messages habituels sur la sortie d'erreur. C'est ainsi
+qu'une IA, l'interface en terminal ou Jenkins le pilotent :
+
+```bash
+jgit release start --json
+```
+
+```json
+{"schema":"jgit.error/1","ok":false,"command":"release start",
+ "error":{"code":"worktree_dirty","exit_code":1,
+          "message":"Votre espace de travail contient des modifications non commitées.",
+          "hint":"git stash push -u -m \"avant jgit\""}}
+```
+
+Le contrat complet — schémas, codes de sortie — est dans
+[`docs/06-contrat-cli.md`](../06-contrat-cli.md).
 
 ---
 

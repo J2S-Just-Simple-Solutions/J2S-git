@@ -301,6 +301,74 @@ assert_jgit_output_not_contains() {
     assert_not_contains "$JGIT_OUTPUT" "$1" "${2:-sortie de jgit ne contient pas [$1]}"
 }
 
+###############################################
+#            Document JSON (--json)
+###############################################
+
+json_query() {
+    python3 "$JGIT_TESTS_DIR/lib/json_query.py" "$SANDBOX/stdout.json" "$@"
+}
+
+assert_json_document() {
+    local error
+
+    if error=$(json_query check 2>&1); then
+        assert_ok "sortie standard = un unique document JSON"
+    else
+        assert_failed "sortie standard = un unique document JSON" "$error"
+    fi
+}
+
+json_value_at() {
+    local path="$1"
+    local value
+
+    if ! value=$(json_query get "$path" 2>&1); then
+        assert_failed "valeur JSON $path" "$value" "--- document ---" "$(cat "$SANDBOX/stdout.json")"
+    fi
+    printf '%s' "$value"
+}
+
+assert_json_equals() {
+    local path="$1"
+    local expected="$2"
+    local actual
+
+    actual=$(json_value_at "$path") || exit 1
+    assert_equals "$expected" "$actual" "JSON $path"
+}
+
+assert_json_type() {
+    local path="$1"
+    local expected="$2"
+    local actual
+
+    if ! actual=$(json_query type "$path" 2>&1); then
+        assert_failed "type JSON de $path" "$actual"
+    fi
+    assert_equals "$expected" "$actual" "type JSON de $path"
+}
+
+assert_json_length() {
+    local path="$1"
+    local expected="$2"
+    local actual
+
+    if ! actual=$(json_query len "$path" 2>&1); then
+        assert_failed "longueur JSON de $path" "$actual"
+    fi
+    assert_equals "$expected" "$actual" "longueur JSON de $path"
+}
+
+assert_json_missing() {
+    local path="$1"
+
+    if json_query get "$path" >/dev/null 2>&1; then
+        assert_failed "JSON $path absent" "valeur trouvee : $(json_query get "$path")"
+    fi
+    assert_ok "JSON $path absent"
+}
+
 # Ni sequence ANSI ni plainte de tput : ce que lit un journal Jenkins ou une IA.
 assert_jgit_output_plain() {
     local esc=$'\033'

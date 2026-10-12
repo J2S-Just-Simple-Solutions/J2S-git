@@ -178,7 +178,26 @@ quitterait que le sous-shell.
 
 ---
 
-## 8. Compatibilité bash 3.2 / 5.2, macOS et Linux
+## 8. Une erreur s'arrête par `jgit_fail`
+
+**La règle.** Une nouvelle erreur s'arrête par
+`jgit_fail <code> <code_de_sortie> <message> [remède]` (`json.sh`) : le message
+part en rouge sur la sortie d'erreur, le remède en dessous, et le tout est repris
+dans le document `jgit.error/1` en mode `--json`. Quand le message est déjà
+affiché par ailleurs, `jgit_error_set <code> <message> [remède]` puis
+`exit_safe`.
+
+**Pourquoi.** Une IA ou Jenkins ne lit pas les phrases : il lit `error.code`. Un
+`exit_safe 1` nu reste un document valide, mais réduit à `failed` — le
+programme sait que ça a échoué, pas pourquoi, et ne peut rien proposer.
+
+**Corollaire.** Avec `--json`, la sortie standard est réservée au document : rien
+d'autre ne doit y être écrit que par `json_emit`. Le contrat est dans
+[`06-contrat-cli.md`](06-contrat-cli.md).
+
+---
+
+## 9. Compatibilité bash 3.2 / 5.2, macOS et Linux
 
 Le bash livré par Apple est le 3.2 : pas de tableaux associatifs, pas de
 `readarray`/`mapfile`, pas de `${var^^}`. Voir le

@@ -97,6 +97,8 @@ jgit <scope> <action> [<cible>] [options...]
 - `--based-on <branche>` : force la branche de référence lors d'un `start` ou d'un `rebase`.
 - `--from <branche>` : ajoute une source à fusionner (option répétable).
 - `--into <branche>` : définit explicitement la branche de destination.
+- `--json` : sortie machine, pour une IA, l'interface ou Jenkins. La sortie standard porte **un seul document JSON** ; tous les messages partent sur la sortie d'erreur ; le code de sortie donne la famille du résultat. Implique `--no-interaction`. Le contrat complet est dans [`docs/06-contrat-cli.md`](docs/06-contrat-cli.md).
+- `--no-fetch` : ne contacte pas le serveur et travaille sur les références déjà rapatriées (affichage répété).
 - `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune. Cette réponse par défaut est **toujours** celle signalée par la majuscule dans le suffixe de la question — `(Y/n)` quand valider sans rien saisir revient à dire oui, `(y/N)` quand cela revient à dire non. Il n'existe aucune question affichée `(y/n)`. Un conflit de rebase, qui exige une intervention humaine, n'est jamais validé automatiquement : la commande s'arrête proprement (voir ci-dessous).
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
 - `--squash` : lors d'un `rebase`, squash tous les commits de la branche de travail en un seul avant de rejouer l'historique.

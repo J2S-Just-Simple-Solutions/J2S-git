@@ -19,10 +19,25 @@ jgit_resolve_home() {
 
 JGIT_HOME=$(jgit_resolve_home)
 
+# --json est repéré avant tout le reste : dès la première ligne écrite, la
+# sortie standard doit être réservée au document, y compris pour une erreur de
+# syntaxe dans la suite de la ligne de commande. Après « -- », plus d'option.
+JGIT_JSON_REQUESTED=false
+for jgit_arg in "$@"; do
+    [[ "$jgit_arg" == "--" ]] && break
+    [[ "$jgit_arg" == "--json" ]] && JGIT_JSON_REQUESTED=true
+done
+unset jgit_arg
+
 source "$JGIT_HOME/feature.sh"
 source "$JGIT_HOME/release.sh"
 source "$JGIT_HOME/rebase.sh"
 source "$JGIT_HOME/demo.sh"
+
+if [[ $JGIT_JSON_REQUESTED == true ]]; then
+    jgit_json_enable
+    jgit_disable_colors
+fi
 
 ####################################
 #
@@ -60,6 +75,7 @@ trailer_branch="jgit-branch"
 trailer_based_on="jgit-based-on"
 
 JGIT_NO_INTERACTION=false
+JGIT_NO_FETCH=false
 JGIT_SQUASH=false
 JGIT_SQUASH_THRESHOLD=$squash_threshold
 JGIT_NO_OPEN=false
@@ -84,6 +100,9 @@ help() {
     printf "  --from <branch>       Source d'un merge (répétable).\n"
     printf "  --into <branch>       Destination explicite d'un merge.\n"
     printf "  --no-interaction      Ne pose aucune question et applique les réponses par défaut.\n"
+    printf "  --json                Sortie machine : un seul document JSON sur la sortie standard,\n"
+    printf "                        les messages sur la sortie d'erreur. Implique --no-interaction.\n"
+    printf "  --no-fetch            Ne contacte pas le serveur : travaille sur les références déjà rapatriées.\n"
     printf "  --no-open             N'ouvre pas automatiquement la PR.\n"
     printf "  --squash              Squash les commits de la branche en un seul avant le rebase.\n"
     printf "  -h | --help           Affiche cette aide.\n\n"
@@ -120,8 +139,7 @@ require_argument() {
     local option="$1"
     local value="$2"
     if [[ -z "$value" || "$value" == -* ]]; then
-        printf "${C_RED}Erreur : l'option %s requiert une valeur.${C_RESET}\n" "$option" >&2
-        exit_safe 1
+        jgit_fail usage "$JGIT_EXIT_ERROR" "Erreur : l'option $option requiert une valeur."
     fi
 }
 
@@ -130,8 +148,7 @@ ensure_remote() {
     remotes=$(git remote -v)
 
     if [[ $remotes != *"$j2s_remote"* ]]; then
-        echo "Please configure J2S remote as $j2s_remote"
-        exit_safe 1
+        jgit_fail remote_missing "$JGIT_EXIT_ERROR" "Please configure J2S remote as $j2s_remote"
     fi
 }
 
@@ -174,6 +191,15 @@ while [[ $# -gt 0 ]]; do
             JGIT_NO_INTERACTION=true
             shift
             ;;
+        --json)
+            # Déjà traité avant le chargement des modules.
+            JGIT_NO_INTERACTION=true
+            shift
+            ;;
+        --no-fetch)
+            JGIT_NO_FETCH=true
+            shift
+            ;;
         --no-open)
             JGIT_NO_OPEN=true
             shift
@@ -194,8 +220,7 @@ while [[ $# -gt 0 ]]; do
             done
             ;;
         -* )
-            printf "${C_RED}Option inconnue : %s${C_RESET}\n" "$1" >&2
-            exit_safe 1
+            jgit_fail usage "$JGIT_EXIT_ERROR" "Option inconnue : $1"
             ;;
         *)
             positional+=("$1")
@@ -228,8 +253,23 @@ if [[ "$JGIT_TYPE" == "-h" ]]; then
 fi
 
 if [[ ${#extra_positionals[@]} -gt 0 ]]; then
-    printf "${C_RED}Arguments supplémentaires non reconnus : %s${C_RESET}\n" "${extra_positionals[*]}" >&2
-    exit_safe 1
+    jgit_fail usage "$JGIT_EXIT_ERROR" "Arguments supplémentaires non reconnus : ${extra_positionals[*]}"
+fi
+
+JGIT_COMMAND="$JGIT_TYPE${JGIT_ACTION:+ $JGIT_ACTION}"
+
+# Sans interaction, git ne doit rien demander non plus : ni identifiants, ni
+# message de commit dans un éditeur.
+if [[ $JGIT_NO_INTERACTION == true ]]; then
+    export GIT_TERMINAL_PROMPT=0
+    export GIT_EDITOR=true
+    export GIT_MERGE_AUTOEDIT=no
+fi
+
+# Les références déjà rapatriées font foi : utile pour un affichage répété
+# (interface, tableau de bord) qui n'a pas besoin d'interroger le serveur.
+if [[ $JGIT_NO_FETCH == true ]]; then
+    JGIT_FETCH_DONE=true
 fi
 
 ####################################
@@ -252,42 +292,40 @@ case "$JGIT_TYPE" in
     feature|hotfix)
         if [[ -z "$JGIT_ACTION" ]]; then
             help
+            jgit_error_set usage "Action manquante pour le scope $JGIT_TYPE." "jgit --help"
             exit_safe 1
         fi
         case "$JGIT_ACTION" in
             start)
                 if [[ -z "$JGIT_TARGET" ]]; then
-                    echo "Please set a $JGIT_TYPE identifier." >&2
-                    exit_safe 1
+                    jgit_fail usage "$JGIT_EXIT_ERROR" "Please set a $JGIT_TYPE identifier."
                 fi
                 verify_stash
                 feature_start "$JGIT_TYPE" "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
                 ;;
             restart)
                 if [[ -z "$JGIT_TARGET" ]]; then
-                    echo "Please set a $JGIT_TYPE identifier." >&2
-                    exit_safe 1
+                    jgit_fail usage "$JGIT_EXIT_ERROR" "Please set a $JGIT_TYPE identifier."
                 fi
                 verify_stash
                 feature_restart "$JGIT_TYPE" "$JGIT_TARGET"
                 ;;
             rebase)
                 if [[ -z "$JGIT_TARGET" ]]; then
-                    echo "Please set a $JGIT_TYPE identifier." >&2
-                    exit_safe 1
+                    jgit_fail usage "$JGIT_EXIT_ERROR" "Please set a $JGIT_TYPE identifier."
                 fi
                 verify_stash
                 feature_rebase "$JGIT_TYPE" "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
                 ;;
             *)
-                printf "${C_RED}Action '%s' non supportée pour %s.${C_RESET}\n" "$JGIT_ACTION" "$JGIT_TYPE" >&2
-                exit_safe 1
+                jgit_fail usage "$JGIT_EXIT_ERROR" "Action '$JGIT_ACTION' non supportée pour $JGIT_TYPE."
                 ;;
         esac
         ;;
     release)
         if [[ -z "$JGIT_ACTION" ]]; then
             help
+            jgit_error_set usage "Action manquante pour le scope $JGIT_TYPE." "jgit --help"
             exit_safe 1
         fi
         case "$JGIT_ACTION" in
@@ -308,13 +346,11 @@ case "$JGIT_TYPE" in
                     JGIT_TARGET=""
                 fi
                 if [[ -n "$JGIT_TARGET" ]] && ! is_release_version "$JGIT_TARGET"; then
-                    printf "${C_RED}Version de release attendue au format x.y.z, reçu '%s'.${C_RESET}\n" "$JGIT_TARGET" >&2
-                    printf "Pour désigner une branche source, utilisez --from %s.\n" "$JGIT_TARGET" >&2
-                    exit_safe 1
+                    jgit_fail usage "$JGIT_EXIT_ERROR" "Version de release attendue au format x.y.z, reçu '$JGIT_TARGET'." \
+                        "Pour désigner une branche source, utilisez --from $JGIT_TARGET."
                 fi
                 if [[ ${#JGIT_FROM_SOURCES[@]} -eq 0 ]]; then
-                    echo "Veuillez spécifier au moins une source avec --from." >&2
-                    exit_safe 1
+                    jgit_fail usage "$JGIT_EXIT_ERROR" "Veuillez spécifier au moins une source avec --from."
                 fi
                 refuse_if_worktree_dirty "Une release" || exit_safe 1
                 release_merge "$JGIT_TARGET" "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
@@ -324,14 +360,14 @@ case "$JGIT_TYPE" in
                 release_finish "$JGIT_INTO_TARGET"
                 ;;
             *)
-                printf "${C_RED}Action '%s' non supportée pour release.${C_RESET}\n" "$JGIT_ACTION" >&2
-                exit_safe 1
+                jgit_fail usage "$JGIT_EXIT_ERROR" "Action '$JGIT_ACTION' non supportée pour release."
                 ;;
         esac
         ;;
     demo)
         if [[ -z "$JGIT_ACTION" ]]; then
             help
+            jgit_error_set usage "Action manquante pour le scope $JGIT_TYPE." "jgit --help"
             exit_safe 1
         fi
         case "$JGIT_ACTION" in
@@ -341,8 +377,7 @@ case "$JGIT_TYPE" in
                 ;;
             merge)
                 if [[ ${#JGIT_FROM_SOURCES[@]} -eq 0 ]]; then
-                    echo "Veuillez préciser au moins une source avec --from." >&2
-                    exit_safe 1
+                    jgit_fail usage "$JGIT_EXIT_ERROR" "Veuillez préciser au moins une source avec --from."
                 fi
                 refuse_if_worktree_dirty "Une démo" || exit_safe 1
                 demo_merge "$JGIT_INTO_TARGET" "${JGIT_FROM_SOURCES[@]}"
@@ -355,14 +390,14 @@ case "$JGIT_TYPE" in
                 demo_remove
                 ;;
             *)
-                printf "${C_RED}Action '%s' non supportée pour demo.${C_RESET}\n" "$JGIT_ACTION" >&2
-                exit_safe 1
+                jgit_fail usage "$JGIT_EXIT_ERROR" "Action '$JGIT_ACTION' non supportée pour demo."
                 ;;
         esac
         ;;
     util)
         if [[ -z "$JGIT_ACTION" ]]; then
             help
+            jgit_error_set usage "Action manquante pour le scope $JGIT_TYPE." "jgit --help"
             exit_safe 1
         fi
         case "$JGIT_ACTION" in
@@ -372,8 +407,7 @@ case "$JGIT_TYPE" in
             check_rebase)
                 # Le positionnel serait ignoré en silence : on préfère le dire.
                 if [[ -n "$JGIT_TARGET" ]]; then
-                    printf "${C_RED}Pour désigner une branche, utilisez --from %s.${C_RESET}\n" "$JGIT_TARGET" >&2
-                    exit_safe 1
+                    jgit_fail usage "$JGIT_EXIT_ERROR" "Pour désigner une branche, utilisez --from $JGIT_TARGET."
                 fi
                 util_check_rebase ${JGIT_FROM_SOURCES[@]+"${JGIT_FROM_SOURCES[@]}"}
                 exit $?
@@ -383,8 +417,7 @@ case "$JGIT_TYPE" in
                 exit $?
                 ;;
             *)
-                printf "${C_RED}Action '%s' non supportée pour util.${C_RESET}\n" "$JGIT_ACTION" >&2
-                exit_safe 1
+                jgit_fail usage "$JGIT_EXIT_ERROR" "Action '$JGIT_ACTION' non supportée pour util."
                 ;;
         esac
         ;;
@@ -394,8 +427,7 @@ case "$JGIT_TYPE" in
         clean_branches
         ;;
     *)
-        printf "${C_RED}Scope '%s' non supporté.${C_RESET}\n" "$JGIT_TYPE" >&2
-        exit_safe 1
+        jgit_fail usage "$JGIT_EXIT_ERROR" "Scope '$JGIT_TYPE' non supporté."
         ;;
  esac
 

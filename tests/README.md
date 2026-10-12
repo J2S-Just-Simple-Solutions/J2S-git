@@ -142,6 +142,7 @@ Les valeurs sont toujours entre guillemets.
 | --- |
 | `Quand je lance "jgit …"` |
 | `Quand je lance "jgit …" et que je réponds aux questions :` + tableau `\| question \| réponse \|` |
+| `Quand je lance "jgit …" en lisant le JSON` (sortie standard capturée à part, dans `$SANDBOX/stdout.json`) |
 | `Quand je commite le fichier "…" contenant "…" avec le message "…"` |
 | `Quand je modifie le fichier "…" avec "…"` (sans commit : espace de travail sale) |
 | `Quand je pousse la branche courante` |
@@ -184,6 +185,13 @@ Les valeurs sont toujours entre guillemets.
 | `Alors jgit se termine avec le code N` (pour `util check_rebase`, qui répond par son code) |
 | `Et la sortie contient "…"` / `ne contient pas "…"` |
 | `Et la sortie ne contient aucune séquence de couleur` (ni séquence ANSI, ni erreur de `tput`) |
+| `Et la sortie standard est un unique document JSON` |
+| `Et le JSON a "chemin" égal à "…"` / `égal au nombre N` / `vrai` / `faux` / `nul` / `qui contient "…"` |
+| `Et le JSON n'a pas de "chemin"` |
+| `Et la liste JSON "chemin" contient N éléments` |
+
+Un chemin JSON s'écrit `error.code`, `demos[0].name`, ou
+`tickets[ticket=feature/A].status` (premier élément dont le champ vaut la valeur).
 | `Et la branche locale "…" existe` / `n'existe pas` |
 | `Et la branche distante "…" existe` / `n'existe pas` |
 | `Et la branche distante "…" est inchangée` / `a changé` |
@@ -272,6 +280,9 @@ Les fonctions utilisables dans une définition d'étape :
 | `gh_calls` | journal des appels à `gh` |
 | `assert_jgit_success` / `assert_jgit_failure` / `assert_jgit_output_contains` | |
 | `assert_jgit_output_plain` | ni séquence ANSI ni erreur de `tput` dans la sortie |
+| `run_jgit_json <args…>` | lance `jgit` en gardant la sortie standard à part (`$JGIT_STDOUT`, `$SANDBOX/stdout.json`) |
+| `json_query check\|get\|len\|type <chemin>` | lit le document (`lib/json_query.py`) |
+| `assert_json_document`, `assert_json_equals`, `assert_json_type`, `assert_json_length`, `assert_json_missing` | vérifications sur le document |
 | `jgit_use_symlink` | appelle `jgit` par un lien symbolique jusqu'à la fin du scénario |
 | `repo_reclone <options git clone…>` | remplace le dépôt de travail par un nouveau clone (`--depth`, `--single-branch`…) |
 | `repo_remove_git_identity` | retire toute identité git et interdit à git d'en deviner une |
@@ -322,13 +333,14 @@ test_passed
 | `lib/sandbox.sh` | dépôt jetable, remote local, simulation de GitHub |
 | `lib/interactive.sh` + `lib/expect.py` | pilotage de `jgit` dans un pseudo-terminal |
 | `lib/assert.sh`, `lib/git_assert.sh` | assertions |
+| `lib/json_query.py` | lecture du document JSON produit par `--json` |
 | `lib/bootstrap.sh` | chargement de l'ensemble |
 | `mocks/bin/gh` | mock du client GitHub CLI |
 | `steps/vscode_glue.py` | fichier généré, uniquement pour l'extension Cucumber de VS Code |
 
 ## Scénarios existants
 
-198 scénarios répartis par domaine fonctionnel.
+207 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -346,6 +358,7 @@ test_passed
 | `12_portabilite.feature` | Linux accepté, tout autre système refusé — y compris, et surtout, avant un `feature rebase` —, l'aide restant accessible ; appel par un lien symbolique ; sortie sans couleur hors terminal et sans `TERM` ; clone superficiel refusé, clone à une branche accepté, absence d'identité git refusée |
 | `13_branche_origine.feature` | enregistrement de la branche d'origine (`feature`/`hotfix`/`demo`/`release`, `--based-on`, `restart`), `util check_rebase` (à jour, en retard, conflit, refus, codes de sortie), refus sur les anciennes branches — y compris quand un ancêtre porte la trace d'une autre branche —, le rebase qui propose la base enregistrée, et le refus commun quand la base n'existe pas, qu'elle vienne d'une saisie ou d'une valeur par défaut |
 | `14_confirmation.feature` | réponses aux confirmations sans tenir compte de la casse : `Y`, `YES`, `oui`, `O` acceptent ; `N` et une réponse inconnue refusent |
+| `15_contrat_json.feature` | `--json` : document unique de résultat ou d'erreur, `--no-interaction` implicite, erreurs d'usage et refus identifiés, échappement des caractères spéciaux, aide, absence de couleur, `--no-fetch` |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

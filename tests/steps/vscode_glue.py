@@ -27,6 +27,10 @@ def step_projet_git(context):
 def step_lance_commande(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("je lance {string} en lisant le JSON")
+def step_lance_commande_json(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("je lance {string} et que je réponds aux questions :")
 def step_lance_commande_interactive(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -105,6 +109,42 @@ def step_sortie_ne_contient_pas(context):
 
 @given("la sortie ne contient aucune séquence de couleur")
 def step_sortie_sans_couleur(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la sortie standard est un unique document JSON")
+def step_json_unique(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} égal à {string}")
+def step_json_egal(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} qui contient {string}")
+def step_json_contient(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} égal au nombre {int}")
+def step_json_nombre(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} vrai")
+def step_json_vrai(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} faux")
+def step_json_faux(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} nul")
+def step_json_nul(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la liste JSON {string} contient {int} éléments")
+def step_json_longueur(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON n'a pas de {string}")
+def step_json_absent(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("la branche locale {string} existe")

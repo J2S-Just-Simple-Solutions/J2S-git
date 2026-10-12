@@ -51,6 +51,9 @@ fi
 
 declare -a JGIT_FROM_SOURCES
 
+# Contrat de sortie --json : document unique, codes de sortie (json.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/json.sh"
+
 ###############################################
 #            Couleurs
 ###############################################
@@ -149,6 +152,7 @@ ensure_supported_platform() {
     Darwin|Linux) return 0 ;;
   esac
 
+  jgit_error_set platform_unsupported "jgit ne fonctionne que sur macOS et Linux (système détecté : ${system:-inconnu})."
   printf "${C_RED}jgit ne fonctionne que sur macOS et Linux (système détecté : %s).${C_RESET}\n" "${system:-inconnu}" >&2
   printf "Les outils de base de ce système n'ont pas été vérifiés, et un écart de comportement peut détruire du travail.\n" >&2
   printf "Voir docs/05-portabilite.md pour le détail.\n" >&2
@@ -164,6 +168,8 @@ ensure_full_history() {
     return 0
   fi
 
+  jgit_error_set shallow_repository "Ce dépôt est un clone superficiel (--depth) : jgit a besoin de l'historique complet." \
+    "git fetch --unshallow $j2s_remote"
   printf "${C_RED}Ce dépôt est un clone superficiel (--depth) : jgit a besoin de l'historique complet.${C_RESET}\n" >&2
   printf "Les commits d'initialisation et la branche d'origine des branches ne s'y trouvent pas.\n" >&2
   printf "\nRécupérez l'historique complet puis relancez :\n" >&2
@@ -179,6 +185,8 @@ ensure_git_identity() {
     return 0
   fi
 
+  jgit_error_set git_identity_missing "Aucune identité git n'est configurée : jgit ne peut pas créer de commit." \
+    "git config --global user.name \"Prénom Nom\" && git config --global user.email \"prenom.nom@example.com\""
   printf "${C_RED}Aucune identité git n'est configurée : jgit ne peut pas créer de commit.${C_RESET}\n" >&2
   printf "Rien n'a été modifié.\n" >&2
   printf "\nConfigurez-la puis relancez :\n" >&2
@@ -295,6 +303,8 @@ refuse_if_worktree_dirty() {
 
   [[ -n $(git status --porcelain) ]] || return 0
 
+  jgit_error_set worktree_dirty "Votre espace de travail contient des modifications non commitées." \
+    "git stash push -u -m \"avant jgit\""
   printf "${C_RED}Votre espace de travail contient des modifications non commitées.${C_RESET}\n" >&2
   printf "%s ne se fabrique pas sur un dépôt en cours de modification.\n" "$what" >&2
   printf "\nMettez-les de côté puis relancez :\n" >&2
@@ -316,6 +326,9 @@ refuse_if_branch_ahead() {
   local ahead
   ahead=$(git rev-list --count "$remote_ref..$branch" 2>/dev/null) || return 0
   [[ -n "$ahead" && $ahead -gt 0 ]] || return 0
+
+  jgit_error_set branch_ahead "La branche $branch porte $ahead commit(s) qui ne sont pas sur $remote_ref." \
+    "git push $j2s_remote $branch"
 
   printf "${C_RED}La branche %s porte %s commit(s) qui ne sont pas sur %s.${C_RESET}\n" \
     "$branch" "$ahead" "$remote_ref" >&2
@@ -842,6 +855,7 @@ jgit_fetch_once() {
   # croirait develop, les tickets ou les démos inexistants.
   if ! git fetch "$j2s_remote" --prune --quiet \
        "+refs/heads/*:refs/remotes/$j2s_remote/*"; then
+    jgit_error_set remote_unreachable "Impossible de contacter $j2s_remote." "Vérifiez votre connexion puis relancez."
     printf "${C_RED}Impossible de contacter %s.${C_RESET}\n" "$j2s_remote" >&2
     printf "jgit travaille toujours sur les dernières versions du serveur : vérifiez votre connexion.\n" >&2
     return 1
