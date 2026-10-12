@@ -382,6 +382,27 @@ l'argument : `1.2.0` ou `release/1.2.0` est une version cible, tout le reste est
 traité comme une branche source. Mélanger les deux — `jgit release merge
 feature/X --from feature/Y` — est refusé explicitement.
 
+## Piloter jgit par une IA (Claude Code)
+
+Le dépôt fournit un **skill** Claude Code, [`.claude/skills/jgit-demo`](.claude/skills/jgit-demo/SKILL.md),
+qui apprend à Claude à gérer les démos d'un projet : les lister, dire où elles en
+sont, y ajouter ou retirer des tickets, les remettre à jour, **résoudre leurs
+conflits**, les archiver. Il s'appuie uniquement sur `jgit … --json` (voir le
+[contrat](docs/06-contrat-cli.md)) et demande votre accord avant toute
+réécriture.
+
+Pour qu'il soit disponible dans tous vos projets, liez-le dans vos skills
+personnels :
+
+```bash
+mkdir -p ~/.claude/skills
+ln -s /chemin/vers/J2S-git/.claude/skills/jgit-demo ~/.claude/skills/jgit-demo
+```
+
+Il suffit ensuite de demander, dans un projet J2S : *« où en est la démo
+client-a ? »*, *« ajoute MONPROJET-88 à la démo sprint12 »*, *« remets la démo à
+jour sur la préprod »*.
+
 ## Tests
 
 `jgit` est couvert par une suite de tests « grandeur nature ». Les scénarios sont

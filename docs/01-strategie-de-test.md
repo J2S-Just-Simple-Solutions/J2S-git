@@ -100,6 +100,20 @@ Deux choses distinctes sont simulées côté GitHub :
 | macOS et Linux acceptés, tout autre système refusé ; clone superficiel, clone à une branche, absence d'identité git | oui — [parcours 12](02-parcours-couverts.md), suite jouée aussi sous Linux (`tests/run-in-docker.sh`) |
 | Enregistrement de la branche d'origine, `util check_rebase`, refus sur les anciennes branches | oui — [parcours 13](02-parcours-couverts.md) |
 
+## Le pilotage par une IA : une recette, pas un test automatique
+
+Le skill [`jgit-demo`](../.claude/skills/jgit-demo/SKILL.md) n'est pas joué par la
+suite : ce qu'il décrit — lire un document, décider, résoudre un conflit — est le
+travail du modèle, pas de `jgit`. Ce que `jgit` lui garantit (le contrat
+`--json`, les codes de sortie, la pause et la reprise) est en revanche couvert
+par les parcours 15, 16 et 20.
+
+Le skill se valide par une **recette** à rejouer quand il change, dans un dépôt
+jetable : créer une démo de trois tickets dont deux en conflit, résoudre le
+conflit en suivant la procédure du skill, retirer un ticket, rebaser après une
+avancée de la préprod (la résolution doit être rejouée sans être redemandée),
+puis archiver.
+
 ## Figer un comportement discutable plutôt que l'ignorer
 
 Certains scénarios décrivent ce que `jgit` fait aujourd'hui, en signalant que ce

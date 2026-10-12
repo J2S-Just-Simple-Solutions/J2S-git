@@ -33,6 +33,9 @@ les limites connues. Lisible sans être expert Git.
 Le mode d'emploi opérationnel (lancer les tests, écrire un scénario, catalogue
 des étapes) est dans [`tests/README.md`](../tests/README.md).
 L'installation et la configuration sont dans le [README principal](../README.md).
+Le skill Claude Code qui pilote les démos est dans
+[`.claude/skills/jgit-demo`](../.claude/skills/jgit-demo/SKILL.md) ; les notes pour
+travailler sur `jgit` avec Claude sont dans [`CLAUDE.md`](../CLAUDE.md).
 
 ## En une page
 
