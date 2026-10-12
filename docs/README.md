@@ -27,7 +27,7 @@ les limites connues. Lisible sans être expert Git.
 | [02 — Parcours couverts](02-parcours-couverts.md) | Description fonctionnelle des parcours validés par les tests, et garanties associées |
 | [03 — Choix techniques](03-choix-techniques.md) | Les décisions prises pour la suite de tests, leurs raisons et leurs conséquences |
 | [04 — Règles de codage](04-regles-de-codage.md) | Les règles à respecter en modifiant `jgit`, à commencer par l'alignement code / aide / doc |
-| [05 — Portabilité](05-portabilite.md) | Pourquoi `jgit` refuse de tourner ailleurs que sur macOS, et ce qu'il reste à lever |
+| [05 — Portabilité](05-portabilite.md) | macOS et Linux : ce qui a été levé pour Linux, les règles à respecter, et pourquoi tout autre système est refusé |
 
 Le mode d'emploi opérationnel (lancer les tests, écrire un scénario, catalogue
 des étapes) est dans [`tests/README.md`](../tests/README.md).

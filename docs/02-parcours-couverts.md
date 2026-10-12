@@ -542,34 +542,35 @@ que rien n'est poussé au passage.
 
 ---
 
-## Parcours 12 — Le refus de tourner ailleurs que sur macOS
+## Parcours 12 — macOS, Linux, et rien d'autre
 
 Fichier : [`tests/features/12_portabilite.feature`](../tests/features/12_portabilite.feature)
 
-`jgit` s'appuie sur des outils BSD dont l'équivalent GNU se comporte
-différemment. Le cas le plus grave : `feature rebase` construit sa liste de
-commits avec `tail -r`, qui n'existe pas dans GNU coreutils. Ailleurs que sur
-macOS, la liste ressort **vide**, le rebase ne rejoue rien, et la branche de
-travail est **force-pushée vidée de tout le travail** — en affichant « Rebase
-terminé avec succès ».
-
-Plutôt que de risquer cela, `jgit` refuse de démarrer. Le détail et l'inventaire
-de ce qu'il reste à lever sont dans [`05-portabilite.md`](05-portabilite.md).
+`jgit` tourne sur macOS (postes des développeurs) et sous Linux (Docker,
+Jenkins). Tout autre système est refusé : un écart de comportement d'un outil
+système — `tail -r`, absent de GNU — a déjà vidé une branche de travail en
+silence. Le détail est dans [`05-portabilite.md`](05-portabilite.md).
 
 ### Ce que le parcours vérifie
 
 | Situation | Comportement attendu |
 | --- | --- |
-| N'importe quelle commande sur un système non supporté | refus explicite, nommant le système détecté et renvoyant à la doc |
+| Une commande sous Linux | fonctionne normalement |
+| N'importe quelle commande sur un autre système | refus explicite, nommant le système détecté et renvoyant à la doc |
 | `feature rebase` en particulier | refus **avant** toute réécriture : la branche distante est inchangée, le travail est toujours là |
-| Les commandes de release | refusées au même titre |
 | `jgit --help` | reste accessible : on doit pouvoir comprendre le refus |
+| `jgit` appelé par un lien symbolique | retrouve ses modules à côté du vrai `jgit.sh` |
+| Sortie hors terminal, ou sans `TERM` | aucune séquence ANSI, aucune erreur de `tput` |
+| Clone superficiel (`--depth`) | refus avant toute action, avec la commande `git fetch --unshallow` |
+| Clone réduit à une branche | fonctionne : toutes les branches du serveur sont rapatriées |
+| Aucune identité git | refus avant de créer quoi que ce soit |
 
-### Comment c'est testé sans machine Linux
+### Comment c'est testé
 
 Le bac à sable place `$SANDBOX/bin` en tête du `PATH`. L'étape
-`Étant donné le système est "…" et non macOS` y dépose un faux `uname` : `jgit`
-croit tourner ailleurs, sans conteneur ni runner distant.
+`Étant donné le système détecté est "…"` y dépose un faux `uname` : `jgit`
+croit tourner ailleurs. Et toute la suite est jouée pour de vrai sous Linux par
+`./tests/run-in-docker.sh`.
 
 ---
 

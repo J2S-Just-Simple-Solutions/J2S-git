@@ -270,6 +270,30 @@ repo_merge_branch() {
     info "merge de $branch dans $(repo_current_branch)"
 }
 
+# Remplace le depot de travail par un nouveau clone du remote, avec les options
+# donnees (--depth, --single-branch…). C'est ainsi qu'arrive un agent de CI.
+repo_reclone() {
+    local conf="$SANDBOX/conf_local.sh.saved"
+
+    cp "$SANDBOX/repo/.jgit/conf_local.sh" "$conf"
+    rm -rf "$SANDBOX/repo"
+    # file:// : --depth est ignore pour un chemin local.
+    git clone --quiet "$@" "file://$SANDBOX/origin.git" "$SANDBOX/repo" 2>/dev/null || \
+        assert_failed "clone du remote" "options : $*"
+    mkdir -p "$SANDBOX/repo/.jgit"
+    cp "$conf" "$SANDBOX/repo/.jgit/conf_local.sh"
+    info "depot de travail reclone ($*)"
+}
+
+# Retire toute identite git : ni variables d'environnement, ni configuration,
+# et interdiction a git d'en deviner une (nom d'hote, utilisateur systeme).
+repo_remove_git_identity() {
+    unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL
+    git config --global --remove-section user 2>/dev/null
+    git config --global user.useConfigOnly true
+    info "aucune identite git configuree"
+}
+
 # Retire le remote : permet de verifier le garde-fou ensure_remote.
 repo_remove_remote() {
     repo_git remote remove origin

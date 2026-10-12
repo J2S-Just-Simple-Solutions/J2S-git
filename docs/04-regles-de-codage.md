@@ -178,12 +178,19 @@ quitterait que le sous-shell.
 
 ---
 
-## 8. Compatibilité bash 3.2 et macOS
+## 8. Compatibilité bash 3.2 / 5.2, macOS et Linux
 
 Le bash livré par Apple est le 3.2 : pas de tableaux associatifs, pas de
 `readarray`/`mapfile`, pas de `${var^^}`. Voir le
 [choix technique n°8](03-choix-techniques.md).
 
-`jgit` ne tourne par ailleurs que sur macOS, pour des raisons détaillées dans
-[`05-portabilite.md`](05-portabilite.md) : avant d'introduire une dépendance à un
-outil système, vérifiez qu'elle ne fige pas davantage cette situation.
+`jgit` tourne aussi sous Linux (bash 5.2, outils GNU) pour Docker et Jenkins.
+Toute dépendance à un outil système se limite à sa partie POSIX ; les pièges
+connus sont listés dans [`05-portabilite.md`](05-portabilite.md#règles-pour-la-suite).
+Une modification passe les deux suites : `./tests/run.sh` et
+`./tests/run-in-docker.sh`.
+
+Les couleurs passent exclusivement par les variables `C_RED`, `C_GREEN`…
+et par `jgit_tput` (`functions.sh`) : jamais de séquence `\033[` écrite à la
+main, jamais d'appel direct à `tput`. C'est ce qui garantit une sortie sans
+séquence ANSI hors d'un terminal.

@@ -35,11 +35,13 @@
 
 ## Prérequis
 
-- **macOS.** `jgit` refuse de démarrer sur un autre système : plusieurs commandes
-  s'appuient sur des outils BSD dont l'équivalent GNU se comporte différemment, et
-  un `feature rebase` lancé ailleurs écraserait la branche de travail au lieu de
-  la rejouer. Le détail et l'état d'avancement sont dans
-  [`docs/05-portabilite.md`](docs/05-portabilite.md).
+- **macOS ou Linux.** `jgit` refuse de démarrer sur tout autre système : un écart
+  de comportement d'un outil système y a déjà vidé une branche de travail en
+  silence. Linux est celui des conteneurs Docker et des agents Jenkins. Le détail
+  est dans [`docs/05-portabilite.md`](docs/05-portabilite.md).
+- Un clone **complet** : un clone superficiel (`--depth`) est refusé, il n'a pas
+  l'historique dont `jgit` a besoin (`git fetch --unshallow origin`).
+- Une **identité git** configurée (`user.name`, `user.email`) : `jgit` commite.
 - Un dépôt Git avec un remote nommé `origin` pointant vers GitHub (organisation J2S).
 - Git installé en local (`git --version` doit répondre).
 - Le client GitHub CLI (`gh`) installé et configuré : https://cli.github.com/

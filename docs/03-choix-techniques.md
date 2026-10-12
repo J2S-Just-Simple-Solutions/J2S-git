@@ -157,6 +157,12 @@ l'alias `jgit` du poste de travail.
 limites de bash 3.2 (pas de tableaux associatifs). Le code des tests s'interdit
 donc les facilités de bash 4+.
 
+**Complément : Linux dans Docker.** Depuis que `jgit` doit tourner dans un
+conteneur et sur un agent Jenkins, la même suite est aussi jouée sous Debian
+(bash 5.2, outils GNU) par `./tests/run-in-docker.sh`. L'image de test
+(`tests/docker/Dockerfile`) n'ajoute que `git` et `python3` : la règle « aucune
+dépendance supplémentaire » vaut pour les deux plateformes.
+
 ---
 
 ## 9. Un bac à sable neuf et totalement isolé par scénario

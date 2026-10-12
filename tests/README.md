@@ -40,6 +40,18 @@ Un fichier seul peut aussi être joué directement :
 Prérequis : `git`, `bash` et `python3` (livré avec macOS). Le vrai client `gh`
 n'est **pas** nécessaire, il est remplacé par un mock.
 
+### Sous Linux, dans Docker
+
+`jgit` tourne aussi sous Linux (conteneurs, agents Jenkins). La même suite s'y
+joue, dans une image Debian (bash 5.2, outils GNU) construite à la volée :
+
+```bash
+./tests/run-in-docker.sh            # toute la suite
+./tests/run-in-docker.sh demo -v    # mêmes arguments que run.sh
+```
+
+Le dépôt est monté en lecture seule ; seul Docker est requis.
+
 ## Ce que voit un scénario
 
 L'étape `Étant donné un projet git initialisé pour jgit` construit un
@@ -148,7 +160,10 @@ Les valeurs sont toujours entre guillemets.
 | `Étant donné je note l'état de la branche distante "…"` (pour `est inchangée`) |
 | `Étant donné je récupère la branche distante "…" en local` |
 | `Étant donné le projet utilise "…" au lieu de develop, master ou main` |
-| `Étant donné le système est "…" et non macOS` (dépose un faux `uname`) |
+| `Étant donné le système détecté est "…"` (dépose un faux `uname`) |
+| `Étant donné le dépôt de travail est un clone superficiel` (`--depth 1`) |
+| `Étant donné le dépôt de travail est un clone de la seule branche "…"` (`--single-branch`) |
+| `Étant donné aucune identité git n'est configurée` |
 | `Étant donné jgit est installé par un lien symbolique` (les appels suivants passent par un lien hors du dépôt jgit) |
 | `Étant donné le terminal n'est pas défini` (retire `TERM`) |
 
@@ -258,6 +273,8 @@ Les fonctions utilisables dans une définition d'étape :
 | `assert_jgit_success` / `assert_jgit_failure` / `assert_jgit_output_contains` | |
 | `assert_jgit_output_plain` | ni séquence ANSI ni erreur de `tput` dans la sortie |
 | `jgit_use_symlink` | appelle `jgit` par un lien symbolique jusqu'à la fin du scénario |
+| `repo_reclone <options git clone…>` | remplace le dépôt de travail par un nouveau clone (`--depth`, `--single-branch`…) |
+| `repo_remove_git_identity` | retire toute identité git et interdit à git d'en deviner une |
 | `assert_jgit_exit_code` | code de sortie exact |
 | `assert_local_based_on` / `assert_remote_based_on` / `assert_remote_without_based_on` | branche d'origine enregistrée |
 | `assert_remote_subject_without_based_on` | vérifie que la trace reste hors des sujets de commit |
@@ -298,6 +315,7 @@ test_passed
 | Fichier | Rôle |
 | --- | --- |
 | `run.sh` | lanceur : découverte, filtrage, rapport |
+| `run-in-docker.sh` + `docker/Dockerfile` | même lanceur, sous Linux (Debian, bash 5.2) |
 | `features/*.feature` | les scénarios |
 | `steps/*.steps.sh` | les définitions d'étapes |
 | `lib/gherkin.sh` | moteur Gherkin (analyse + exécution) |
@@ -310,7 +328,7 @@ test_passed
 
 ## Scénarios existants
 
-196 scénarios répartis par domaine fonctionnel.
+198 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -325,7 +343,7 @@ test_passed
 | `09_parcours_complets.feature` | hotfix de bout en bout, feature rebasée puis redémarrée puis livrée, démo servant de répétition, deux releases successives |
 | `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
 | `11_synchronisation.feature` | fraîcheur des branches : mise à jour d'une branche en retard, acceptation sans push d'une branche en avance, arrêt sur divergence, départ d'une feature/hotfix/démo sur la version serveur de la branche de référence |
-| `12_portabilite.feature` | refus de démarrer hors macOS, y compris — et surtout — avant un `feature rebase`, l'aide restant accessible ; appel par un lien symbolique ; sortie sans couleur hors terminal et sans `TERM` |
+| `12_portabilite.feature` | Linux accepté, tout autre système refusé — y compris, et surtout, avant un `feature rebase` —, l'aide restant accessible ; appel par un lien symbolique ; sortie sans couleur hors terminal et sans `TERM` ; clone superficiel refusé, clone à une branche accepté, absence d'identité git refusée |
 | `13_branche_origine.feature` | enregistrement de la branche d'origine (`feature`/`hotfix`/`demo`/`release`, `--based-on`, `restart`), `util check_rebase` (à jour, en retard, conflit, refus, codes de sortie), refus sur les anciennes branches — y compris quand un ancêtre porte la trace d'une autre branche —, le rebase qui propose la base enregistrée, et le refus commun quand la base n'existe pas, qu'elle vienne d'une saisie ou d'une valeur par défaut |
 | `14_confirmation.feature` | réponses aux confirmations sans tenir compte de la casse : `Y`, `YES`, `oui`, `O` acceptent ; `N` et une réponse inconnue refusent |
 

@@ -51,8 +51,20 @@ def step_squash_merge_pr(context):
 def step_branches_non_standard(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
-@given("le système est {string} et non macOS")
+@given("le système détecté est {string}")
 def step_systeme_non_macos(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le dépôt de travail est un clone superficiel")
+def step_clone_superficiel(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le dépôt de travail est un clone de la seule branche {string}")
+def step_clone_une_branche(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("aucune identité git n'est configurée")
+def step_sans_identite(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("jgit est installé par un lien symbolique")

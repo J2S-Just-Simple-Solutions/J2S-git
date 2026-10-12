@@ -270,18 +270,22 @@ précisant ce qui reste à faire à la main — et seulement cela.
 
 ---
 
-## `jgit` ne fonctionne que sur Mac
+## `jgit` fonctionne sur Mac et sous Linux
 
-L'outil refuse de démarrer sur un autre système. Ce n'est pas un confort : sur
-Linux, certaines commandes se comporteraient mal **sans le signaler**, et un rebase
-pourrait publier votre branche vidée de votre travail.
+Le Mac est le poste des développeurs ; Linux est celui des conteneurs Docker et
+des agents Jenkins. Tout autre système est refusé avant la moindre action : un
+écart de comportement d'un outil système pourrait, sans le signaler, publier
+votre branche vidée de votre travail.
 
 ```
-jgit ne fonctionne que sur macOS (système détecté : Linux).
+jgit ne fonctionne que sur macOS et Linux (système détecté : FreeBSD).
 ```
 
-Seule l'aide (`jgit --help`) reste accessible. Le détail et l'état d'avancement
-sont dans [`docs/05-portabilite.md`](../05-portabilite.md).
+Seule l'aide (`jgit --help`) reste accessible. Deux autres refus visent surtout
+les machines de CI : un **clone superficiel** (`git clone --depth …`), auquel il
+manque l'historique dont `jgit` a besoin, et l'**absence d'identité git**, sans
+laquelle aucun commit n'est possible. Le détail est dans
+[`docs/05-portabilite.md`](../05-portabilite.md).
 
 ---
 
@@ -293,4 +297,4 @@ sont dans [`docs/05-portabilite.md`](../05-portabilite.md).
 | le vocabulaire et le cycle complet | [01 — Concepts](01-concepts.md) |
 | une commande précise | fiches [02](02-feature-et-hotfix.md) à [06](06-utilitaires.md) |
 | ce qui est vérifié par les tests | [Parcours couverts](../02-parcours-couverts.md) |
-| pourquoi `jgit` ne tourne que sur Mac | [Portabilité](../05-portabilite.md) |
+| sur quels systèmes tourne `jgit` | [Portabilité](../05-portabilite.md) |

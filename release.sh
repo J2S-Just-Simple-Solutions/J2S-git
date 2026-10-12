@@ -71,7 +71,10 @@ release_start() {
         future_tag="$requested_version"
     else
         local current_tag
-        current_tag=$(git tag -l --sort=-creatordate | head -n 1)
+        # Le tag le plus récent ; à date égale (deux tags dans la même seconde,
+        # ce qu'un script ou une CI produit sans peine), le plus haut numéro.
+        # git applique la dernière clé --sort en premier.
+        current_tag=$(git tag -l --sort=-v:refname --sort=-creatordate | head -n 1)
         echo "Current tag: ${current_tag}"
 
         local major=0
@@ -229,7 +232,10 @@ release_finish() {
         local future_feature="${BASH_REMATCH[2]}"
 
         local current_tag
-        current_tag=$(git tag -l --sort=-creatordate | head -n 1)
+        # Le tag le plus récent ; à date égale (deux tags dans la même seconde,
+        # ce qu'un script ou une CI produit sans peine), le plus haut numéro.
+        # git applique la dernière clé --sort en premier.
+        current_tag=$(git tag -l --sort=-v:refname --sort=-creatordate | head -n 1)
         local current_feature=0
         if [[ $current_tag =~ $regex_tag ]]; then
             current_feature="${BASH_REMATCH[2]}"

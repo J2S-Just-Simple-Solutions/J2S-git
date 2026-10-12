@@ -104,20 +104,35 @@ step_branches_non_standard() {
 }
 step_def "le projet utilise {chaine} au lieu de develop, master ou main" step_branches_non_standard
 
-# jgit refuse de tourner ailleurs que sur macOS (docs/05-portabilite.md). Le bac
-# a sable place deja $SANDBOX/bin en tete du PATH : y deposer un faux `uname`
-# suffit a faire croire a jgit qu'il tourne sur Linux.
+# jgit ne tourne que sur macOS et Linux (docs/05-portabilite.md). Le bac a sable
+# place deja $SANDBOX/bin en tete du PATH : y deposer un faux `uname` suffit a
+# faire croire a jgit qu'il tourne sur un autre systeme.
 step_systeme_non_macos() {
     local systeme="${1:-Linux}"
     cat > "$SANDBOX/bin/uname" <<UNAME_MOCK
 #!/bin/bash
-# Faux uname : simule un systeme autre que macOS.
+# Faux uname : simule un autre systeme.
 printf '%s\n' "$systeme"
 UNAME_MOCK
     chmod +x "$SANDBOX/bin/uname"
     info "uname simule : $systeme"
 }
-step_def "le système est {chaine} et non macOS" step_systeme_non_macos
+step_def "le système détecté est {chaine}" step_systeme_non_macos
+
+step_clone_superficiel() {
+    repo_reclone --depth 1 --no-single-branch
+}
+step_def "le dépôt de travail est un clone superficiel" step_clone_superficiel
+
+step_clone_une_branche() {
+    repo_reclone --single-branch --branch "$1"
+}
+step_def "le dépôt de travail est un clone de la seule branche {chaine}" step_clone_une_branche
+
+step_sans_identite() {
+    repo_remove_git_identity
+}
+step_def "aucune identité git n'est configurée" step_sans_identite
 
 step_appel_par_lien() {
     jgit_use_symlink

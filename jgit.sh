@@ -240,6 +240,13 @@ fi
 
 ensure_supported_platform || exit_safe 1
 ensure_remote
+ensure_full_history || exit_safe 1
+
+# Seules les commandes qui ne commitent jamais se passent d'identité git.
+case "$JGIT_TYPE $JGIT_ACTION" in
+    "util clean"|"clean "*) ;;
+    *) ensure_git_identity || exit_safe 1 ;;
+esac
 
 case "$JGIT_TYPE" in
     feature|hotfix)

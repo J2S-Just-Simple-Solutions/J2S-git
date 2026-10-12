@@ -135,21 +135,55 @@ warn_deprecated_syntax() {
     "$(jgit_tput setaf 3)" "$(jgit_tput sgr0)" >&2
 }
 
-# jgit ne tourne aujourd'hui que sur macOS : plusieurs commandes s'appuient sur
-# des outils BSD dont l'équivalent GNU se comporte différemment, et un rebase
-# lancé ailleurs écraserait la branche de travail au lieu de la rejouer.
+# jgit tourne sur macOS (poste des développeurs) et sous Linux (Docker,
+# agents Jenkins). Les deux sont joués par la suite de tests ; tout autre
+# système est refusé, parce que personne n'y a vérifié que les outils de base
+# (sed, awk, grep…) s'y comportent comme jgit l'attend — et qu'un écart y a
+# déjà, par le passé, vidé une branche de travail en silence.
 # Le détail et l'inventaire sont dans docs/05-portabilite.md.
 ensure_supported_platform() {
   local system
   system=$(uname -s 2>/dev/null)
 
-  if [[ "$system" == "Darwin" ]]; then
+  case "$system" in
+    Darwin|Linux) return 0 ;;
+  esac
+
+  printf "${C_RED}jgit ne fonctionne que sur macOS et Linux (système détecté : %s).${C_RESET}\n" "${system:-inconnu}" >&2
+  printf "Les outils de base de ce système n'ont pas été vérifiés, et un écart de comportement peut détruire du travail.\n" >&2
+  printf "Voir docs/05-portabilite.md pour le détail.\n" >&2
+  return 1
+}
+
+# Un dépôt superficiel (clone --depth, fréquent sur un agent de CI) n'a pas
+# l'historique dont jgit a besoin : les commits d'init, la branche d'origine,
+# l'ancêtre commun d'un rebase. Les commandes y échoueraient au milieu, ou
+# pire, concluraient à tort qu'une trace n'existe pas.
+ensure_full_history() {
+  if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" != "true" ]]; then
     return 0
   fi
 
-  printf "${C_RED}jgit ne fonctionne que sur macOS (système détecté : %s).${C_RESET}\n" "${system:-inconnu}" >&2
-  printf "Certaines commandes s'appuient sur des outils BSD et détruiraient du travail ailleurs.\n" >&2
-  printf "Voir docs/05-portabilite.md pour le détail et l'état d'avancement.\n" >&2
+  printf "${C_RED}Ce dépôt est un clone superficiel (--depth) : jgit a besoin de l'historique complet.${C_RESET}\n" >&2
+  printf "Les commits d'initialisation et la branche d'origine des branches ne s'y trouvent pas.\n" >&2
+  printf "\nRécupérez l'historique complet puis relancez :\n" >&2
+  printf "  git fetch --unshallow %s\n" "$j2s_remote" >&2
+  return 1
+}
+
+# jgit commite (commits d'init, cherry-picks, merges de release) : sans
+# identité git, la commande échouerait au premier commit, après avoir déjà
+# créé des branches. Cas typique : un conteneur ou un agent Jenkins neuf.
+ensure_git_identity() {
+  if git var GIT_COMMITTER_IDENT >/dev/null 2>&1 && git var GIT_AUTHOR_IDENT >/dev/null 2>&1; then
+    return 0
+  fi
+
+  printf "${C_RED}Aucune identité git n'est configurée : jgit ne peut pas créer de commit.${C_RESET}\n" >&2
+  printf "Rien n'a été modifié.\n" >&2
+  printf "\nConfigurez-la puis relancez :\n" >&2
+  printf "  git config --global user.name \"Prénom Nom\"\n" >&2
+  printf "  git config --global user.email \"prenom.nom@example.com\"\n" >&2
   return 1
 }
 
@@ -802,7 +836,12 @@ jgit_fetch_once() {
 
   # --prune : une branche supprimée sur le serveur doit disparaître du miroir
   # local, sinon jgit continue de la croire disponible.
-  if ! git fetch "$j2s_remote" --prune --quiet; then
+  #
+  # Le refspec est explicite : un clone réduit à une branche (--single-branch,
+  # courant sur un agent de CI) ne rapatrierait sinon que celle-là, et jgit
+  # croirait develop, les tickets ou les démos inexistants.
+  if ! git fetch "$j2s_remote" --prune --quiet \
+       "+refs/heads/*:refs/remotes/$j2s_remote/*"; then
     printf "${C_RED}Impossible de contacter %s.${C_RESET}\n" "$j2s_remote" >&2
     printf "jgit travaille toujours sur les dernières versions du serveur : vérifiez votre connexion.\n" >&2
     return 1
@@ -956,7 +995,7 @@ switch_branch() {
 clean_branches() {
   # Récupérer toutes les branches locales correspondant aux préfixes
   local branches_to_delete
-  branches_to_delete=$(git branch | grep -E "^\s*(jgit_rebase_|__PR__|jgit_verify_rebase)")
+  branches_to_delete=$(git branch | grep -E "^[[:space:]]*(jgit_rebase_|__PR__|jgit_verify_rebase)")
 
   # Vérifier si des branches correspondent
   if [[ -z "$branches_to_delete" ]]; then
