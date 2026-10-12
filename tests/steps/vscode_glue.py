@@ -55,6 +55,14 @@ def step_branches_non_standard(context):
 def step_systeme_non_macos(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("jgit est installé par un lien symbolique")
+def step_appel_par_lien(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le terminal n'est pas défini")
+def step_terminal_non_defini(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("la branche {string} est supprimée sur GitHub")
 def step_github_supprime_branche(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -81,6 +89,10 @@ def step_sortie_contient(context):
 
 @given("la sortie ne contient pas {string}")
 def step_sortie_ne_contient_pas(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la sortie ne contient aucune séquence de couleur")
+def step_sortie_sans_couleur(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("la branche locale {string} existe")

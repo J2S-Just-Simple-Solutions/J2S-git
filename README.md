@@ -27,6 +27,12 @@
      ```
    - Rechargez votre terminal ou exécutez `source ~/.zprofile`.
 
+   Un lien symbolique placé dans le `PATH` fonctionne aussi : `jgit` retrouve
+   ses modules à côté du vrai `jgit.sh`, pas à côté du lien.
+   ```bash
+   ln -s /chemin/vers/J2S-git/jgit.sh /usr/local/bin/jgit
+   ```
+
 ## Prérequis
 
 - **macOS.** `jgit` refuse de démarrer sur un autre système : plusieurs commandes
@@ -93,6 +99,12 @@ jgit <scope> <action> [<cible>] [options...]
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
 - `--squash` : lors d'un `rebase`, squash tous les commits de la branche de travail en un seul avant de rejouer l'historique.
 - `jgit help` / `jgit -h` : affiche l'aide complète.
+
+**Couleurs.** `jgit` ne colore sa sortie que face à un terminal. Redirigée vers
+un fichier, lue par un journal Jenkins ou par une IA, ou lancée sans variable
+`TERM`, elle ne contient aucune séquence ANSI. La variable d'environnement
+`JGIT_COLOR` force le choix (`always` ou `never`, `auto` par défaut), et
+[`NO_COLOR`](https://no-color.org) coupe la couleur dans tous les cas.
 
 ## Fraîcheur des branches
 

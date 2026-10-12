@@ -1,5 +1,5 @@
 #!/bin/bash
-source "$(dirname "$0")/functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/functions.sh"
 
 # Annule un rebase interrompu et restaure l'état local d'avant la commande :
 # abandon du cherry-pick, suppression des branches temporaires et retour à
@@ -27,7 +27,7 @@ abort_rebase() {
     git branch -D "$branch_PR_rebase" --quiet 2>/dev/null
 
     printf "%sLe rebase a été annulé, l'état local est restauré et le remote n'a pas été modifié.%s\n" \
-        "$(tput setaf 1)" "$(tput sgr0)"
+        "$(jgit_tput setaf 1)" "$(jgit_tput sgr0)"
 }
 
 feature_rebase() {
@@ -85,9 +85,9 @@ feature_rebase() {
 
             if [[ "$recorded_base" != "$reference_branch" ]]; then
                 printf "%sLa branche %s%s%s%s est partie de %s%s%s%s, et non de la référence du projet %s%s%s.%s\n" \
-                    "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)" "$(tput setaf 2)" \
-                    "$(tput setaf 1)" "$recorded_base" "$(tput sgr0)" "$(tput setaf 2)" \
-                    "$(tput setaf 1)" "$reference_branch" "$(tput setaf 2)" "$(tput sgr0)"
+                    "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$branch" "$(jgit_tput sgr0)" "$(jgit_tput setaf 2)" \
+                    "$(jgit_tput setaf 1)" "$recorded_base" "$(jgit_tput sgr0)" "$(jgit_tput setaf 2)" \
+                    "$(jgit_tput setaf 1)" "$reference_branch" "$(jgit_tput setaf 2)" "$(jgit_tput sgr0)"
                 if confirm_action "Rebaser sur $recorded_base ?" "y"; then
                     reference_branch="$recorded_base"
                     base_provenance="record"
@@ -123,7 +123,7 @@ feature_rebase() {
 
     switch_branch "$branch"
     # Lister les commits sur la branche feature en avance de la branche PR (dans l'ordre du plus ancien au plus récent)
-    local commits=($(git rev-list "$branch_PR..$branch" | tail -r))
+    local commits=($(git rev-list --reverse "$branch_PR..$branch"))
 
     #############################################################################
     # Cette partie permet de gérer le cas où la PR avait déjà été validée et mergée
@@ -145,7 +145,7 @@ feature_rebase() {
     if is_fast_forward "$branch_PR" "$branch"; then
         echo "La branche $branch est un fast-forward de $branch_PR."
     else
-        printf "\033[1;31mLa branche %s n'est PAS un fast-forward de %s.\033[0m\n" "$branch" "$branch_PR"
+        printf "${C_RED}La branche %s n'est PAS un fast-forward de %s.${C_RESET}\n" "$branch" "$branch_PR"
         echo "Cela peut se produire si vous avez déjà cloturé la PR."
         echo "Ce cas n'est pas encore géré par JGIT. Il va falloir rebase $branch_PR à la mano :) ou la restart"
         exit_safe 1
@@ -156,7 +156,7 @@ feature_rebase() {
     # On ne peut pas automatiser un rebase s'il y a un commit de fusion, on refuse l'action
     for commit in "${commits_on_PR[@]}"; do
         if is_merge_commit "$commit"; then
-            printf "\033[1;31mLe commit \033[1;32m%s\033[1;31m est un commit de fusion. On ne peut pas rebase automatiquement un commit de fusion.\033[0m\n" "$commit"  
+            printf "${C_RED}Le commit ${C_GREEN}%s${C_RED} est un commit de fusion. On ne peut pas rebase automatiquement un commit de fusion.${C_RESET}\n" "$commit"  
             printf "Il ne faut pas mélanger rebase et merge, la prochaine fois merci de ne faire que des rebases ;).\nPensez à toujours squash and merge vos PRs\n"
 
             exit_safe 1
@@ -165,7 +165,7 @@ feature_rebase() {
 
     for commit in "${commits[@]}"; do
         if is_merge_commit "$commit"; then
-            printf "\033[1;31mLe commit \033[1;32m%s\033[1;31m est un commit de fusion. On ne peut pas rebase automatiquement un commit de fusion.\033[0m\n" "$commit"  
+            printf "${C_RED}Le commit ${C_GREEN}%s${C_RED} est un commit de fusion. On ne peut pas rebase automatiquement un commit de fusion.${C_RESET}\n" "$commit"  
             printf "Il ne faut pas mélanger rebase et merge, la prochaine fois merci de ne faire que des rebases ;).\nPensez à toujours squash and merge vos PRs\n"
 
             exit_safe 1
@@ -179,11 +179,11 @@ feature_rebase() {
     if [[ ${#commits_on_PR[@]} -gt 1 ]]; then
         # On est dans le cas d'une PR qui déjà été mergée puis réouverte, on affiche la liste complète pour bien la valider visuellement.
         printf "%sLes commits suivants sont présents sur la branche %s%s%s actuelle mais pas sur la branche %s%s%s. Il seront repris sur la future branche %s%s%s%s\n" \
-        "$(tput setaf 2)"  \
-        "$(tput setaf 1)" "$branch_PR" "$(tput setaf 2)" \
-        "$(tput setaf 1)" "$reference_branch" "$(tput setaf 2)" \
-        "$(tput setaf 1)" "$branch_PR" "$(tput setaf 2)" \
-        "$(tput sgr0)"
+        "$(jgit_tput setaf 2)"  \
+        "$(jgit_tput setaf 1)" "$branch_PR" "$(jgit_tput setaf 2)" \
+        "$(jgit_tput setaf 1)" "$reference_branch" "$(jgit_tput setaf 2)" \
+        "$(jgit_tput setaf 1)" "$branch_PR" "$(jgit_tput setaf 2)" \
+        "$(jgit_tput sgr0)"
         printf "Liste des commits repris :\n"
         for commit in "${commits_on_PR[@]}"; do
             get_commit_info "$commit"
@@ -217,9 +217,9 @@ feature_rebase() {
                 # Simple rappel de l'existence de --squash : sans demande explicite,
                 # le rebase reprend l'historique complet.
                 printf "%sLa branche %s%s%s%s contient %s commits de travail.%s\n" \
-                    "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)" "$(tput setaf 2)" "$squashable_count" "$(tput sgr0)"
+                    "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$branch" "$(jgit_tput sgr0)" "$(jgit_tput setaf 2)" "$squashable_count" "$(jgit_tput sgr0)"
                 printf "%sLes squasher en un seul commit (option %s--squash%s%s) limiterait les conflits à résoudre à un seul.%s\n" \
-                    "$(tput setaf 2)" "$(tput setaf 1)" "$(tput sgr0)" "$(tput setaf 2)" "$(tput sgr0)"
+                    "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$(jgit_tput sgr0)" "$(jgit_tput setaf 2)" "$(jgit_tput sgr0)"
 
                 if confirm_action "Souhaitez-vous squasher ces commits avant le rebase ?" "n"; then
                     do_squash=true
@@ -233,19 +233,19 @@ feature_rebase() {
                 fi
                 squash_done=true
                 # L'historique local vient d'être réécrit, on recalcule la liste des commits à reprendre.
-                commits=($(git rev-list "$branch_PR..$branch" | tail -r))
+                commits=($(git rev-list --reverse "$branch_PR..$branch"))
             fi
         fi
     fi
 
-    printf "%sjgit va reprendre, dans l'ordre, tous les commits ci-dessous qui existe dans la branche locale %s%s%s\n" "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"
+    printf "%sjgit va reprendre, dans l'ordre, tous les commits ci-dessous qui existe dans la branche locale %s%s%s\n" "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$branch" "$(jgit_tput sgr0)"
     
     for commit in "${commits[@]}"; do
         get_commit_info "$commit"
     done
 
     printf "%sEn se basant sur la branche de référence distante %s%s%s\n" \
-    "$(tput setaf 2)" "$(tput setaf 1)" "$reference_branch" "$(tput sgr0)"
+    "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$reference_branch" "$(jgit_tput sgr0)"
     
     # Demander confirmation à l'utilisateur
     if ! confirm_action "Souhaitez-vous continuer ?" "y"; then
@@ -324,5 +324,5 @@ feature_rebase() {
 
     current_branch="$branch"
     clean_branches
-    printf "%sRebase terminé avec succès%s\n" "$(tput setaf 2)" "$(tput sgr0)"
+    printf "%sRebase terminé avec succès%s\n" "$(jgit_tput setaf 2)" "$(jgit_tput sgr0)"
 }

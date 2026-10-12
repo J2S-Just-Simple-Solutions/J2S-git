@@ -1,5 +1,5 @@
 #!/bin/bash
-source "$(dirname "$0")/functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/functions.sh"
 
 DemoBranchPrefix="demo_"
 
@@ -56,7 +56,7 @@ demo_start() {
     fi
 
     if git show-ref --verify --quiet "refs/heads/$demo_branch"; then
-        printf "\033[1;31mLa branche %s existe en local mais pas sur %s.\033[0m\n" "$demo_branch" "$j2s_remote"
+        printf "${C_RED}La branche %s existe en local mais pas sur %s.${C_RESET}\n" "$demo_branch" "$j2s_remote"
         printf "Veuillez la publier manuellement ou la supprimer avant de relancer la commande.\n"
         exit_safe 1
     fi
@@ -73,7 +73,7 @@ demo_start() {
     refuse_if_branch_ahead "$base_branch" "Une démo" || exit_safe 1
 
     printf "%sJGit va créer la branche de démo %s%s%s%s qui se basera sur la branche %s%s%s\n" \
-    "$(tput setaf 2)" "$(tput setaf 1)" "$demo_branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$base_branch" "$(tput sgr0)"
+    "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$demo_branch" "$(jgit_tput sgr0)"  "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$base_branch" "$(jgit_tput sgr0)"
     # Demander confirmation à l'utilisateur
     if ! confirm_action "Souhaitez-vous continuer ?" "y"; then
         echo "Opération annulée."
@@ -97,7 +97,7 @@ resolve_demo_source_branch() {
     else
         # Appelée en substitution de commande : message sur stderr et code de
         # retour, sinon le message serait capturé comme un nom de branche.
-        printf "\033[1;31mLe format attendu est feature/<ticket> ou hotfix/<ticket>.\033[0m\n" >&2
+        printf "${C_RED}Le format attendu est feature/<ticket> ou hotfix/<ticket>.${C_RESET}\n" >&2
         return 1
     fi
 }
@@ -112,14 +112,14 @@ demo_merge_branch() {
     local source_remote="$j2s_remote/$source_branch"
 
     if ! is_demo_branch "$demo_branch"; then
-        printf "\033[1;31mCette commande doit être exécutée sur une branche demo_* (branche actuelle : %s).\033[0m\n" "$demo_branch"
+        printf "${C_RED}Cette commande doit être exécutée sur une branche demo_* (branche actuelle : %s).${C_RESET}\n" "$demo_branch"
         exit_safe 1
     fi
 
     jgit_fetch_once || exit_safe 1
 
     if ! git ls-remote --exit-code --heads "$j2s_remote" "$source_branch" >/dev/null 2>&1; then
-        printf "\033[1;31mLa branche %s n'existe pas sur %s.\033[0m\n" "$source_branch" "$j2s_remote"
+        printf "${C_RED}La branche %s n'existe pas sur %s.${C_RESET}\n" "$source_branch" "$j2s_remote"
         exit_safe 1
     fi
 
@@ -140,7 +140,7 @@ demo_merge_branch() {
     fi
 
     if ! git rebase "$source_remote"; then
-        printf "\033[1;31mRebase interrompu pour %s. Résolvez les conflits puis terminez le rebase manuellement.\033[0m\n" "$source_branch"
+        printf "${C_RED}Rebase interrompu pour %s. Résolvez les conflits puis terminez le rebase manuellement.${C_RESET}\n" "$source_branch"
         printf "Utilisez 'git rebase --continue' après résolution ou 'git rebase --abort' pour annuler.\n"
         exit_safe 1
     fi
@@ -177,7 +177,7 @@ demo_list() {
     local demo_branch=$(git rev-parse --abbrev-ref HEAD)
 
     if ! is_demo_branch "$demo_branch"; then
-        printf "\033[1;31mCette commande doit être exécutée depuis une branche demo_*.\033[0m\n"
+        printf "${C_RED}Cette commande doit être exécutée depuis une branche demo_*.${C_RESET}\n"
         exit_safe 1
     fi
 
@@ -187,7 +187,7 @@ demo_list() {
     init_commit=$(get_last_commit_with_pattern "$prefix_init_commit demo $demo_branch")
 
     if [[ -z "$init_commit" ]]; then
-        printf "\033[1;31mImpossible de trouver le commit d'initialisation de la démo.\033[0m\n"
+        printf "${C_RED}Impossible de trouver le commit d'initialisation de la démo.${C_RESET}\n"
         exit_safe 1
     fi
 
@@ -211,10 +211,10 @@ demo_list() {
         exit_safe 0
     fi
 
-    local color_title=$(tput bold; tput setaf 6)
-    local color_feature=$(tput setaf 2)
-    local color_marker=$(tput setaf 4)
-    local color_reset=$(tput sgr0)
+    local color_title=$(jgit_tput bold; jgit_tput setaf 6)
+    local color_feature=$(jgit_tput setaf 2)
+    local color_marker=$(jgit_tput setaf 4)
+    local color_reset=$(jgit_tput sgr0)
 
     printf "%sBranches mergées dans %s :%s\n" "$color_title" "$demo_branch" "$color_reset"
     for entry in "${entries[@]}"; do
@@ -237,7 +237,7 @@ demo_remove() {
     local demo_branch=$(git rev-parse --abbrev-ref HEAD)
 
     if ! is_demo_branch "$demo_branch"; then
-        printf "\033[1;31mCette commande doit être exécutée depuis une branche demo_*.\033[0m\n"
+        printf "${C_RED}Cette commande doit être exécutée depuis une branche demo_*.${C_RESET}\n"
         exit_safe 1
     fi
 
@@ -248,10 +248,10 @@ demo_remove() {
         exit_safe 1
     fi
 
-    local color_title=$(tput bold; tput setaf 6)
-    local color_branch=$(tput bold; tput setaf 1)
-    local color_text=$(tput setaf 2)
-    local color_reset=$(tput sgr0)
+    local color_title=$(jgit_tput bold; jgit_tput setaf 6)
+    local color_branch=$(jgit_tput bold; jgit_tput setaf 1)
+    local color_text=$(jgit_tput setaf 2)
+    local color_reset=$(jgit_tput sgr0)
 
     printf "%sSuppression de la branche de démo %s%s%s%s\n" \
         "$color_title" "$color_branch" "$demo_branch" "$color_title" "$color_reset"
@@ -267,7 +267,7 @@ demo_remove() {
 
     if git ls-remote --exit-code --heads "$j2s_remote" "$demo_branch" >/dev/null 2>&1; then
         if ! git push "$j2s_remote" --delete "$demo_branch"; then
-            printf "\033[1;31mImpossible de supprimer %s sur %s.\033[0m\n" "$demo_branch" "$j2s_remote"
+            printf "${C_RED}Impossible de supprimer %s sur %s.${C_RESET}\n" "$demo_branch" "$j2s_remote"
             exit_safe 1
         fi
     else

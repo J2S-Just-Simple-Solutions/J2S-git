@@ -43,21 +43,24 @@ Résultat : la branche de travail est publiée **vidée de tous les commits du
 développeur**, sans le moindre message d'erreur. Le comportement a été reproduit
 en simulant un `tail` GNU (scénario `12_portabilite.feature`).
 
-Le correctif est connu — `git rev-list --reverse` rend le `tail` inutile — mais
-il ne suffit pas à rendre `jgit` portable : il faut d'abord inventorier le reste.
+Le correctif — `git rev-list --reverse`, qui rend le `tail` inutile — est
+appliqué, mais il ne suffit pas à rendre `jgit` portable : il faut d'abord
+inventorier le reste.
 
 ### Ce qu'il reste à inventorier
 
 Avant de lever la restriction, il faut passer en revue les autres dépendances au
 système :
 
-| Point à vérifier | Où |
-| --- | --- |
-| `tail -r` | `rebase.sh` (2 occurrences) — correctif connu |
-| `tput` sans `TERM` exploitable | partout : les messages colorés |
-| Comportement de `sed` BSD vs GNU | `functions.sh` (`get_last_commit_with_pattern`, `util_verify_rebase`) |
-| `bash` 3.2 vs 5.x | tout le dépôt (voir [choix technique n°8](03-choix-techniques.md)) |
-| Le bac à sable de test lui-même | `tests/lib/sandbox.sh` |
+| Point à vérifier | Où | État |
+| --- | --- | --- |
+| `tail -r` | `rebase.sh` (2 occurrences) | **corrigé** : `git rev-list --reverse` |
+| `tput` sans `TERM` exploitable | partout : les messages colorés | **corrigé** : couleurs centralisées (`jgit_init_colors`), coupées hors terminal |
+| Expression `\?` (extension GNU) passée à `git log --grep` | `functions.sh` (`get_last_commit_with_pattern`) | **corrigé** : BRE POSIX explicite (`--basic-regexp`) |
+| Appel par un lien symbolique (`$0`) | `jgit.sh` et les modules | **corrigé** : résolution du lien (`jgit_resolve_home`) |
+| Comportement de `sed` BSD vs GNU | `functions.sh` (`util_verify_rebase`) | à vérifier |
+| `bash` 3.2 vs 5.x | tout le dépôt (voir [choix technique n°8](03-choix-techniques.md)) | à vérifier |
+| Le bac à sable de test lui-même | `tests/lib/sandbox.sh` | à vérifier |
 
 ## Conséquence sur les tests
 

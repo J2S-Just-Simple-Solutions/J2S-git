@@ -1,5 +1,5 @@
 #!/bin/bash
-source "$(dirname "$0")/functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/functions.sh"
 
 ####################################
 #            RELEASE
@@ -22,7 +22,7 @@ checkout_release_branch() {
     local branch="$1"
 
     if [[ -z "$branch" ]]; then
-        printf "\033[1;31mErreur : aucune branche de release fournie.\033[0m\n"
+        printf "${C_RED}Erreur : aucune branche de release fournie.${C_RESET}\n"
         exit_safe 1
     fi
 
@@ -120,7 +120,7 @@ release_merge_single() {
     local resolved_branch
     resolved_branch=$(resolve_release_source_branch "$source_branch")
     if [[ -z "$resolved_branch" ]]; then
-        printf "\033[1;31mAucune branche source fournie.\033[0m\n"
+        printf "${C_RED}Aucune branche source fournie.${C_RESET}\n"
         exit_safe 1
     fi
 
@@ -133,7 +133,7 @@ release_merge_single() {
         echo "Remote branch exists, use it..."
         merge_source="$j2s_remote/$resolved_branch"
     else
-        printf "\033[1;31m/!\\ Feature branch '%s' was not found!\033[0m\n" "$resolved_branch"
+        printf "${C_RED}/!\\ Feature branch '%s' was not found!${C_RESET}\n" "$resolved_branch"
         exit_safe 1
     fi
 
@@ -145,7 +145,7 @@ release_merge_single() {
     local last_commit_subject
     last_commit_subject=$(git log -1 --pretty=%s "$merge_source")
     if [[ "$last_commit_subject" == "$prefix_init_commit $work_branch $suffix_init_commit" ]]; then
-        printf "\033[1;31m/!\\ La branche '%s' ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release.\033[0m\n" "$resolved_branch"
+        printf "${C_RED}/!\\ La branche '%s' ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release.${C_RESET}\n" "$resolved_branch"
         exit_safe 1
     fi
 
@@ -155,7 +155,7 @@ release_merge_single() {
     # tout de même poussée, amputée de tout ce qui suit. On s'arrête net.
     if ! git merge --no-ff "$merge_source" -m "$prefix_commit Release merge feature branch : $resolved_branch"; then
         git merge --abort >/dev/null 2>&1
-        printf "\033[1;31mConflit lors de l'intégration de %s dans %s.\033[0m\n" "$resolved_branch" "$release_branch" >&2
+        printf "${C_RED}Conflit lors de l'intégration de %s dans %s.${C_RESET}\n" "$resolved_branch" "$release_branch" >&2
         printf "Le merge a été annulé : la release n'a pas été poussée et rien n'est perdu.\n" >&2
         printf "Résolvez le conflit à la main (« git merge --no-ff %s »), puis relancez jgit pour les sources restantes.\n" "$merge_source" >&2
         exit_safe 1
@@ -275,7 +275,7 @@ release_finish() {
         echo "Merging release ${branch} in $prod_branch branch..."
         if ! git merge --no-ff "${branch}" -m "Merge release branch : ${branch}"; then
             git merge --abort >/dev/null 2>&1
-            printf "\033[1;31mConflit lors de la fusion de %s dans %s.\033[0m\n" "$branch" "$prod_branch" >&2
+            printf "${C_RED}Conflit lors de la fusion de %s dans %s.${C_RESET}\n" "$branch" "$prod_branch" >&2
             printf "Aucun tag n'a été posé, rien n'a été poussé et la branche de release est intacte.\n" >&2
             printf "Résolvez le conflit à la main puis relancez « jgit release finish --into %s ».\n" "$branch" >&2
             exit_safe 1
@@ -292,7 +292,7 @@ release_finish() {
         # release GitHub manque, le message doit le dire sans laisser croire
         # qu'il faut rejouer la release entière.
         if ! gh release create "${future_tag}" --generate-notes; then
-            printf "\033[1;31mLa release GitHub %s n'a pas pu être créée.\033[0m\n" "${future_tag}" >&2
+            printf "${C_RED}La release GitHub %s n'a pas pu être créée.${C_RESET}\n" "${future_tag}" >&2
             printf "Le merge sur %s et le tag %s sont poussés : il ne reste que la release GitHub.\n" "$prod_branch" "${future_tag}" >&2
             printf "Relancez « gh release create %s --generate-notes ».\n" "${future_tag}" >&2
             exit_safe 1

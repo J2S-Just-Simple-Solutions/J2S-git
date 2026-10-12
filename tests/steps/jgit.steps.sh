@@ -119,6 +119,17 @@ UNAME_MOCK
 }
 step_def "le système est {chaine} et non macOS" step_systeme_non_macos
 
+step_appel_par_lien() {
+    jgit_use_symlink
+}
+step_def "jgit est installé par un lien symbolique" step_appel_par_lien
+
+step_terminal_non_defini() {
+    unset TERM
+    info "variable TERM retiree"
+}
+step_def "le terminal n'est pas défini" step_terminal_non_defini
+
 step_github_supprime_branche() {
     github_delete_branch "$1"
 }
@@ -160,6 +171,11 @@ step_sortie_ne_contient_pas() {
     assert_jgit_output_not_contains "$1"
 }
 step_def "la sortie ne contient pas {chaine}" step_sortie_ne_contient_pas
+
+step_sortie_sans_couleur() {
+    assert_jgit_output_plain
+}
+step_def "la sortie ne contient aucune séquence de couleur" step_sortie_sans_couleur
 
 ###############################################
 #            Verifications : branches

@@ -1,9 +1,28 @@
 #!/bin/bash
 
-source "$(dirname "$0")/feature.sh"
-source "$(dirname "$0")/release.sh"
-source "$(dirname "$0")/rebase.sh"
-source "$(dirname "$0")/demo.sh"
+# Dossier d'installation de jgit, liens symboliques résolus : jgit peut être
+# appelé par un alias, par son chemin, ou par un lien posé dans le PATH
+# (/usr/local/bin/jgit dans l'image Docker). Sans résolution, un lien ferait
+# chercher les modules à côté du lien. readlink sans -f : absent des vieux macOS.
+jgit_resolve_home() {
+    local source="${BASH_SOURCE[0]}"
+    local dir
+
+    while [[ -L "$source" ]]; do
+        dir=$(cd -P "$(dirname "$source")" && pwd)
+        source=$(readlink "$source")
+        [[ "$source" == /* ]] || source="$dir/$source"
+    done
+
+    cd -P "$(dirname "$source")" && pwd
+}
+
+JGIT_HOME=$(jgit_resolve_home)
+
+source "$JGIT_HOME/feature.sh"
+source "$JGIT_HOME/release.sh"
+source "$JGIT_HOME/rebase.sh"
+source "$JGIT_HOME/demo.sh"
 
 ####################################
 #
@@ -55,12 +74,12 @@ current_branch=$(git rev-parse --abbrev-ref HEAD)
 # Help                                                                         #
 ################################################################################
 help() {
-    printf "\n\033[1;34mUsage:\033[0m\n"
-    printf "  jgit \033[1;32m<scope>\033[0m \033[1;36m<action>\033[0m \033[38;5;214m[<target>]\033[0m \033[38;5;214m[options…]\033[0m\n\n"
+    printf "\n${C_BLUE}Usage:${C_RESET}\n"
+    printf "  jgit ${C_GREEN}<scope>${C_RESET} ${C_CYAN}<action>${C_RESET} ${C_ORANGE}[<target>]${C_RESET} ${C_ORANGE}[options…]${C_RESET}\n\n"
 
-    printf "\033[1;34mScopes:\033[0m feature | hotfix | release | demo | util\n\n"
+    printf "${C_BLUE}Scopes:${C_RESET} feature | hotfix | release | demo | util\n\n"
 
-    printf "\033[1;34mOptions communes:\033[0m\n"
+    printf "${C_BLUE}Options communes:${C_RESET}\n"
     printf "  --based-on <branch>   Branche de référence pour les créations / rebase.\n"
     printf "  --from <branch>       Source d'un merge (répétable).\n"
     printf "  --into <branch>       Destination explicite d'un merge.\n"
@@ -69,30 +88,30 @@ help() {
     printf "  --squash              Squash les commits de la branche en un seul avant le rebase.\n"
     printf "  -h | --help           Affiche cette aide.\n\n"
 
-    printf "\033[1;34mFeature & Hotfix:\033[0m\n"
+    printf "${C_BLUE}Feature & Hotfix:${C_RESET}\n"
     printf "  jgit feature start <ticket> [--based-on <branch>] [--no-open]\n"
     printf "  jgit feature restart <ticket> [--no-open]\n"
     printf "  jgit feature rebase <ticket> [--based-on <branch>] [--squash]\n"
     printf "  (idem avec hotfix)\n\n"
 
-    printf "\033[1;34mRelease:\033[0m\n"
+    printf "${C_BLUE}Release:${C_RESET}\n"
     printf "  jgit release start [<x.y.z>]\n"
     printf "  jgit release merge [<x.y.z>] --from <branch> [--into <branch>]\n"
     printf "  jgit release finish [--into <x.y.z>]\n\n"
 
-    printf "\033[1;34mDemo:\033[0m\n"
+    printf "${C_BLUE}Demo:${C_RESET}\n"
     printf "  jgit demo start [<demo_name>] [--based-on <branch>]\n"
     printf "  jgit demo merge [--from feature/<ticket>]... [--into <branch>]\n"
     printf "  jgit demo list\n"
     printf "  jgit demo remove [--no-interaction]\n\n"
 
-    printf "\033[1;34mUtility:\033[0m\n"
+    printf "${C_BLUE}Utility:${C_RESET}\n"
     printf "  jgit util clean                Supprime les branches locales jgit_rebase_*, jgit_verify_rebase_* et __PR__*.\n"
     printf "  jgit util check_rebase [--from <branche>]\n"
     printf "                                 Dit si la branche est à jour sur sa branche d'origine et si le rebase passerait.\n"
     printf "  jgit util verify_rebase --from <branche_source> --into <branche_cible>\n\n"
 
-    printf "\033[1;34mSyntaxes dépréciées\033[0m (encore acceptées, retirées à terme) :\n"
+    printf "${C_BLUE}Syntaxes dépréciées${C_RESET} (encore acceptées, retirées à terme) :\n"
     printf "  jgit release merge <branche>   → jgit release merge --from <branche>\n"
     printf "  jgit clean                     → jgit util clean\n\n"
 }
@@ -101,7 +120,7 @@ require_argument() {
     local option="$1"
     local value="$2"
     if [[ -z "$value" || "$value" == -* ]]; then
-        printf "\033[1;31mErreur : l'option %s requiert une valeur.\033[0m\n" "$option" >&2
+        printf "${C_RED}Erreur : l'option %s requiert une valeur.${C_RESET}\n" "$option" >&2
         exit_safe 1
     fi
 }
@@ -175,7 +194,7 @@ while [[ $# -gt 0 ]]; do
             done
             ;;
         -* )
-            printf "\033[1;31mOption inconnue : %s\033[0m\n" "$1" >&2
+            printf "${C_RED}Option inconnue : %s${C_RESET}\n" "$1" >&2
             exit_safe 1
             ;;
         *)
@@ -209,7 +228,7 @@ if [[ "$JGIT_TYPE" == "-h" ]]; then
 fi
 
 if [[ ${#extra_positionals[@]} -gt 0 ]]; then
-    printf "\033[1;31mArguments supplémentaires non reconnus : %s\033[0m\n" "${extra_positionals[*]}" >&2
+    printf "${C_RED}Arguments supplémentaires non reconnus : %s${C_RESET}\n" "${extra_positionals[*]}" >&2
     exit_safe 1
 fi
 
@@ -254,7 +273,7 @@ case "$JGIT_TYPE" in
                 feature_rebase "$JGIT_TYPE" "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
                 ;;
             *)
-                printf "\033[1;31mAction '%s' non supportée pour %s.\033[0m\n" "$JGIT_ACTION" "$JGIT_TYPE" >&2
+                printf "${C_RED}Action '%s' non supportée pour %s.${C_RESET}\n" "$JGIT_ACTION" "$JGIT_TYPE" >&2
                 exit_safe 1
                 ;;
         esac
@@ -282,7 +301,7 @@ case "$JGIT_TYPE" in
                     JGIT_TARGET=""
                 fi
                 if [[ -n "$JGIT_TARGET" ]] && ! is_release_version "$JGIT_TARGET"; then
-                    printf "\033[1;31mVersion de release attendue au format x.y.z, reçu '%s'.\033[0m\n" "$JGIT_TARGET" >&2
+                    printf "${C_RED}Version de release attendue au format x.y.z, reçu '%s'.${C_RESET}\n" "$JGIT_TARGET" >&2
                     printf "Pour désigner une branche source, utilisez --from %s.\n" "$JGIT_TARGET" >&2
                     exit_safe 1
                 fi
@@ -298,7 +317,7 @@ case "$JGIT_TYPE" in
                 release_finish "$JGIT_INTO_TARGET"
                 ;;
             *)
-                printf "\033[1;31mAction '%s' non supportée pour release.\033[0m\n" "$JGIT_ACTION" >&2
+                printf "${C_RED}Action '%s' non supportée pour release.${C_RESET}\n" "$JGIT_ACTION" >&2
                 exit_safe 1
                 ;;
         esac
@@ -329,7 +348,7 @@ case "$JGIT_TYPE" in
                 demo_remove
                 ;;
             *)
-                printf "\033[1;31mAction '%s' non supportée pour demo.\033[0m\n" "$JGIT_ACTION" >&2
+                printf "${C_RED}Action '%s' non supportée pour demo.${C_RESET}\n" "$JGIT_ACTION" >&2
                 exit_safe 1
                 ;;
         esac
@@ -346,7 +365,7 @@ case "$JGIT_TYPE" in
             check_rebase)
                 # Le positionnel serait ignoré en silence : on préfère le dire.
                 if [[ -n "$JGIT_TARGET" ]]; then
-                    printf "\033[1;31mPour désigner une branche, utilisez --from %s.\033[0m\n" "$JGIT_TARGET" >&2
+                    printf "${C_RED}Pour désigner une branche, utilisez --from %s.${C_RESET}\n" "$JGIT_TARGET" >&2
                     exit_safe 1
                 fi
                 util_check_rebase ${JGIT_FROM_SOURCES[@]+"${JGIT_FROM_SOURCES[@]}"}
@@ -357,7 +376,7 @@ case "$JGIT_TYPE" in
                 exit $?
                 ;;
             *)
-                printf "\033[1;31mAction '%s' non supportée pour util.\033[0m\n" "$JGIT_ACTION" >&2
+                printf "${C_RED}Action '%s' non supportée pour util.${C_RESET}\n" "$JGIT_ACTION" >&2
                 exit_safe 1
                 ;;
         esac
@@ -368,7 +387,7 @@ case "$JGIT_TYPE" in
         clean_branches
         ;;
     *)
-        printf "\033[1;31mScope '%s' non supporté.\033[0m\n" "$JGIT_TYPE" >&2
+        printf "${C_RED}Scope '%s' non supporté.${C_RESET}\n" "$JGIT_TYPE" >&2
         exit_safe 1
         ;;
  esac

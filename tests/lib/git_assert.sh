@@ -301,6 +301,14 @@ assert_jgit_output_not_contains() {
     assert_not_contains "$JGIT_OUTPUT" "$1" "${2:-sortie de jgit ne contient pas [$1]}"
 }
 
+# Ni sequence ANSI ni plainte de tput : ce que lit un journal Jenkins ou une IA.
+assert_jgit_output_plain() {
+    local esc=$'\033'
+
+    assert_not_contains "$JGIT_OUTPUT" "$esc" "sortie de jgit sans sequence de couleur"
+    assert_not_contains "$JGIT_OUTPUT" "tput:" "sortie de jgit sans erreur de tput"
+}
+
 ###############################################
 #            Historique local
 ###############################################

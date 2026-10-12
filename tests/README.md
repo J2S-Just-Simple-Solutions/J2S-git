@@ -149,6 +149,8 @@ Les valeurs sont toujours entre guillemets.
 | `Étant donné je récupère la branche distante "…" en local` |
 | `Étant donné le projet utilise "…" au lieu de develop, master ou main` |
 | `Étant donné le système est "…" et non macOS` (dépose un faux `uname`) |
+| `Étant donné jgit est installé par un lien symbolique` (les appels suivants passent par un lien hors du dépôt jgit) |
+| `Étant donné le terminal n'est pas défini` (retire `TERM`) |
 
 ### Actions sur GitHub (simulé)
 
@@ -166,6 +168,7 @@ Les valeurs sont toujours entre guillemets.
 | `Alors jgit se termine sans erreur` / `en erreur` |
 | `Alors jgit se termine avec le code N` (pour `util check_rebase`, qui répond par son code) |
 | `Et la sortie contient "…"` / `ne contient pas "…"` |
+| `Et la sortie ne contient aucune séquence de couleur` (ni séquence ANSI, ni erreur de `tput`) |
 | `Et la branche locale "…" existe` / `n'existe pas` |
 | `Et la branche distante "…" existe` / `n'existe pas` |
 | `Et la branche distante "…" est inchangée` / `a changé` |
@@ -253,6 +256,8 @@ Les fonctions utilisables dans une définition d'étape :
 | `remote_snapshot_save <branche>` | mémorise l'état du remote pour `assert_remote_branch_unchanged` |
 | `gh_calls` | journal des appels à `gh` |
 | `assert_jgit_success` / `assert_jgit_failure` / `assert_jgit_output_contains` | |
+| `assert_jgit_output_plain` | ni séquence ANSI ni erreur de `tput` dans la sortie |
+| `jgit_use_symlink` | appelle `jgit` par un lien symbolique jusqu'à la fin du scénario |
 | `assert_jgit_exit_code` | code de sortie exact |
 | `assert_local_based_on` / `assert_remote_based_on` / `assert_remote_without_based_on` | branche d'origine enregistrée |
 | `assert_remote_subject_without_based_on` | vérifie que la trace reste hors des sujets de commit |
@@ -305,7 +310,7 @@ test_passed
 
 ## Scénarios existants
 
-188 scénarios répartis par domaine fonctionnel.
+196 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -320,8 +325,9 @@ test_passed
 | `09_parcours_complets.feature` | hotfix de bout en bout, feature rebasée puis redémarrée puis livrée, démo servant de répétition, deux releases successives |
 | `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
 | `11_synchronisation.feature` | fraîcheur des branches : mise à jour d'une branche en retard, acceptation sans push d'une branche en avance, arrêt sur divergence, départ d'une feature/hotfix/démo sur la version serveur de la branche de référence |
-| `12_portabilite.feature` | refus de démarrer hors macOS, y compris — et surtout — avant un `feature rebase`, l'aide restant accessible |
+| `12_portabilite.feature` | refus de démarrer hors macOS, y compris — et surtout — avant un `feature rebase`, l'aide restant accessible ; appel par un lien symbolique ; sortie sans couleur hors terminal et sans `TERM` |
 | `13_branche_origine.feature` | enregistrement de la branche d'origine (`feature`/`hotfix`/`demo`/`release`, `--based-on`, `restart`), `util check_rebase` (à jour, en retard, conflit, refus, codes de sortie), refus sur les anciennes branches — y compris quand un ancêtre porte la trace d'une autre branche —, le rebase qui propose la base enregistrée, et le refus commun quand la base n'existe pas, qu'elle vienne d'une saisie ou d'une valeur par défaut |
+| `14_confirmation.feature` | réponses aux confirmations sans tenir compte de la casse : `Y`, `YES`, `oui`, `O` acceptent ; `N` et une réponse inconnue refusent |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

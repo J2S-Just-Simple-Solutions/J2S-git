@@ -36,8 +36,10 @@ sandbox_create() {
     export JGIT_GH_LOG="$SANDBOX/gh-calls.log"
     : > "$JGIT_GH_LOG"
     # Les scenarios d'un meme fichier partagent le processus : une panne gh
-    # simulee ne doit pas deborder sur le scenario suivant.
+    # simulee, un lien d'appel ou un terminal retire ne doivent pas deborder sur
+    # le scenario suivant.
     unset JGIT_GH_FAIL
+    JGIT_BIN_ALIAS=""
 
     cat > "$GIT_CONFIG_GLOBAL" <<'GITCONFIG'
 [user]
@@ -202,6 +204,21 @@ gh_calls() {
 #            Execution de jgit
 ###############################################
 
+# Chemin par lequel jgit est appele : jgit.sh lui-meme, ou un lien symbolique
+# vers lui (installation dans le PATH, image Docker).
+jgit_invoked_path() {
+    printf '%s' "${JGIT_BIN_ALIAS:-$JGIT_BIN}"
+}
+
+# Installe un lien symbolique vers jgit.sh hors du depot jgit, et l'utilise pour
+# les appels suivants du scenario.
+jgit_use_symlink() {
+    mkdir -p "$SANDBOX/install/bin"
+    ln -s "$JGIT_BIN" "$SANDBOX/install/bin/jgit"
+    JGIT_BIN_ALIAS="$SANDBOX/install/bin/jgit"
+    info "jgit appele via le lien $JGIT_BIN_ALIAS"
+}
+
 # Lance jgit dans le depot de travail. La sortie complete est rangee dans
 # $JGIT_OUTPUT et le code de sortie dans $JGIT_STATUS.
 run_jgit() {
@@ -211,7 +228,7 @@ run_jgit() {
     printf '%s$ jgit %s\n' "$ASSERT_INDENT" "$*"
     # $JGIT_LAUNCHER est vide dans le cas nominal : jgit.sh est lance via son shebang.
     # shellcheck disable=SC2086
-    output=$(cd "$SANDBOX/repo" && $JGIT_LAUNCHER "$JGIT_BIN" "$@" < /dev/null 2>&1) || status=$?
+    output=$(cd "$SANDBOX/repo" && $JGIT_LAUNCHER "$(jgit_invoked_path)" "$@" < /dev/null 2>&1) || status=$?
 
     JGIT_OUTPUT="$output"
     JGIT_STATUS=$status

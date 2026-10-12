@@ -56,3 +56,25 @@ Fonctionnalité: jgit ne tourne que sur macOS
     Quand je lance "jgit util clean"
     Alors jgit se termine en erreur
     Et la sortie contient "système détecté : FreeBSD"
+
+  # Installé dans le PATH par un lien (/usr/local/bin/jgit, image Docker), jgit
+  # doit retrouver ses modules à côté du vrai jgit.sh, pas à côté du lien.
+  Scénario: jgit fonctionne lorsqu'il est appelé par un lien symbolique
+    Étant donné jgit est installé par un lien symbolique
+    Quand je lance "jgit feature start TEST-3 --no-interaction --no-open"
+    Alors jgit se termine sans erreur
+    Et la branche distante "feature/TEST-3" existe
+
+  # Un journal Jenkins ou une IA qui lit la sortie n'a que faire des séquences
+  # ANSI : la couleur est réservée au terminal.
+  Scénario: Hors d'un terminal, la sortie n'est pas colorée
+    Quand je lance "jgit feature start TEST-4 --no-interaction --no-open"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "JGit va créer la branche feature/TEST-4"
+    Et la sortie ne contient aucune séquence de couleur
+
+  Scénario: Sans variable TERM, tput ne pollue pas la sortie
+    Étant donné le terminal n'est pas défini
+    Quand je lance "jgit feature start TEST-5 --no-interaction --no-open"
+    Alors jgit se termine sans erreur
+    Et la sortie ne contient aucune séquence de couleur
