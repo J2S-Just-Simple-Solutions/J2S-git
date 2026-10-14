@@ -80,10 +80,13 @@ def main():
     deadline = time.time() + args.timeout
     status = None
 
+    # La sortie enregistree est nettoyee comme le tampon des attentes : face a
+    # un vrai terminal (TERM=xterm…), jgit colore ses messages, et une couleur
+    # au milieu d'une phrase la rendrait introuvable pour « la sortie contient ».
     def finish(code):
         if args.output:
             with open(args.output, "w", encoding="utf-8") as handle:
-                handle.write("".join(transcript))
+                handle.write(clean("".join(transcript)))
         return code
 
     while True:

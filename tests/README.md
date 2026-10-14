@@ -111,6 +111,12 @@ Quand je lance "jgit feature start TEST-123" et que je réponds aux questions :
 Si `jgit` oublie de poser une question, le scénario échoue ; s'il en pose une qui
 n'était pas prévue, le scénario échoue sur un timeout au lieu de rester bloqué.
 
+Face au pseudo-terminal, `jgit` colore ses messages. La sortie enregistrée pour
+les vérifications (`la sortie contient …`) est donc **nettoyée** de ses
+séquences de couleur, comme le tampon des questions : sans quoi une couleur au
+milieu d'une phrase la rendrait introuvable, et le résultat dépendrait du
+terminal depuis lequel on lance la suite.
+
 ## Écrire un scénario
 
 Créez `tests/features/<numero>_<nom>.feature` :
