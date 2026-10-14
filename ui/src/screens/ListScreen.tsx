@@ -4,6 +4,10 @@ import type { JgitRunner } from '../jgit.js';
 import { failureText } from '../jgit.js';
 import type { DemoListDoc, DemoSummary } from '../types.js';
 import { KeyHints, Spinner, Title, pad } from '../components.js';
+import { listHeight, useTerminalRows, windowAround } from '../viewport.js';
+
+// Lignes fixes de l'écran, hors liste.
+const RESERVED_ROWS = 11;
 
 interface Props {
   runner: JgitRunner;
@@ -27,6 +31,7 @@ function stateOf(demo: DemoSummary): { text: string; color: string } {
 }
 
 export function ListScreen({ runner, onOpen, onCreate, onQuit, onError }: Props) {
+  const rows = useTerminalRows();
   const [scope, setScope] = useState<'active' | 'all'>('active');
   const [doc, setDoc] = useState<DemoListDoc | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,11 +61,12 @@ export function ListScreen({ runner, onOpen, onCreate, onQuit, onError }: Props)
   }, [scope, reload]);
 
   const demos = doc?.demos ?? [];
+  const range = windowAround(demos.length, cursor, listHeight(rows, RESERVED_ROWS));
 
   useInput((input, key) => {
     if (loading) return;
-    if (key.upArrow) setCursor((value) => Math.max(0, value - 1));
-    else if (key.downArrow) setCursor((value) => Math.min(demos.length - 1, value + 1));
+    if (key.upArrow || (key.ctrl && input === 'p')) setCursor((value) => Math.max(0, value - 1));
+    else if (key.downArrow || (key.ctrl && input === 'n')) setCursor((value) => Math.min(demos.length - 1, value + 1));
     else if (key.return && demos[cursor]) onOpen(demos[cursor]);
     else if (input === 'n') onCreate();
     else if (input === 'a') setScope((value) => (value === 'active' ? 'all' : 'active'));
@@ -79,11 +85,13 @@ export function ListScreen({ runner, onOpen, onCreate, onQuit, onError }: Props)
         ) : (
           <>
             <Text dimColor>{`  ${pad('NOM', 24)}${pad('BASE', 12)}${pad('TICKETS', 10)}ÉTAT`}</Text>
-            {demos.map((demo, index) => {
+            {range.start > 0 ? <Text dimColor>{`  ↑ ${range.start} de plus`}</Text> : null}
+            {demos.slice(range.start, range.end).map((demo, offset) => {
+              const index = range.start + offset;
               const state = stateOf(demo);
               const selected = index === cursor;
               return (
-                <Text key={demo.branch} inverse={selected}>
+                <Text key={demo.branch} inverse={selected} wrap="truncate-end">
                   {selected ? '❯ ' : '  '}
                   {pad(demo.name, 24)}
                   {pad(demo.base ?? '-', 12)}
@@ -92,6 +100,7 @@ export function ListScreen({ runner, onOpen, onCreate, onQuit, onError }: Props)
                 </Text>
               );
             })}
+            {range.end < demos.length ? <Text dimColor>{`  ↓ ${demos.length - range.end} de plus`}</Text> : null}
           </>
         )}
         {loading && doc ? <Spinner label="Mise à jour…" /> : null}

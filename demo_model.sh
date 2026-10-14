@@ -406,33 +406,40 @@ demo_lines_minus() {
 # (« [jgit] Release merge feature branch : __PR__feature/X »).
 
 DEMO_DELIVERED_BASE=""
-DEMO_DELIVERED_SUBJECTS=""
+# Tickets livrés dans la base, un par ligne, encadrés de sauts de ligne : la
+# question « ce ticket est-il livré ? » se pose alors sans aucun processus,
+# même pour des centaines de tickets.
+DEMO_DELIVERED_TICKETS=""
 
 demo_delivered_cache_load() {
   local base="$1"
+  local p e
 
   [[ "$DEMO_DELIVERED_BASE" == "$base" ]] && return 0
   DEMO_DELIVERED_BASE="$base"
-  DEMO_DELIVERED_SUBJECTS=""
+  DEMO_DELIVERED_TICKETS=""
   [[ -n "$base" ]] || return 0
   git show-ref --verify --quiet "$(demo_remote_ref "$base")" || return 0
 
-  DEMO_DELIVERED_SUBJECTS=$(git log "$(demo_remote_ref "$base")" --format=%s -F \
+  p=$(escape_basic_regex "$prefix_commit")
+  e=$(escape_basic_regex "$suffix_init_commit")
+
+  # Sujets exacts : « [jgit] INIT <ticket> [empty_commit] » (commit d'init de
+  # la branche de PR), « [jgit] Release merge feature branch : __PR__<ticket> »,
+  # et l'ancien « [jgit] Merge feature branch : __PR__<ticket> [[empty_commit]] ».
+  DEMO_DELIVERED_TICKETS=$'\n'$(git log "$(demo_remote_ref "$base")" --format=%s -F \
     --grep="$prefix_init_commit " \
     --grep="Release merge feature branch : " \
-    --grep="Merge feature branch : " 2>/dev/null)
+    --grep="Merge feature branch : " 2>/dev/null \
+    | sed -n \
+        -e "s/^$p INIT \\([^ ]*\\) $e\$/\\1/p" \
+        -e "s/^$p Release merge feature branch : $prefix_PR\\([^ ]*\\)\$/\\1/p" \
+        -e "s/^$p Merge feature branch : $prefix_PR\\([^ ]*\\)\\( $e\\)\\{0,1\\}\$/\\1/p")$'\n'
 }
 
 # Vrai si le ticket est livré dans la base (cache chargé au préalable).
 demo_ticket_is_delivered() {
-  local ticket="$1"
-
-  [[ -n "$DEMO_DELIVERED_SUBJECTS" ]] || return 1
-  printf '%s\n' "$DEMO_DELIVERED_SUBJECTS" | grep -Fxq \
-    -e "$prefix_init_commit $ticket $suffix_init_commit" \
-    -e "$prefix_commit Release merge feature branch : $prefix_PR$ticket" \
-    -e "$prefix_commit Merge feature branch : $prefix_PR$ticket" \
-    -e "$prefix_commit Merge feature branch : $prefix_PR$ticket $suffix_init_commit"
+  [[ "$DEMO_DELIVERED_TICKETS" == *$'\n'"$1"$'\n'* ]]
 }
 
 ###############################################

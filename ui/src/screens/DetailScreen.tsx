@@ -4,6 +4,12 @@ import type { JgitRunner } from '../jgit.js';
 import { failureText } from '../jgit.js';
 import type { DemoShowDoc } from '../types.js';
 import { KeyHints, Spinner, Title, pad, ticketState } from '../components.js';
+import { listHeight, useTerminalSize, windowAround, wrappedRows } from '../viewport.js';
+
+// Lignes fixes de l'écran, hors tickets et hors commande de release : en-tête,
+// base, mise à jour, titres, aide (sur deux lignes), message.
+const RESERVED_ROWS = 15;
+const MAX_FOREIGN_SHOWN = 3;
 
 // Ce que l'écran de détail demande à l'application : une commande jgit à
 // préparer (avec --dry-run si elle réécrit la démo) ou un autre écran.
@@ -21,6 +27,7 @@ interface Props {
 }
 
 export function DetailScreen({ runner, branch, reloadKey, onAction, onError }: Props) {
+  const { rows, columns } = useTerminalSize();
   const [doc, setDoc] = useState<DemoShowDoc | null>(null);
   const [cursor, setCursor] = useState(0);
   const [marked, setMarked] = useState<Set<string>>(new Set());
@@ -52,8 +59,8 @@ export function DetailScreen({ runner, branch, reloadKey, onAction, onError }: P
     if (!doc || !demo) return;
     const current = tickets[cursor];
     if (key.escape || key.leftArrow || input === 'q') return onAction({ kind: 'back' });
-    if (key.upArrow) return setCursor((value) => Math.max(0, value - 1));
-    if (key.downArrow) return setCursor((value) => Math.min(tickets.length - 1, value + 1));
+    if (key.upArrow || (key.ctrl && input === 'p')) return setCursor((value) => Math.max(0, value - 1));
+    if (key.downArrow || (key.ctrl && input === 'n')) return setCursor((value) => Math.min(tickets.length - 1, value + 1));
 
     if (demo.archived) {
       if (input === 'u') {
@@ -111,6 +118,10 @@ export function DetailScreen({ runner, branch, reloadKey, onAction, onError }: P
     return <Spinner label={`Lecture de ${branch}…`} />;
   }
 
+  const foreignRows = doc.foreign_commits.length > 0 ? Math.min(doc.foreign_commits.length, MAX_FOREIGN_SHOWN + 1) + 2 : 0;
+  const releaseRows = doc.release_command ? wrappedRows(`  ${doc.release_command}`, columns) + 2 : 0;
+  const range = windowAround(tickets.length, cursor, listHeight(rows, RESERVED_ROWS + foreignRows + releaseRows));
+
   const hints: [string, string][] = [['↑↓', 'choisir']];
   if (demo.archived) hints.push(['u', 'restaurer']);
   else if (demo.format === 'legacy') hints.push(['m', 'convertir']);
@@ -148,12 +159,14 @@ export function DetailScreen({ runner, branch, reloadKey, onAction, onError }: P
       <Box marginTop={1} flexDirection="column">
         <Title>Tickets</Title>
         {tickets.length === 0 ? <Text>  Aucun ticket : a pour en ajouter.</Text> : null}
-        {tickets.map((ticket, index) => {
+        {range.start > 0 ? <Text dimColor>{`  ↑ ${range.start} de plus`}</Text> : null}
+        {tickets.slice(range.start, range.end).map((ticket, offset) => {
+          const index = range.start + offset;
           const state = ticketState(ticket, demo.base);
           const selected = index === cursor;
           const check = marked.has(ticket.ticket) ? '[x]' : '[ ]';
           return (
-            <Text key={ticket.ticket} inverse={selected}>
+            <Text key={ticket.ticket} inverse={selected} wrap="truncate-end">
               {selected ? '❯ ' : '  '}
               {writable ? `${check} ` : ''}
               {pad(ticket.ticket, 30)}
@@ -162,14 +175,18 @@ export function DetailScreen({ runner, branch, reloadKey, onAction, onError }: P
             </Text>
           );
         })}
+        {range.end < tickets.length ? <Text dimColor>{`  ↓ ${tickets.length - range.end} de plus`}</Text> : null}
       </Box>
 
       {doc.foreign_commits.length > 0 ? (
         <Box marginTop={1} flexDirection="column">
           <Text color="yellow">Commits ajoutés à la main (gardés par les reconstructions)</Text>
-          {doc.foreign_commits.map((commit) => (
-            <Text key={commit.sha} dimColor>{`  ${commit.sha.slice(0, 7)} ${commit.subject} (${commit.author})`}</Text>
+          {doc.foreign_commits.slice(0, MAX_FOREIGN_SHOWN).map((commit) => (
+            <Text key={commit.sha} dimColor wrap="truncate-end">{`  ${commit.sha.slice(0, 7)} ${commit.subject} (${commit.author})`}</Text>
           ))}
+          {doc.foreign_commits.length > MAX_FOREIGN_SHOWN ? (
+            <Text dimColor>{`  … et ${doc.foreign_commits.length - MAX_FOREIGN_SHOWN} autre(s)`}</Text>
+          ) : null}
         </Box>
       ) : null}
 

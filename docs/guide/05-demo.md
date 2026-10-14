@@ -15,8 +15,10 @@ jour quand la préprod avance. `jgit` s'occupe de la mécanique ; vous décidez 
 ce qu'elle contient.
 
 > **Au clavier plutôt qu'en commandes ?** `jgit ui` ouvre une interface en
-> terminal qui fait tout ce qui suit : liste, détail, cases à cocher pour ajouter
-> ou retirer des tickets, plan montré avant chaque réécriture, écran de conflit.
+> terminal qui fait tout ce qui suit : liste, détail, choix des tickets en tapant
+> leur numéro (la liste se réduit à la frappe, un ticket seul à correspondre est
+> coché d'office, ⏎ l'ajoute), plan montré avant chaque réécriture, écran de
+> conflit.
 
 ---
 

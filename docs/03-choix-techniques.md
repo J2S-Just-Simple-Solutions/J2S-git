@@ -427,6 +427,12 @@ d'interface au clavier digne de ce nom.
 - Les réécritures passent par `--dry-run` : le plan est montré avant d'être
   appliqué. Toute modification est lancée avec `--on-conflict pause` : un
   conflit ouvre un écran dédié plutôt qu'un échec.
+- Un projet a souvent des centaines de branches de tickets : on les cherche à
+  la frappe plutôt qu'on ne les parcourt, et toute liste n'affiche qu'une
+  fenêtre qui tient dans le terminal — un écran plus haut que le terminal, Ink
+  le réimprime à chaque touche et le terminal défile au lieu de la sélection.
+  Un ticket seul à correspondre est coché d'office mais ne s'ajoute qu'avec ⏎ :
+  en tapant « 1234 », « 123 » peut déjà être unique.
 - Ouvrir un éditeur ou Claude Code demande le terminal : l'interface se démonte,
   le lanceur (`cli.tsx`) exécute la commande, puis relance l'interface, qui
   relit `jgit util status`.

@@ -351,7 +351,8 @@ demo_show_cmd() {
 # des plus récentes aux plus anciennes, moins celles déjà dans la démo.
 demo_candidates_cmd() {
   local target="$1"
-  local base demo_name="" ticket date subject author known
+  local base demo_name="" ticket date subject author known line
+  local j_ticket j_type j_id j_date j_subject j_author
   local items=() fresh_lines=() delivered_lines=()
 
   jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
@@ -377,19 +378,21 @@ demo_candidates_cmd() {
     local delivered=false
     demo_ticket_is_delivered "$ticket" && delivered=true
 
-    items[${#items[@]}]=$(json_object \
-      "$(json_kv_str ticket "$ticket")" \
-      "$(json_kv_str type "${ticket%%/*}")" \
-      "$(json_kv_str id "${ticket#*/}")" \
-      "$(json_kv_str updated_at "$date")" \
-      "$(json_kv_str last_subject "$subject")" \
-      "$(json_kv_str author "$author")" \
-      "$(json_kv_bool delivered "$delivered")")
+    # Des centaines de tickets possibles : aucun sous-shell dans la boucle.
+    json_str_into j_ticket "$ticket"
+    json_str_into j_type "${ticket%%/*}"
+    json_str_into j_id "${ticket#*/}"
+    json_str_into j_date "$date"
+    json_str_into j_subject "$subject"
+    json_str_into j_author "$author"
+    items[${#items[@]}]="{\"ticket\":$j_ticket,\"type\":$j_type,\"id\":$j_id,\"updated_at\":$j_date,\"last_subject\":$j_subject,\"author\":$j_author,\"delivered\":$delivered}"
 
     if [[ $delivered == true ]]; then
-      delivered_lines[${#delivered_lines[@]}]=$(printf '  %-28s %s' "$ticket" "$subject")
+      printf -v line '  %-28s %s' "$ticket" "$subject"
+      delivered_lines[${#delivered_lines[@]}]="$line"
     else
-      fresh_lines[${#fresh_lines[@]}]=$(printf '  %-28s %s  %s' "$ticket" "${date%%T*}" "$subject")
+      printf -v line '  %-28s %s  %s' "$ticket" "${date%%T*}" "$subject"
+      fresh_lines[${#fresh_lines[@]}]="$line"
     fi
   done < <(git for-each-ref --sort=-committerdate \
              --format="%(refname:strip=3)%1f%(committerdate:iso-strict)%1f%(subject)%1f%(authorname)" \

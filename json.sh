@@ -82,6 +82,37 @@ json_str() {
   printf '"%s"' "$s"
 }
 
+# Comme json_str, mais le résultat va dans une variable, sans sous-shell : pour
+# les boucles sur des centaines d'éléments (chaque $(…) coûte un processus).
+#
+#   json_str_into <variable> <texte>
+json_str_into() {
+  local __json_var="$1"
+  local s="$2"
+  local bs='\'
+  local q='"'
+
+  case "$s" in
+    *[[:cntrl:]\"\\]*)
+      # Contrôles autres que tabulation, saut de ligne et retour chariot :
+      # rares, on accepte alors le détour par tr (voir json_str).
+      case "$s" in
+        *[$'\001'-$'\010'$'\013'$'\014'$'\016'-$'\037']*)
+          s=$(printf '%s.' "$s" | LC_ALL=C tr -d '\000-\010\013\014\016-\037')
+          s=${s%.}
+          ;;
+      esac
+      s=${s//"$bs"/"$bs$bs"}
+      s=${s//"$q"/"$bs$q"}
+      s=${s//$'\t'/"${bs}t"}
+      s=${s//$'\r'/"${bs}r"}
+      s=${s//$'\n'/"${bs}n"}
+      ;;
+  esac
+
+  printf -v "$__json_var" '"%s"' "$s"
+}
+
 # Chaîne, ou null si vide.
 json_str_or_null() {
   if [[ -z "$1" ]]; then

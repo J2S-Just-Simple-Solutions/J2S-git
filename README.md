@@ -392,8 +392,9 @@ jgit ui
 ```
 
 Une interface au clavier pour les démos, pensée pour qui ne veut pas retenir les
-commandes : la liste des démos et leur état, le détail ticket par ticket, des
-cases à cocher pour ajouter ou retirer des tickets, la création d'une démo, le
+commandes : la liste des démos et leur état, le détail ticket par ticket, le
+choix des tickets **en tapant leur numéro** (la liste se réduit à la frappe ; un
+ticket seul à correspondre est coché d'office), la création d'une démo, le
 plan de chaque réécriture montré avant d'être appliqué (`--dry-run`), et un
 écran de conflit (fichiers à résoudre, ouverture dans l'éditeur, reprise,
 annulation, « résoudre avec Claude » quand Claude Code est installé).
