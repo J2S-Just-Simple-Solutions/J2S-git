@@ -291,7 +291,8 @@ Lire (ne touche ni à l'espace de travail ni à la branche courante) :
 
 - `jgit demo list [--archived | --all]` : les démos du projet, leur base et leur état.
 - `jgit demo show [<nom>]` : le détail d'une démo, ticket par ticket (à jour, a avancé, réécrit, branche supprimée, livré), avec la commande à lancer pour chaque action utile et la commande `jgit release merge` correspondante.
-- `jgit demo candidates [<nom>]` : les tickets que l'on peut ajouter.
+- `jgit demo candidates [<nom>] [--based-on <branche>]` : les tickets que l'on peut ajouter — à une démo existante, ou à une démo encore à créer sur cette base (les tickets déjà livrés y sont signalés).
+- `jgit demo bases` : les branches dont une démo peut partir, la préprod et la production en tête, puis les releases.
 
 Fabriquer (sur une branche temporaire `jgit_demo_<nom>`, à partir de la version du serveur, publication finale par `--force-with-lease`, rien n'est publié si rien ne change, `--dry-run` disponible) :
 

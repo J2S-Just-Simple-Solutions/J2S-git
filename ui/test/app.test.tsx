@@ -168,10 +168,22 @@ test('au démarrage, une opération déjà en pause est montrée d’abord', asy
   assert.ok(runner.calls.some((call) => call.join(' ') === 'demo abort client-a'));
 });
 
-test('créer une démo : nom, tickets dans l’ordre coché, plan, puis création', async () => {
+test('créer une démo : nom, base, tickets dans l’ordre choisi, plan, puis création', async () => {
   const runner = new FakeRunner((args) => {
     if (args[0] === 'util') return { doc: noPause };
     if (args[1] === 'list') return { doc: { schema: 'jgit.demo.list/1', ok: true, demos: [], archived_count: 0 } };
+    if (args[1] === 'bases') {
+      return {
+        doc: {
+          schema: 'jgit.demo.bases/1', ok: true, default: 'develop',
+          bases: [
+            { branch: 'develop', role: 'preprod', updated_at: '2026-10-12T08:00:00+02:00', last_subject: 'Préprod' },
+            { branch: 'main', role: 'prod', updated_at: '2026-10-11T08:00:00+02:00', last_subject: 'Production' },
+            { branch: 'release/1.4.0', role: 'release', updated_at: '2026-10-10T08:00:00+02:00', last_subject: 'Release' },
+          ],
+        },
+      };
+    }
     if (args[1] === 'candidates') {
       return {
         doc: {
@@ -184,7 +196,7 @@ test('créer une démo : nom, tickets dans l’ordre coché, plan, puis créatio
       };
     }
     if (args[1] === 'create' && args.includes('--dry-run')) {
-      return { doc: { schema: 'jgit.demo.result/1', ok: true, operation: 'create', demo: 'vitrine', branch: 'demo/vitrine', changed: true, pushed: false, dry_run: true, added: ['feature/B-2', 'feature/B-1'] } };
+      return { doc: { schema: 'jgit.demo.result/1', ok: true, operation: 'create', demo: 'vitrine', branch: 'demo/vitrine', changed: true, pushed: false, dry_run: true, base: 'main', added: ['feature/B-2', 'feature/B-1'] } };
     }
     if (args[1] === 'create') {
       return { doc: { schema: 'jgit.demo.result/1', ok: true, operation: 'create', demo: 'vitrine', branch: 'demo/vitrine', changed: true, pushed: true, dry_run: false, added: ['feature/B-2', 'feature/B-1'] } };
@@ -201,6 +213,17 @@ test('créer une démo : nom, tickets dans l’ordre coché, plan, puis créatio
   assert.match(lastFrame() ?? '', /demo\/vitrine/);
   stdin.write(KEYS.enter);
   await tick();
+  // La base se choisit avant les tickets ; la sélection part sur la préprod.
+  let frame = lastFrame() ?? '';
+  assert.match(frame, /Base de la nouvelle démo vitrine/);
+  assert.match(frame, /❯ develop\s+préprod/);
+  assert.match(frame, /main\s+production/);
+  stdin.write(KEYS.down);
+  await tick();
+  stdin.write(KEYS.enter);
+  await tick();
+  assert.ok(runner.called('demo candidates --based-on main'));
+  assert.match(lastFrame() ?? '', /Tickets de la nouvelle démo vitrine \(base main\)/);
   stdin.write(KEYS.down);
   await tick();
   stdin.write(KEYS.space);
@@ -211,11 +234,13 @@ test('créer une démo : nom, tickets dans l’ordre coché, plan, puis créatio
   await tick();
   stdin.write(KEYS.enter);
   await tick();
-  assert.ok(runner.calls.some((call) => call.join(' ') === 'demo create vitrine --from feature/B-2 --from feature/B-1 --dry-run'));
-  assert.match(lastFrame() ?? '', /\+ feature\/B-2/);
+  assert.ok(runner.calls.some((call) => call.join(' ') === 'demo create vitrine --based-on main --from feature/B-2 --from feature/B-1 --dry-run'));
+  frame = lastFrame() ?? '';
+  assert.match(frame, /Base : main/);
+  assert.match(frame, /\+ feature\/B-2/);
   stdin.write(KEYS.enter);
   await tick();
-  assert.ok(runner.calls.some((call) => call.join(' ') === 'demo create vitrine --from feature/B-2 --from feature/B-1 --on-conflict pause'));
+  assert.ok(runner.calls.some((call) => call.join(' ') === 'demo create vitrine --based-on main --from feature/B-2 --from feature/B-1 --on-conflict pause'));
   assert.ok(runner.called('demo show demo/vitrine'));
 });
 

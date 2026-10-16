@@ -132,7 +132,9 @@ help() {
     printf "${C_BLUE}Demo:${C_RESET}\n"
     printf "  jgit demo list [--archived | --all]   Les démos du projet et leur état.\n"
     printf "  jgit demo show [<nom>]                Le contenu d'une démo, ticket par ticket.\n"
-    printf "  jgit demo candidates [<nom>]          Les tickets que l'on peut ajouter à une démo.\n"
+    printf "  jgit demo candidates [<nom>] [--based-on <branch>]\n"
+    printf "                                        Les tickets que l'on peut ajouter à une démo (ou à une démo sur cette base).\n"
+    printf "  jgit demo bases                       Les branches dont une démo peut partir.\n"
     printf "  jgit demo create <nom> [--based-on <branch>] [--from <ticket>]...\n"
     printf "  jgit demo add [<nom>] --from <ticket>...      Ajoute des tickets, ou leurs nouveaux commits.\n"
     printf "  jgit demo drop [<nom>] --from <ticket>...     Reconstruit la démo sans ces tickets.\n"
@@ -358,7 +360,7 @@ ensure_full_history || exit_safe 1
 jgit_command_is_read_only() {
     case "$JGIT_TYPE $JGIT_ACTION" in
         "ui ") return 0 ;;
-        "demo list"|"demo show"|"demo candidates"|"util status") return 0 ;;
+        "demo list"|"demo show"|"demo candidates"|"demo bases"|"util status") return 0 ;;
     esac
     return 1
 }
@@ -550,7 +552,10 @@ case "$JGIT_TYPE" in
                 demo_abort_cmd "$JGIT_TARGET"
                 ;;
             candidates)
-                demo_candidates_cmd "$JGIT_TARGET"
+                demo_candidates_cmd "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
+                ;;
+            bases)
+                demo_bases_cmd
                 ;;
             archive)
                 demo_archive_cmd "$JGIT_TARGET"

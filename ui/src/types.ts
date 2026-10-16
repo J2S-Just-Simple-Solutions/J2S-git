@@ -74,6 +74,20 @@ export interface CandidatesDoc {
   candidates: Candidate[];
 }
 
+export interface Base {
+  branch: string;
+  role: 'preprod' | 'prod' | 'release' | 'other';
+  updated_at: string;
+  last_subject: string;
+}
+
+export interface BasesDoc {
+  schema: 'jgit.demo.bases/1';
+  ok: true;
+  default: string | null;
+  bases: Base[];
+}
+
 export interface DemoResultDoc {
   schema: 'jgit.demo.result/1';
   ok: true;
@@ -83,6 +97,7 @@ export interface DemoResultDoc {
   changed: boolean;
   pushed: boolean;
   dry_run: boolean;
+  base?: string | null;
   added?: string[];
   updated?: string[];
   dropped?: { ticket: string; reason: string }[];
@@ -137,6 +152,7 @@ export type AnyDoc =
   | DemoListDoc
   | DemoShowDoc
   | CandidatesDoc
+  | BasesDoc
   | DemoResultDoc
   | ConflictDoc
   | StatusDoc

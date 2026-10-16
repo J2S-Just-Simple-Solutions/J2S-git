@@ -373,7 +373,7 @@ test_passed
 
 ## Scénarios existants
 
-294 scénarios répartis par domaine fonctionnel.
+298 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -393,7 +393,7 @@ test_passed
 | `14_confirmation.feature` | réponses aux confirmations sans tenir compte de la casse : `Y`, `YES`, `oui`, `O` acceptent ; `N` et une réponse inconnue refusent |
 | `15_contrat_json.feature` | `--json` : document unique de résultat ou d'erreur, `--no-interaction` implicite, erreurs d'usage et refus identifiés, échappement des caractères spéciaux, aide, absence de couleur, `--no-fetch` |
 | `16_rebase_pause_reprise.feature` | `--on-conflict pause` : conflit décrit, résolution puis `continue`, conflits successifs, résolution inachevée ou marqueurs restants, `abort`, refus des autres commandes pendant la pause, lease au moment de publier, abandon sans interaction, valeur inconnue |
-| `17_demo_creation_et_lecture.feature` | `demo create` (base, tickets, `--based-on`, confirmation, `--dry-run`, refus), `demo list`, `demo show` (chaque état de ticket, retard sur la base, commit ajouté à la main), `demo candidates` |
+| `17_demo_creation_et_lecture.feature` | `demo create` (base, tickets, `--based-on`, confirmation, `--dry-run`, refus), `demo list`, `demo show` (chaque état de ticket, retard sur la base, commit ajouté à la main), `demo candidates` (et `--based-on`), `demo bases` |
 | `18_demo_tickets.feature` | `demo add` (à la suite, sans réécriture ; nouveaux commits d'un ticket ; à jour ; réécrit ; livré), `demo drop` (ordre conservé, premier ticket, confirmation, `--dry-run`, commits ajoutés à la main, `--drop-foreign`), `demo refresh` |
 | `19_demo_rebase.feature` | `demo rebase` : base qui a avancé, démo à jour non republiée, tickets livrés ou disparus retirés (`--keep-*`), `--based-on`, commits ajoutés à la main, `--dry-run`, base inconnue |
 | `20_demo_conflits.feature` | conflit de démo en pause, `continue`, résolution rejouée par les reconstructions suivantes, `abort`, abandon sans interaction, lecture pendant la pause, lease, mauvaise démo, `util status` |

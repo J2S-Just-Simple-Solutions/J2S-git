@@ -39,6 +39,12 @@ export function ConfirmScreen({ title, plan, onConfirm, onCancel }: Props) {
     <Box flexDirection="column">
       <Title>{title}</Title>
       <Box marginTop={1} flexDirection="column">
+        {plan.base && ['create', 'rebase', 'migrate'].includes(plan.operation) ? (
+          <Text>
+            {'  Base : '}
+            <Text bold>{plan.base}</Text>
+          </Text>
+        ) : null}
         {plan.operation === 'archive' ? <Text>{`  → ${plan.branch}`}</Text> : null}
         {added.map((ticket) => (
           <Text key={`+${ticket}`} color="green">{`  + ${ticket}`}</Text>

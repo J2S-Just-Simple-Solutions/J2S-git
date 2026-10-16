@@ -316,3 +316,53 @@ Fonctionnalité: Créer une démo, puis la lire
     Alors jgit se termine sans erreur
     Et le JSON a "demo" nul
     Et la liste JSON "candidates" contient 2 éléments
+
+  # --- demo bases --------------------------------------------------------------
+
+  # Avant de créer une démo, on choisit sa base : l'interface et l'IA ont
+  # besoin de la liste, la préprod et la production en tête.
+  Scénario: Les bases possibles : préprod et production d'abord, puis les releases
+    Étant donné je lance "jgit release start --no-interaction"
+    Et je me place sur la branche "develop"
+    Et je lance "jgit demo create sprint12 --no-interaction"
+    Quand je lance "jgit demo bases --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "schema" égal à "jgit.demo.bases/1"
+    Et le JSON a "default" égal à "develop"
+    Et la liste JSON "bases" contient 3 éléments
+    Et le JSON a "bases[0].branch" égal à "develop"
+    Et le JSON a "bases[0].role" égal à "preprod"
+    Et le JSON a "bases[1].branch" égal à "main"
+    Et le JSON a "bases[1].role" égal à "prod"
+    Et le JSON a "bases[2].branch" égal à "release/1.1.0"
+    Et le JSON a "bases[2].role" égal à "release"
+    # Ni tickets, ni branches de PR, ni démos.
+    Et la sortie ne contient pas "feature/TEST-1"
+    Et la sortie ne contient pas "__PR__"
+    Et la sortie ne contient pas "demo/sprint12"
+    Et la sortie contient "(préprod)"
+
+  # --- demo candidates --based-on ------------------------------------------------
+
+  Scénario: Les candidats d'une démo encore à créer se comparent à la base choisie
+    Étant donné la PR de "hotfix/URGENT-1" est squash-mergée sur GitHub avec le message "URGENT-1 (#2)"
+    Et la PR de "hotfix/URGENT-1" est livrée dans "main"
+    Quand je lance "jgit demo candidates --based-on main --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "base" égal à "main"
+    Et le JSON a "candidates[ticket=hotfix/URGENT-1].delivered" vrai
+    Quand je lance "jgit demo candidates --json" en lisant le JSON
+    Alors le JSON a "base" égal à "develop"
+    Et le JSON a "candidates[ticket=hotfix/URGENT-1].delivered" faux
+
+  Scénario: Une base inconnue pour les candidats est refusée
+    Quand je lance "jgit demo candidates --based-on inexistante --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "base_not_found"
+    Et le JSON a "error.hint" égal à "Les bases possibles : jgit demo bases"
+
+  Scénario: --based-on ne se combine pas avec une démo existante
+    Étant donné je lance "jgit demo create sprint12 --no-interaction"
+    Quand je lance "jgit demo candidates sprint12 --based-on main --json" en lisant le JSON
+    Alors jgit se termine avec le code 1
+    Et le JSON a "error.code" égal à "usage"

@@ -351,17 +351,34 @@ demo_show_cmd() {
 # des plus récentes aux plus anciennes, moins celles déjà dans la démo.
 demo_candidates_cmd() {
   local target="$1"
+  local based_on="${2:-}"
   local base demo_name="" ticket date subject author known line
   local j_ticket j_type j_id j_date j_subject j_author
   local items=() fresh_lines=() delivered_lines=()
 
   jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
 
-  if [[ -n "$target" ]] || demo_parse_branch "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" 2>/dev/null; then
+  if [[ -n "$target" && -n "$based_on" ]]; then
+    jgit_fail usage "$JGIT_EXIT_ERROR" \
+      "--based-on ne s'utilise pas avec une démo : ses tickets se comparent à sa propre base." \
+      "jgit demo candidates $target"
+  fi
+
+  # Une démo nommée, ou la démo de la branche courante — sauf si --based-on
+  # demande les candidats d'une démo encore à créer, sur cette base.
+  if [[ -n "$target" ]] || { [[ -z "$based_on" ]] && demo_parse_branch "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" 2>/dev/null; }; then
     demo_require_target "$target" "demo candidates"
     demo_load "$DEMO_BRANCH" || DEMO_TICKETS=()
     demo_name="$DEMO_NAME"
     base="$DEMO_BASE"
+  elif [[ -n "$based_on" ]]; then
+    if ! demo_remote_exists "$based_on"; then
+      jgit_fail base_not_found "$JGIT_EXIT_REFUSED" \
+        "La branche $based_on n'existe pas sur $j2s_remote." \
+        "Les bases possibles : jgit demo bases"
+    fi
+    DEMO_TICKETS=()
+    base="$based_on"
   else
     DEMO_TICKETS=()
     base=$(get_reference_branch feature 2>/dev/null)
@@ -423,4 +440,81 @@ demo_candidates_cmd() {
     "$(json_kv_str_or_null demo "$demo_name")" \
     "$(json_kv_str_or_null base "$base")" \
     "$(json_kv candidates "$(json_array ${items[@]+"${items[@]}"})")")"
+}
+
+###############################################
+#            jgit demo bases
+###############################################
+
+# Les branches dont une démo peut partir : la préprod et la production d'abord,
+# puis les releases, puis les autres branches du serveur, des plus récentes aux
+# plus anciennes. Les branches de tickets, de PR, de démos et les branches
+# temporaires de jgit n'en sont pas.
+demo_bases_cmd() {
+  local default branch date subject role label item line
+  local j_branch j_role j_date j_subject
+  local preprod_item="" prod_item="" preprod_line="" prod_line=""
+  local releases=() others=() release_lines=() other_lines=() items=() lines=()
+
+  jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
+  default=$(get_reference_branch feature 2>/dev/null)
+
+  while IFS=$'\037' read -r branch date subject; do
+    case "$branch" in
+      ""|HEAD|feature/*|hotfix/*|"$prefix_PR"*|"$DEMO_PREFIX"*|"$DEMO_ARCHIVE_PREFIX"*|"$DEMO_LEGACY_PREFIX"*|jgit_*) continue ;;
+    esac
+
+    if [[ "$branch" == "$branch_preprod" ]]; then
+      role="preprod"
+      label="préprod"
+    elif [[ "$branch" == "$branch_prod" ]]; then
+      role="prod"
+      label="production"
+    elif [[ "$branch" == release/* ]]; then
+      role="release"
+      label="release"
+    else
+      role="other"
+      label=""
+    fi
+
+    # Des dizaines de branches possibles : aucun sous-shell dans la boucle.
+    json_str_into j_branch "$branch"
+    json_str_into j_role "$role"
+    json_str_into j_date "$date"
+    json_str_into j_subject "$subject"
+    item="{\"branch\":$j_branch,\"role\":$j_role,\"updated_at\":$j_date,\"last_subject\":$j_subject}"
+    # Le rôle en fin de ligne : « préprod » compte un octet de plus qu'il n'a
+    # de caractères, et bash 3.2 aligne les colonnes à l'octet.
+    printf -v line '  %-28s %s  %s%s' "$branch" "${date%%T*}" "$subject" "${label:+  ($label)}"
+
+    case "$role" in
+      preprod) preprod_item="$item"; preprod_line="$line" ;;
+      prod) prod_item="$item"; prod_line="$line" ;;
+      release) releases[${#releases[@]}]="$item"; release_lines[${#release_lines[@]}]="$line" ;;
+      *) others[${#others[@]}]="$item"; other_lines[${#other_lines[@]}]="$line" ;;
+    esac
+  done < <(git for-each-ref --sort=-committerdate \
+             --format="%(refname:strip=3)%1f%(committerdate:iso-strict)%1f%(subject)" \
+             "refs/remotes/$j2s_remote" 2>/dev/null)
+
+  [[ -n "$preprod_item" ]] && items[${#items[@]}]="$preprod_item" && lines[${#lines[@]}]="$preprod_line"
+  [[ -n "$prod_item" ]] && items[${#items[@]}]="$prod_item" && lines[${#lines[@]}]="$prod_line"
+  items=(${items[@]+"${items[@]}"} ${releases[@]+"${releases[@]}"} ${others[@]+"${others[@]}"})
+  lines=(${lines[@]+"${lines[@]}"} ${release_lines[@]+"${release_lines[@]}"} ${other_lines[@]+"${other_lines[@]}"})
+
+  printf "%sBases possibles pour une démo%s (par défaut : %s)\n" "$C_BLUE" "$C_RESET" "${default:-?}"
+  if [[ ${#lines[@]} -eq 0 ]]; then
+    printf "  Aucune.\n"
+  else
+    printf "%s\n" "${lines[@]}"
+  fi
+  printf "\nCréer une démo sur l'une d'elles : jgit demo create <nom> --based-on <branche>\n"
+
+  json_emit "$(json_object \
+    "$(json_kv_str schema "jgit.demo.bases/1")" \
+    "$(json_kv_bool ok true)" \
+    "$(json_kv_str command "demo bases")" \
+    "$(json_kv_str_or_null default "$default")" \
+    "$(json_kv bases "$(json_array ${items[@]+"${items[@]}"})")")"
 }

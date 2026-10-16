@@ -731,7 +731,8 @@ Fichier : [`tests/features/17_demo_creation_et_lecture.feature`](../tests/featur
 | Démo existante, nom invalide, nom manquant, base inconnue, ticket mal formé ou absent, espace de travail sale | refus identifiés, rien créé |
 | `demo list` | chaque démo, sa base, ses tickets, son état ; « Aucune démo » ; aucune identité git nécessaire |
 | `demo show` | ticket à jour, qui a avancé, **rebasé par jgit (toujours à jour)**, squashé (réécrit), supprimé, livré ; démo en retard sur sa base ; commit poussé à la main ; démo de la branche courante ; refus d'une démo inconnue |
-| `demo candidates` | tickets absents de la démo, livrés mis à part ; sans démo, tous les tickets |
+| `demo candidates` | tickets absents de la démo, livrés mis à part ; sans démo, tous les tickets ; `--based-on` compare à une base envisagée (livrés compris), refuse une base inconnue ou combinée à une démo |
+| `demo bases` | préprod et production en tête, puis releases ; ni tickets, ni PR, ni démos |
 
 ---
 

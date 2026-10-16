@@ -11,6 +11,8 @@ interface Props {
   runner: JgitRunner;
   // Démo existante (ajout), ou null (création : tous les tickets du serveur).
   demo: string | null;
+  // Création : la base choisie, à laquelle les tickets se comparent (livrés…).
+  base?: string | null;
   title: string;
   allowEmpty: boolean;
   onDone: (tickets: string[]) => void;
@@ -51,7 +53,7 @@ export function filterCandidates(candidates: Candidate[], query: string, showDel
 //   - tab montre ou masque les tickets déjà livrés.
 //
 // L'ordre de choix est l'ordre des tickets dans la démo.
-export function PickTicketsScreen({ runner, demo, title, allowEmpty, onDone, onCancel, onError }: Props) {
+export function PickTicketsScreen({ runner, demo, base: chosenBase = null, title, allowEmpty, onDone, onCancel, onError }: Props) {
   const rows = useTerminalRows();
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [base, setBase] = useState<string | null>(null);
@@ -64,6 +66,7 @@ export function PickTicketsScreen({ runner, demo, title, allowEmpty, onDone, onC
   useEffect(() => {
     const args = ['demo', 'candidates'];
     if (demo) args.push(demo);
+    else if (chosenBase) args.push('--based-on', chosenBase);
     runner.run(args).then((result) => {
       if (result.doc && result.doc.schema === 'jgit.demo.candidates/1') {
         setCandidates(result.doc.candidates);
@@ -73,7 +76,7 @@ export function PickTicketsScreen({ runner, demo, title, allowEmpty, onDone, onC
         onCancel();
       }
     });
-  }, [demo]);
+  }, [demo, chosenBase]);
 
   const visible = candidates ? filterCandidates(candidates, query, showDelivered) : [];
   // Un seul ticket libre correspond à la saisie : il est coché d'office.

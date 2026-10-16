@@ -202,6 +202,26 @@ qu'il faut à quelqu'un — un collègue, une IA, l'interface — qui arrive au 
                 "author":"Camille","delivered":false}]}
 ```
 
+Avec `--based-on <branche>` (sans nom de démo), les candidats d'une démo encore
+à créer sur cette base : `demo` vaut `null`, `base` la branche demandée, et
+`delivered` se lit par rapport à elle. Une branche absente du serveur donne
+`base_not_found` (code 2) ; `--based-on` avec un nom de démo, `usage`.
+
+### `jgit.demo.bases/1` — `jgit demo bases`
+
+```json
+{"schema":"jgit.demo.bases/1","ok":true,"command":"demo bases","default":"develop",
+ "bases":[{"branch":"develop","role":"preprod","updated_at":"…","last_subject":"…"},
+          {"branch":"main","role":"prod","updated_at":"…","last_subject":"…"},
+          {"branch":"release/1.5.0","role":"release","updated_at":"…","last_subject":"…"}]}
+```
+
+`role` vaut `preprod`, `prod`, `release` ou `other`. L'ordre est celui à
+proposer : préprod, production, releases puis autres branches (des plus
+récentes aux plus anciennes). `default` est la base que prend `demo create`
+sans `--based-on`. Les branches de tickets, de PR, de démos et les branches
+temporaires de jgit n'y figurent pas.
+
 ### `jgit.demo.result/1` — `create`, `add`, `drop`, `refresh`, `rebase`, `continue`
 
 ```json

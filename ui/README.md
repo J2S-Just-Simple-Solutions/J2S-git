@@ -15,10 +15,18 @@ JGIT_UI=native jgit ui      # avec le node du poste, après « npm ci && npm run
 | `src/cli.tsx` | lanceur : rend l'interface, lui prête le terminal pour l'éditeur ou Claude Code, la relance |
 | `src/app.tsx` | écrans et enchaînements : plan (`--dry-run`) avant chaque réécriture, `--on-conflict pause` pour toute modification |
 | `src/jgit.ts` | appel de `jgit … --json`, lecture du document |
-| `src/screens/` | liste, détail, choix de tickets, nom, confirmation du plan, conflit |
+| `src/screens/` | liste, détail, nom, choix de la base, choix de tickets, confirmation du plan, conflit |
 | `src/filter.ts` | filtrage à la frappe (sans casse ni accents) et pertinence (identifiant exact d'abord) |
 | `src/viewport.ts` | fenêtre des listes longues : seul ce qui tient à l'écran est affiché |
 | `test/` | tests (`node:test` + `ink-testing-library`) avec un `jgit` simulé |
+
+## Créer une démo
+
+Trois étapes : le nom ; **la base** (« Base de la nouvelle démo », la sélection
+part sur la préprod, la liste — `jgit demo bases` — se filtre à la frappe) ; les
+tickets, comparés à cette base (`jgit demo candidates --based-on`). Le plan
+montré avant la création rappelle la base, et la commande passe toujours
+`--based-on` explicitement.
 
 ## Choisir des tickets
 

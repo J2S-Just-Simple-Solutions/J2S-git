@@ -10,6 +10,7 @@ import { DetailScreen } from './screens/DetailScreen.js';
 import type { DetailAction } from './screens/DetailScreen.js';
 import { PickTicketsScreen } from './screens/PickTicketsScreen.js';
 import { NameScreen } from './screens/NameScreen.js';
+import { BasePickScreen } from './screens/BasePickScreen.js';
 import { ConfirmScreen } from './screens/ConfirmScreen.js';
 import { ConflictScreen } from './screens/ConflictScreen.js';
 import type { ConflictAction } from './screens/ConflictScreen.js';
@@ -19,8 +20,9 @@ export type Screen =
   | { kind: 'list' }
   | { kind: 'detail'; branch: string }
   | { kind: 'name' }
+  | { kind: 'base'; name: string }
   | { kind: 'pick'; mode: 'add'; demo: string }
-  | { kind: 'pick'; mode: 'create'; name: string }
+  | { kind: 'pick'; mode: 'create'; name: string; base: string }
   | { kind: 'confirm'; title: string; plan: DemoResultDoc; args: string[]; back: Screen }
   | { kind: 'running'; label: string }
   | { kind: 'conflict'; view: ConflictView; back: Screen };
@@ -197,11 +199,24 @@ export function App({ runner, claudeAvailable, stage, onSpawn, initialFlash = nu
     case 'name':
       body = (
         <NameScreen
-          onDone={(name) => setScreen({ kind: 'pick', mode: 'create', name })}
+          onDone={(name) => setScreen({ kind: 'base', name })}
           onCancel={() => go({ kind: 'list' })}
         />
       );
       break;
+    case 'base': {
+      const name = screen.name;
+      body = (
+        <BasePickScreen
+          runner={runner}
+          title={`Base de la nouvelle démo ${name}`}
+          onDone={(base) => setScreen({ kind: 'pick', mode: 'create', name, base })}
+          onCancel={() => setScreen({ kind: 'name' })}
+          onError={error}
+        />
+      );
+      break;
+    }
     case 'pick':
       if (screen.mode === 'add') {
         const demo = screen.demo;
@@ -223,22 +238,23 @@ export function App({ runner, claudeAvailable, stage, onSpawn, initialFlash = nu
           />
         );
       } else {
-        const name = screen.name;
+        const { name, base } = screen;
         body = (
           <PickTicketsScreen
             runner={runner}
             demo={null}
-            title={`Tickets de la nouvelle démo ${name}`}
+            base={base}
+            title={`Tickets de la nouvelle démo ${name} (base ${base})`}
             allowEmpty={true}
             onDone={(tickets) =>
               void mutate(
-                ['demo', 'create', name, ...tickets.flatMap((ticket) => ['--from', ticket])],
-                `Créer la démo demo/${name}`,
+                ['demo', 'create', name, '--based-on', base, ...tickets.flatMap((ticket) => ['--from', ticket])],
+                `Créer la démo demo/${name} sur ${base}`,
                 true,
                 { kind: 'list' },
               )
             }
-            onCancel={() => go({ kind: 'list' })}
+            onCancel={() => setScreen({ kind: 'base', name })}
             onError={error}
           />
         );

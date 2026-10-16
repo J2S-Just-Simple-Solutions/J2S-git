@@ -121,9 +121,26 @@ jgit demo candidates client-a
 
 Liste les tickets du serveur (`feature/…`, `hotfix/…`) qui ne sont pas encore
 dans la démo, du plus récent au plus ancien, et met à part ceux déjà livrés dans
-la base — inutile de les ajouter.
+la base — inutile de les ajouter. Pour une démo encore à créer,
+`jgit demo candidates --based-on main` compare les tickets à la base envisagée.
 
-Ces trois commandes **ne font que lire** : elles ne touchent ni à votre espace de
+### `demo bases` — d'où une démo peut partir
+
+```bash
+jgit demo bases
+```
+
+```
+Bases possibles pour une démo (par défaut : develop)
+  develop                      2026-10-12  Livraison du sprint 41  (préprod)
+  main                         2026-10-08  Merge release 1.4.0  (production)
+  release/1.5.0                2026-10-11  INIT release  (release)
+```
+
+La préprod et la production d'abord, puis les releases, puis les autres
+branches. Les branches de tickets, de PR et de démos n'en font pas partie.
+
+Ces quatre commandes **ne font que lire** : elles ne touchent ni à votre espace de
 travail ni à votre branche, et fonctionnent même pendant qu'un conflit attend.
 
 ---
@@ -149,8 +166,13 @@ jgit demo create recette --based-on main
 ```
 
 Le nom est obligatoire : lettres, chiffres, `.`, `_` ou `-`. La base est la
-préprod, sauf `--based-on`. `jgit` annonce ce qu'il va créer et demande
-confirmation.
+préprod, sauf `--based-on`. `jgit` annonce ce qu'il va créer — base comprise —
+et demande confirmation.
+
+Dans `jgit ui`, la création se fait en trois étapes : le nom, **la base** (la
+sélection part sur la préprod ; la liste se filtre à la frappe), puis les
+tickets, comparés à cette base. Le plan montré avant la création rappelle la
+base.
 
 ### `demo add` — ajouter des tickets
 

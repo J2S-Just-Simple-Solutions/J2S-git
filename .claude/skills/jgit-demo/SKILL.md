@@ -53,6 +53,8 @@ documents JSON. Tu ne manipules jamais une branche de démo à la main avec git.
 jgit demo list [--archived|--all] --json         # toutes les démos et leur état
 jgit demo show [<nom>] --json                    # le détail, ticket par ticket
 jgit demo candidates [<nom>] --json              # tickets que l'on peut ajouter
+jgit demo candidates --based-on <base> --json    # … à une démo encore à créer sur cette base
+jgit demo bases --json                           # branches dont une démo peut partir
 
 jgit demo create <nom> [--based-on <base>] [--from <ticket>]... --json
 jgit demo add <nom> --from <ticket>... --on-conflict pause --json
@@ -103,8 +105,13 @@ par défaut est appliquée. `--dry-run` montre le plan sans rien publier.
    lancer d'office si elles réécrivent la démo.
 
 ### Créer une démo
-1. `jgit demo candidates --json` si l'humain ne sait pas quels tickets mettre.
-2. `jgit demo create <nom> --from … --on-conflict pause --json`. Un nom : lettres,
+1. **Demander la base à l'humain** s'il ne l'a pas dite : `jgit demo bases --json`
+   donne les choix (préprod et production en tête, puis releases) et `default`.
+   Ne jamais la choisir en silence.
+2. `jgit demo candidates --based-on <base> --json` si l'humain ne sait pas quels
+   tickets mettre (les tickets déjà livrés dans cette base sont signalés).
+3. `jgit demo create <nom> --based-on <base> --from … --on-conflict pause --json`
+   — toujours avec `--based-on`, explicite. Un nom : lettres,
    chiffres, `.`, `_`, `-`. Si `already_exists` : la démo existe ; proposer `add`,
    ou `archive` puis `create` pour la remplacer.
 
