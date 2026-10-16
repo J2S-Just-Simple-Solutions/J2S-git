@@ -135,6 +135,8 @@ help() {
     printf "  jgit demo candidates [<nom>] [--based-on <branch>]\n"
     printf "                                        Les tickets que l'on peut ajouter à une démo (ou à une démo sur cette base).\n"
     printf "  jgit demo bases                       Les branches dont une démo peut partir.\n"
+    printf "  jgit demo check [<nom>]               Simule les mises à jour en attente et dit si elles passent :\n"
+    printf "                                        conflits, commits et auteurs en cause, commandes à lancer.\n"
     printf "  jgit demo create <nom> [--based-on <branch>] [--from <ticket>]...\n"
     printf "  jgit demo add [<nom>] --from <ticket>...      Ajoute des tickets, ou leurs nouveaux commits.\n"
     printf "  jgit demo drop [<nom>] --from <ticket>...     Reconstruit la démo sans ces tickets.\n"
@@ -360,7 +362,7 @@ ensure_full_history || exit_safe 1
 jgit_command_is_read_only() {
     case "$JGIT_TYPE $JGIT_ACTION" in
         "ui ") return 0 ;;
-        "demo list"|"demo show"|"demo candidates"|"demo bases"|"util status") return 0 ;;
+        "demo list"|"demo show"|"demo candidates"|"demo bases"|"demo check"|"util status") return 0 ;;
     esac
     return 1
 }
@@ -556,6 +558,9 @@ case "$JGIT_TYPE" in
                 ;;
             bases)
                 demo_bases_cmd
+                ;;
+            check)
+                demo_check_cmd "$JGIT_TARGET"
                 ;;
             archive)
                 demo_archive_cmd "$JGIT_TARGET"

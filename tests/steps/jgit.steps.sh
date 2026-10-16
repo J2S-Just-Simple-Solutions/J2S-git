@@ -310,6 +310,11 @@ step_operation_en_pause() {
 }
 step_def "une opération jgit est en pause" step_operation_en_pause
 
+step_aucune_copie_temporaire() {
+    assert_no_extra_worktree
+}
+step_def "aucune copie de travail temporaire ne reste" step_aucune_copie_temporaire
+
 step_aucune_operation_en_pause() {
     assert_no_operation_paused
 }
@@ -473,6 +478,11 @@ step_autre_dev_pousse() {
     github_commit_file "$3" "$1" "$2" "$4"
 }
 step_def "un autre développeur pousse le fichier {chaine} contenant {texte} sur la branche {chaine} avec le message {chaine}" step_autre_dev_pousse
+
+step_personne_pousse() {
+    github_commit_file_as "$1" "$4" "$2" "$3" "$5"
+}
+step_def "{chaine} pousse le fichier {chaine} contenant {texte} sur la branche {chaine} avec le message {chaine}" step_personne_pousse
 
 step_note_etat_branche_distante() {
     remote_snapshot_save "$1"

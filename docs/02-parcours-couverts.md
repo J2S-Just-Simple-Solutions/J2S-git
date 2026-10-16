@@ -813,3 +813,23 @@ Fichier : [`tests/features/21_demo_archive.feature`](../tests/features/21_demo_a
 | Copie locale | supprimée si identique, conservée (et signalée) si elle porte des commits non publiés |
 | `demo delete` | après confirmation ; refus : la démo reste ; une archive se supprime aussi ; démo inconnue refusée |
 
+---
+
+## Parcours 22 — Vérifier que les mises à jour des démos sont faisables
+
+Fichier : [`tests/features/22_demo_verification.feature`](../tests/features/22_demo_verification.feature)
+
+`jgit demo check` simule tout ce qui remettrait chaque démo à jour et rend un
+rapport, sans rien modifier.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Démo à jour | `up_to_date`, aucune action |
+| Base qui a avancé, sans conflit | `feasible`, action `jgit demo rebase <nom>` et sa raison |
+| Conflit avec la base | ticket, étape, commit et auteur ; fichier ; **en face**, le commit de la base qui l'a touché, son auteur (une autre personne) et sa provenance ; commandes `resolve` (avec `--on-conflict pause`) et `drop` ; code de sortie 3 |
+| Conflit entre deux tickets | le nouveau commit (et son auteur) en face du ticket déjà dans la démo, qui est nommé |
+| Plusieurs tickets en conflit | **tous** sont signalés, chacun avec son vis-à-vis |
+| Ticket livré | annoncé comme retiré par le rebase |
+| Espace de travail modifié | la vérification fonctionne ; rien n'a bougé : fichier, branche, serveur ; aucune copie temporaire ne reste |
+| Démo archivée, démo à l'ancien format | refusée ; ignorée et comptée |
+

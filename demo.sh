@@ -3,6 +3,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/functions.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/demo_model.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/demo_engine.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/demo_lifecycle.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/demo_check.sh"
 
 ###############################################
 ###############################################

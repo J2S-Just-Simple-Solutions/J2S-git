@@ -32,6 +32,11 @@ Un conflit se résout sur un poste (`jgit demo rebase client-a --on-conflict pau
 ou en demandant à Claude) : la résolution devient un commit de la démo, et le
 job suivant la rejoue sans conflit.
 
+Avant de reconstruire, le job peut lancer `jgit demo check --json` : le rapport
+dit, sans rien modifier, quelles démos passeront et, pour les autres, quel
+ticket, quel commit et quel auteur sont en cause, et en face qui a modifié le
+même fichier — de quoi notifier directement les bonnes personnes.
+
 ### Déjà prêt depuis le temps 1
 
 - `jgit` tourne sous Linux, dans l'image `j2s/jgit:local` ; un clone

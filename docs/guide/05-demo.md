@@ -15,7 +15,8 @@ jour quand la préprod avance. `jgit` s'occupe de la mécanique ; vous décidez 
 ce qu'elle contient.
 
 > **Au clavier plutôt qu'en commandes ?** `jgit ui` ouvre une interface en
-> terminal qui fait tout ce qui suit : liste, détail, choix des tickets en tapant
+> terminal qui fait tout ce qui suit : liste, détail, vérification des mises à
+> jour (`v`), choix des tickets en tapant
 > leur numéro (la liste se réduit à la frappe, un ticket seul à correspondre est
 > coché d'office, ⏎ l'ajoute), plan montré avant chaque réécriture, écran de
 > conflit.
@@ -140,7 +141,49 @@ Bases possibles pour une démo (par défaut : develop)
 La préprod et la production d'abord, puis les releases, puis les autres
 branches. Les branches de tickets, de PR et de démos n'en font pas partie.
 
-Ces quatre commandes **ne font que lire** : elles ne touchent ni à votre espace de
+### `demo check` — les mises à jour passeront-elles ?
+
+```bash
+jgit demo check             # toutes les démos
+jgit demo check client-a    # une seule
+```
+
+`jgit` **simule** tout ce qui remettrait chaque démo à jour — le rebase sur la
+base actuelle, le retrait des tickets livrés ou disparus, la reprise des tickets
+réécrits, l'ajout des nouveaux commits — et dit ce qui passe et ce qui coince :
+
+```
+demo/client-a  (base develop)
+  ✖ Conflit : feature/FACT-2 (au rebase sur la base à jour)
+      commit fefe23f « Affiche la remise fidélité »
+      par Yann <yann@j2s.net>, le 2026-10-12
+      src/accueil.txt (modifié des deux côtés)
+        en face : 2a926dd « Nouveau message d'accueil » par Camille <camille@j2s.net> (develop)
+      → résoudre : jgit demo rebase client-a --on-conflict pause
+      → ou retirer : jgit demo drop client-a --from feature/FACT-2
+  Pour la remettre à jour, dans l'ordre :
+      jgit demo rebase client-a --on-conflict pause
+        base develop en retard de 1 commit(s)
+      jgit demo add client-a --from feature/MENU-3
+        feature/MENU-3 a de nouveaux commits
+
+Bilan : 1 démo(s) — 0 à jour, 0 faisable(s), 1 en conflit, 0 bloquée(s).
+```
+
+Pour chaque conflit : le ticket, l'étape où il apparaît, **le commit qui ne
+passe plus et son auteur**, les fichiers, et **en face, le dernier commit qui
+les a touchés, son auteur et d'où il vient** (un autre ticket de la démo, ou la
+base) — de quoi savoir qui appeler. Un ticket en conflit est écarté et la
+simulation reprend sans lui : tous les tickets fautifs sont signalés, pas
+seulement le premier.
+
+**Rien n'est modifié** : la simulation se fait dans une copie de travail
+temporaire, effacée à la fin. Votre espace de travail (même en cours de
+modification), votre branche et le serveur ne bougent pas. Le code de sortie
+vaut 3 si un conflit est prévu, ce qui permet à un job planifié de s'arrêter
+dessus.
+
+Ces cinq commandes **ne font que lire** : elles ne touchent ni à votre espace de
 travail ni à votre branche, et fonctionnent même pendant qu'un conflit attend.
 
 ---

@@ -195,6 +195,7 @@ Les valeurs sont toujours entre guillemets.
 | `Étant donné une démo à l'ancien format "…" basée sur "…" contient les tickets "…"` (tickets séparés par des espaces ; reproduit ce que faisait la première version de `jgit`) |
 | `Étant donné une démo à l'ancien format "…" sans base enregistrée contient les tickets "…"` |
 | `Quand un autre développeur pousse le fichier "…" contenant "…" sur la branche "…" avec le message "…"` |
+| `Quand "Camille" pousse le fichier "…" contenant "…" sur la branche "…" avec le message "…"` (commit au nom de cette personne, adresse `camille@example.invalid`) |
 | `Quand le client gh échoue pour les commandes "…"` (motif `grep -E`) |
 
 ### Vérifications
@@ -209,6 +210,7 @@ Les valeurs sont toujours entre guillemets.
 | `Et la démo distante "…" contient dans l'ordre les tickets :` + tableau d'une colonne |
 | `Et la démo distante "…" ne contient aucun ticket` |
 | `Et la branche distante "…" a avancé sans réécriture` (l'état noté en est un ancêtre) |
+| `Et aucune copie de travail temporaire ne reste` (`git worktree list`) |
 | `Et la sortie standard est un unique document JSON` |
 | `Et le JSON a "chemin" égal à "…"` / `égal au nombre N` / `vrai` / `faux` / `nul` / `qui contient "…"` |
 | `Et le JSON n'a pas de "chemin"` |
@@ -313,6 +315,8 @@ Les fonctions utilisables dans une définition d'étape :
 | `repo_resolve_file <chemin> <contenu>`, `repo_mark_resolved <chemin>` | résolution d'un conflit dans le dépôt de travail |
 | `assert_operation_paused` / `assert_no_operation_paused` | état `.git/jgit/operation.state` |
 | `github_create_legacy_demo <nom> <base> <true\|false> <ticket>…` | fabrique une démo `demo_<nom>` comme la première version de `jgit` |
+| `github_commit_file_as <personne> <branche> <chemin> <contenu> <message>` | commit d'une personne nommée |
+| `assert_no_extra_worktree` | aucune copie de travail temporaire ne reste |
 | `github_deliver_pr <branche> <base>` | simule la livraison d'un ticket dans une base |
 | `remote_demo_tickets <branche>`, `assert_remote_demo_tickets` | tickets d'une démo lus sur le remote, à partir des repères |
 | `assert_remote_branch_fast_forwarded <branche>` | la branche a avancé sans réécriture depuis l'état noté |
@@ -373,7 +377,7 @@ test_passed
 
 ## Scénarios existants
 
-298 scénarios répartis par domaine fonctionnel.
+306 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -398,6 +402,7 @@ test_passed
 | `19_demo_rebase.feature` | `demo rebase` : base qui a avancé, démo à jour non republiée, tickets livrés ou disparus retirés (`--keep-*`), `--based-on`, commits ajoutés à la main, `--dry-run`, base inconnue |
 | `20_demo_conflits.feature` | conflit de démo en pause, `continue`, résolution rejouée par les reconstructions suivantes, `abort`, abandon sans interaction, lecture pendant la pause, lease, mauvaise démo, `util status` |
 | `21_demo_archive.feature` | `demo archive` (nom libéré, archives à part dans la liste, numérotation du jour, lecture seule, copie locale), `demo unarchive` (par nom, ambiguïté, nom déjà pris), `demo delete` |
+| `22_demo_verification.feature` | `demo check` : démo à jour, base avancée faisable, conflit avec la base et entre tickets (commit, auteurs, provenance, commandes), tous les conflits signalés, ticket livré, rien n'est touché, démos archivées et à l'ancien format |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

@@ -13,6 +13,7 @@ interface Props {
   runner: JgitRunner;
   onOpen: (demo: DemoSummary) => void;
   onCreate: () => void;
+  onCheck: () => void;
   onQuit: () => void;
   onError: (text: string) => void;
 }
@@ -30,7 +31,7 @@ function stateOf(demo: DemoSummary): { text: string; color: string } {
   return { text: `⚠ ${parts.join(' · ')}`, color: 'yellow' };
 }
 
-export function ListScreen({ runner, onOpen, onCreate, onQuit, onError }: Props) {
+export function ListScreen({ runner, onOpen, onCreate, onCheck, onQuit, onError }: Props) {
   const rows = useTerminalRows();
   const [scope, setScope] = useState<'active' | 'all'>('active');
   const [doc, setDoc] = useState<DemoListDoc | null>(null);
@@ -69,6 +70,7 @@ export function ListScreen({ runner, onOpen, onCreate, onQuit, onError }: Props)
     else if (key.downArrow || (key.ctrl && input === 'n')) setCursor((value) => Math.min(demos.length - 1, value + 1));
     else if (key.return && demos[cursor]) onOpen(demos[cursor]);
     else if (input === 'n') onCreate();
+    else if (input === 'v' && demos.length > 0) onCheck();
     else if (input === 'a') setScope((value) => (value === 'active' ? 'all' : 'active'));
     else if (input === 'r') setReload((value) => value + 1);
     else if (input === 'q' || key.escape) onQuit();
@@ -113,6 +115,7 @@ export function ListScreen({ runner, onOpen, onCreate, onQuit, onError }: Props)
           ['↑↓', 'choisir'],
           ['⏎', 'ouvrir'],
           ['n', 'nouvelle démo'],
+          ['v', 'vérifier les mises à jour'],
           ['a', scope === 'active' ? 'archives' : 'actives seulement'],
           ['r', 'actualiser'],
           ['q', 'quitter'],

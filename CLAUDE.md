@@ -13,7 +13,7 @@ le projet — code, messages, documentation, tests — est **en français**.
 | `json.sh` | contrat `--json` : fragments JSON, `json_emit`, `jgit_fail` |
 | `replay.sh` | moteur de rejeu commun (cherry-pick, pause/reprise sur conflit, état `.git/jgit/operation.state`) |
 | `feature.sh`, `rebase.sh`, `release.sh` | feature/hotfix, rebase, release |
-| `demo.sh`, `demo_model.sh`, `demo_engine.sh`, `demo_lifecycle.sh` | démos : commandes et vues, lecture de la recette, fabrication, archive/migration |
+| `demo.sh`, `demo_model.sh`, `demo_engine.sh`, `demo_lifecycle.sh`, `demo_check.sh` | démos : commandes et vues, lecture de la recette, fabrication, archive/migration, vérification (simulation dans une copie de travail temporaire) |
 | `docs/` | contrat, choix techniques, règles de codage, parcours couverts ; `docs/guide/` pour les utilisateurs |
 | `tests/` | suite Gherkin en français, moteur maison en bash (`tests/README.md`) |
 | `ui.sh`, `ui/` | `jgit ui` : interface en terminal (TypeScript + Ink), qui n'appelle que `jgit … --json` |

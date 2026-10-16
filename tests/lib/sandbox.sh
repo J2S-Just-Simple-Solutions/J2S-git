@@ -433,6 +433,16 @@ github_commit_file() {
     info "GitHub : $message pousse sur $branch"
 }
 
+# Meme chose, au nom d'une personne : son nom est l'auteur du commit, son
+# adresse <prenom en minuscules>@example.invalid.
+github_commit_file_as() {
+    local person="$1"
+    shift
+    local email
+    email="$(printf '%s' "$person" | tr '[:upper:]' '[:lower:]')@example.invalid"
+    GIT_AUTHOR_NAME="$person" GIT_AUTHOR_EMAIL="$email" github_commit_file "$@"
+}
+
 ###############################################
 #            Photos de l'etat du remote
 ###############################################

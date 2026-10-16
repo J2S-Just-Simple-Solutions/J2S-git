@@ -88,6 +88,41 @@ export interface BasesDoc {
   bases: Base[];
 }
 
+export interface CheckOther {
+  sha: string;
+  subject: string;
+  author: string;
+  email: string;
+  origin: string;
+}
+
+export interface CheckConflict {
+  ticket: string;
+  step: 'rebase' | 'refresh' | 'add' | 'foreign';
+  commit: { sha: string; subject: string; author: string; email: string; date: string };
+  files: { path: string; kind: string; other: CheckOther | null }[];
+  commands: { resolve: string; drop: string };
+}
+
+export interface CheckedDemo {
+  name: string;
+  branch: string;
+  base: string | null;
+  behind_base: number | null;
+  status: 'up_to_date' | 'feasible' | 'conflicts' | 'blocked';
+  message: string | null;
+  actions: { command: string; reason: string }[];
+  dropped: { ticket: string; reason: string }[];
+  conflicts: CheckConflict[];
+}
+
+export interface CheckDoc {
+  schema: 'jgit.demo.check/1';
+  ok: true;
+  demos: CheckedDemo[];
+  summary: { demos: number; up_to_date: number; feasible: number; conflicts: number; blocked: number; skipped_legacy: number };
+}
+
 export interface DemoResultDoc {
   schema: 'jgit.demo.result/1';
   ok: true;
@@ -153,6 +188,7 @@ export type AnyDoc =
   | DemoShowDoc
   | CandidatesDoc
   | BasesDoc
+  | CheckDoc
   | DemoResultDoc
   | ConflictDoc
   | StatusDoc

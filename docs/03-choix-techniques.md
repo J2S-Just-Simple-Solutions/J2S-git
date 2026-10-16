@@ -461,3 +461,35 @@ l'interface avec le Node du poste, sans Docker.
 - Réécrire la logique des démos en TypeScript : deux moteurs à garder d'accord,
   et la suite Gherkin à dupliquer.
 
+---
+
+## 17. La vérification des mises à jour simule dans une copie de travail à part
+
+**Contexte.** Avant de lancer les mises à jour d'une démo — ou de laisser un job
+planifié le faire —, on veut savoir si elles passeront, et sinon qui est
+concerné. La seule façon fiable de le savoir est de rejouer les commits.
+
+**Décision.** `jgit demo check` rejoue, pour chaque démo, ce que feraient
+`rebase`, `refresh` et `add`, dans une **copie de travail temporaire**
+(`git worktree add --detach`, sous `.git/jgit/check/`), avec la même mécanique de
+cherry-pick que la vraie fabrication. Un ticket qui conflicte est écarté et la
+simulation reprend sans lui. Pour chaque fichier en conflit, le dernier commit
+qui l'a touché du côté de la démo donne « en face » : auteur et provenance.
+La copie est supprimée en sortant, quelle que soit la sortie (`jgit_on_exit`).
+
+**Conséquences.** La vérification ne touche ni à l'espace de travail de
+l'utilisateur (même modifié), ni à sa branche courante, ni au serveur ; elle
+peut tourner pendant qu'une opération est en pause, pour une IA ou un job
+planifié. Elle n'a pas besoin de l'identité git du poste. Les commits de
+simulation n'ont de branche nulle part : git les oublie. C'est une **exception
+assumée** à la règle n°3 (un seul `git checkout`) : la copie de simulation n'est
+pas l'espace de travail de l'utilisateur.
+
+**Écarté.**
+- Simuler dans l'espace de travail, comme `util verify_rebase` : il faudrait un
+  dépôt propre et des bascules de branche, pour une question qui ne modifie rien.
+- `git merge-tree --merge-base` : sans copie de travail, mais exige git 2.40,
+  absent de Debian bookworm (image Docker, agents Jenkins).
+- S'arrêter au premier conflit : le rapport ne dirait pas qui d'autre est
+  concerné.
+

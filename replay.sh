@@ -201,10 +201,12 @@ util_status_cmd() {
 
 # Lignes « <XY> <chemin> » des fichiers en conflit, XY étant le code de
 # `git status --porcelain`.
+#   replay_conflict_lines [dossier]   (par défaut : l'espace de travail)
 replay_conflict_lines() {
+  local dir="${1:-.}"
   local line path
 
-  git -c core.quotePath=false status --porcelain=v1 2>/dev/null | while IFS= read -r line; do
+  git -C "$dir" -c core.quotePath=false status --porcelain=v1 2>/dev/null | while IFS= read -r line; do
     case "${line:0:2}" in
       UU|AA|DD|AU|UA|DU|UD)
         path="${line:3}"

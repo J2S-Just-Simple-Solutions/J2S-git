@@ -212,7 +212,29 @@ json_str_array() {
 jgit_json_enable() {
   JGIT_JSON=true
   exec 3>&1 1>&2
-  trap jgit_json_on_exit EXIT
+  trap jgit_exit_trap EXIT
+}
+
+# Nettoyages à faire quelle que soit la façon dont jgit se termine (copie de
+# travail temporaire…). Un seul trap EXIT pour tout le monde : il lance les
+# nettoyages, puis garantit le document --json avec le code de sortie d'origine.
+JGIT_EXIT_HOOKS=""
+
+jgit_on_exit() {
+  JGIT_EXIT_HOOKS="$JGIT_EXIT_HOOKS $1"
+  trap jgit_exit_trap EXIT
+}
+
+jgit_exit_trap() {
+  local status=$?
+  local hook
+
+  for hook in $JGIT_EXIT_HOOKS; do
+    "$hook"
+  done
+
+  ( exit "$status" )
+  jgit_json_on_exit
 }
 
 # Écrit LE document de la commande. Un second appel serait une erreur de

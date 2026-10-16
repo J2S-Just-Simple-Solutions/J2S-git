@@ -179,6 +179,10 @@ def step_demo_sans_ticket(context):
 def step_operation_en_pause(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("aucune copie de travail temporaire ne reste")
+def step_aucune_copie_temporaire(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("aucune opération jgit n'est en pause")
 def step_aucune_operation_en_pause(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -289,6 +293,10 @@ def step_supprime_tag(context):
 
 @given("un autre développeur pousse le fichier {string} contenant {string} sur la branche {string} avec le message {string}")
 def step_autre_dev_pousse(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("{string} pousse le fichier {string} contenant {string} sur la branche {string} avec le message {string}")
+def step_personne_pousse(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("je note l'état de la branche distante {string}")

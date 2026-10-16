@@ -382,6 +382,13 @@ assert_remote_demo_tickets() {
     assert_equals "$expected" "$actual" "tickets de la demo $branch, dans l'ordre"
 }
 
+# Aucune copie de travail temporaire (git worktree) ne reste apres jgit.
+assert_no_extra_worktree() {
+    local count
+    count=$(repo_git worktree list 2>/dev/null | wc -l | tr -d ' ')
+    assert_equals "1" "$count" "aucune copie de travail temporaire ne reste"
+}
+
 ###############################################
 #            Operation en pause
 ###############################################

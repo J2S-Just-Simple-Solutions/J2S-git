@@ -55,6 +55,7 @@ jgit demo show [<nom>] --json                    # le détail, ticket par ticket
 jgit demo candidates [<nom>] --json              # tickets que l'on peut ajouter
 jgit demo candidates --based-on <base> --json    # … à une démo encore à créer sur cette base
 jgit demo bases --json                           # branches dont une démo peut partir
+jgit demo check [<nom>] --json                   # simule les mises à jour : faisable ? conflits ? qui ?
 
 jgit demo create <nom> [--based-on <base>] [--from <ticket>]... --json
 jgit demo add <nom> --from <ticket>... --on-conflict pause --json
@@ -115,8 +116,19 @@ par défaut est appliquée. `--dry-run` montre le plan sans rien publier.
    chiffres, `.`, `_`, `-`. Si `already_exists` : la démo existe ; proposer `add`,
    ou `archive` puis `create` pour la remplacer.
 
+### Vérifier avant de mettre à jour
+`jgit demo check [<nom>] --json` simule toutes les mises à jour, sans rien
+modifier (code de sortie 3 si un conflit est prévu, le document est émis quand
+même). Pour chaque démo : `status`, `actions` (les commandes, dans l'ordre) et
+`conflicts` — pour chacun, le ticket, `commit.author` (qui a écrit le commit qui
+ne passe plus) et, par fichier, `other.author` / `other.origin` (qui a modifié
+le même fichier en face, et d'où ça vient). Présenter à l'humain : qui contacter,
+et les deux issues (`commands.resolve`, `commands.drop`). C'est la première
+chose à faire quand l'humain demande « où en sont les démos » ou « peut-on les
+mettre à jour ».
+
 ### Mettre une démo à jour
-1. `jgit demo show <nom> --json`.
+1. `jgit demo check <nom> --json`, puis `jgit demo show <nom> --json`.
 2. Tickets `ahead` : `jgit demo add <nom> --from <ticket> --on-conflict pause --json`.
 3. Tickets `diverged` : `--dry-run`, accord, puis `jgit demo refresh …`.
 4. Base en retard, ou tickets livrés/supprimés : `jgit demo rebase <nom> --dry-run --json`,

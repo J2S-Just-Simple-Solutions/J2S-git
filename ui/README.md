@@ -15,7 +15,7 @@ JGIT_UI=native jgit ui      # avec le node du poste, après « npm ci && npm run
 | `src/cli.tsx` | lanceur : rend l'interface, lui prête le terminal pour l'éditeur ou Claude Code, la relance |
 | `src/app.tsx` | écrans et enchaînements : plan (`--dry-run`) avant chaque réécriture, `--on-conflict pause` pour toute modification |
 | `src/jgit.ts` | appel de `jgit … --json`, lecture du document |
-| `src/screens/` | liste, détail, nom, choix de la base, choix de tickets, confirmation du plan, conflit |
+| `src/screens/` | liste, détail, nom, choix de la base, choix de tickets, confirmation du plan, conflit, vérification des mises à jour (`v`) |
 | `src/filter.ts` | filtrage à la frappe (sans casse ni accents) et pertinence (identifiant exact d'abord) |
 | `src/viewport.ts` | fenêtre des listes longues : seul ce qui tient à l'écran est affiché |
 | `test/` | tests (`node:test` + `ink-testing-library`) avec un `jgit` simulé |

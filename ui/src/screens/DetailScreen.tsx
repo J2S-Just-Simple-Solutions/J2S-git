@@ -16,6 +16,7 @@ const MAX_FOREIGN_SHOWN = 3;
 export type DetailAction =
   | { kind: 'mutate'; args: string[]; title: string; preview: boolean }
   | { kind: 'pick'; demo: string; base: string | null }
+  | { kind: 'check'; demo: string }
   | { kind: 'back' };
 
 interface Props {
@@ -106,6 +107,7 @@ export function DetailScreen({ runner, branch, reloadKey, onAction, onError }: P
       }
       return;
     }
+    if (input === 'v') return onAction({ kind: 'check', demo: name });
     if (input === 'b') {
       return onAction({ kind: 'mutate', args: ['demo', 'rebase', name], title: `Remettre la démo ${name} à jour sur ${demo.base}`, preview: true });
     }
@@ -132,6 +134,7 @@ export function DetailScreen({ runner, branch, reloadKey, onAction, onError }: P
       ['d', 'retirer'],
       ['u', 'appliquer la suggestion'],
       ['b', 'rebaser'],
+      ['v', 'vérifier'],
       ['x', 'archiver'],
     );
   hints.push(['esc', 'retour']);

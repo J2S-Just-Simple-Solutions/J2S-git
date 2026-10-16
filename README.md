@@ -293,6 +293,7 @@ Lire (ne touche ni à l'espace de travail ni à la branche courante) :
 - `jgit demo show [<nom>]` : le détail d'une démo, ticket par ticket (à jour, a avancé, réécrit, branche supprimée, livré), avec la commande à lancer pour chaque action utile et la commande `jgit release merge` correspondante.
 - `jgit demo candidates [<nom>] [--based-on <branche>]` : les tickets que l'on peut ajouter — à une démo existante, ou à une démo encore à créer sur cette base (les tickets déjà livrés y sont signalés).
 - `jgit demo bases` : les branches dont une démo peut partir, la préprod et la production en tête, puis les releases.
+- `jgit demo check [<nom>]` : **simule** toutes les mises à jour en attente (rebase sur la base à jour, tickets livrés ou disparus retirés, tickets réécrits repris, nouveaux commits ajoutés) et rend un rapport : les commandes à lancer dans l'ordre et, pour chaque conflit, le ticket, le commit et son auteur, les fichiers, et en face le commit qui les a touchés, son auteur et sa provenance. Rien n'est modifié — la simulation tourne dans une copie de travail temporaire. Code de sortie 3 si un conflit est prévu.
 
 Fabriquer (sur une branche temporaire `jgit_demo_<nom>`, à partir de la version du serveur, publication finale par `--force-with-lease`, rien n'est publié si rien ne change, `--dry-run` disponible) :
 
@@ -394,7 +395,7 @@ jgit ui
 
 Une interface au clavier pour les démos, pensée pour qui ne veut pas retenir les
 commandes : la liste des démos et leur état, le détail ticket par ticket, le
-choix des tickets **en tapant leur numéro** (la liste se réduit à la frappe ; un
+vérification des mises à jour (`v`), le choix des tickets **en tapant leur numéro** (la liste se réduit à la frappe ; un
 ticket seul à correspondre est coché d'office), la création d'une démo, le
 plan de chaque réécriture montré avant d'être appliqué (`--dry-run`), et un
 écran de conflit (fichiers à résoudre, ouverture dans l'éditeur, reprise,

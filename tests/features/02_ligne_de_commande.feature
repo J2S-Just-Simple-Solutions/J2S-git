@@ -55,6 +55,7 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "jgit demo show [<nom>]"
     Et la sortie contient "jgit demo candidates [<nom>] [--based-on <branch>]"
     Et la sortie contient "jgit demo bases"
+    Et la sortie contient "jgit demo check [<nom>]"
     Et la sortie contient "jgit demo create <nom> [--based-on <branch>] [--from <ticket>]..."
     Et la sortie contient "jgit demo add [<nom>] --from <ticket>..."
     Et la sortie contient "jgit demo drop [<nom>] --from <ticket>..."
