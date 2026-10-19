@@ -844,3 +844,24 @@ sans rien modifier.
 | Démo archivée, démo à l'ancien format | refusée ; ignorée et comptée |
 | Arguments | action inconnue ou nom de démo hors `audit demos` : `usage` ; démo inconnue : `demo_not_found` |
 
+---
+
+## Parcours 23 — Appliquer ce qui passe sans conflit
+
+Fichier : [`tests/features/23_audit_apply.feature`](../tests/features/23_audit_apply.feature)
+
+`jgit audit --apply` fait l'état des lieux, montre le plan, puis lance ce qui
+passe sans conflit : le rebase de mes tickets, puis la mise à jour des démos.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Mes tickets en retard, démo en retard | les tickets sont rebasés, puis la démo ; retour sur la branche de départ ; les branches locales créées en route sont retirées |
+| Ticket d'un collègue | laissé de côté (`not_mine`), sa branche n'est pas touchée ; le rapport dit qui doit le faire |
+| Un ticket coince | laissé de côté, les autres sont appliqués ; la démo en conflit n'est pas touchée ; code de sortie 3 |
+| `--dry-run` | le plan, rien n'est appliqué |
+| Confirmation refusée | rien n'est appliqué |
+| Ticket à base supposée | laissé de côté (`inferred_base`) avec sa commande ; la démo partie de cette base est, elle, remise à jour |
+| Tout à jour | « Rien à appliquer sans conflit. » |
+| Espace de travail modifié | refusé (`worktree_dirty`), rien ne bouge |
+| `--apply` hors de `jgit audit` | refusé (`usage`) |
+

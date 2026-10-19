@@ -329,6 +329,8 @@ L'état des lieux de tous les tickets et de toutes les démos, en simulation : r
 
 Le rapport ne dit que qui et quoi ; le détail (commits, fichiers, et en face le commit de la base et son auteur) est dans `--json`. Sur un projet de centaines de branches, les tickets hors démo simplement à rebaser sont comptés par personne. Code de sortie 3 dès que quelque chose coince.
 
+- `jgit audit [tickets | demos [<nom>]] --apply [--dry-run]` : après l'état des lieux, montre le plan, demande confirmation et lance ce qui passe sans conflit — le rebase de **mes** tickets (ceux où mon identité git doit intervenir), puis la mise à jour des démos faisables. Les tickets des autres et ceux à base supposée sont laissés de côté et listés. Chaque opération est la vraie commande jgit (même lease, même abandon propre) ; l'espace de travail doit être propre.
+
 ### Espace de travail et stash automatique
 
 Avec `feature` et `hotfix`, `jgit` propose de mettre de côté votre travail non

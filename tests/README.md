@@ -407,6 +407,7 @@ test_passed
 | `20_demo_conflits.feature` | conflit de démo en pause, `continue`, résolution rejouée par les reconstructions suivantes, `abort`, abandon sans interaction, lecture pendant la pause, lease, mauvaise démo, `util status` |
 | `21_demo_archive.feature` | `demo archive` (nom libéré, archives à part dans la liste, numérotation du jour, lecture seule, copie locale), `demo unarchive` (par nom, ambiguïté, nom déjà pris), `demo delete` |
 | `22_audit.feature` | `audit` : tout à jour ; base avancée (tickets à rebaser d'abord, puis la démo) ; rebase d'un ticket qui coince (qui doit intervenir, détail dans le JSON, démo qui le met de côté et le reprendra par `--from`) ; seuls les auteurs des commits en conflit sont appelés ; titre de la PR ; ancien ticket sans base enregistrée (base supposée, commande avec `--based-on` qui passe) ; ticket sans commit d'init ; ticket rebasé par son auteur repris par `--from` ; conflits entre tickets dans la démo, tous signalés ; tickets hors démo comptés par personne ; base disparue ; ticket livré ; rien n'est touché ; démos archivées et à l'ancien format ; arguments |
+| `23_audit_apply.feature` | `audit --apply` : mes tickets rebasés puis la démo (retour sur la branche de départ, branches créées retirées), tickets des collègues laissés de côté, ce qui coince laissé de côté et le reste appliqué, `--dry-run`, confirmation refusée, base supposée laissée de côté, rien à appliquer, espace de travail modifié, `--apply` hors de l'audit |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

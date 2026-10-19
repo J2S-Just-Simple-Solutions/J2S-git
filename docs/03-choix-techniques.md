@@ -509,6 +509,14 @@ branches.
   (`jgit_on_exit`).
 - **Le rapport humain** ne dit que qui doit intervenir et quoi lancer ; le
   détail reste dans `--json`.
+- **`--apply`** lance ce que la simulation a trouvé faisable, en appelant **les
+  vraies commandes** (`jgit feature rebase`, `jgit demo …`) comme l'utilisateur
+  le ferait, sans question et sans nouveau fetch, et en lisant leur document
+  JSON : un seul moteur de rejeu, les mêmes leases, le même abandon propre si la
+  réalité contredit la simulation. Seuls **mes** tickets sont rebasés (ceux où
+  mon identité git doit intervenir) : réécrire la branche d'un collègue ferait
+  diverger sa copie locale sans qu'il le sache. Un ticket à base supposée n'est
+  pas rebasé : une supposition ne réécrit pas une branche.
 
 **Conséquences.** L'audit ne touche ni à l'espace de travail de l'utilisateur
 (même modifié), ni à sa branche courante, ni au serveur ; il peut tourner

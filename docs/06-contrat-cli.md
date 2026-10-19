@@ -299,6 +299,27 @@ inconnue, ou un nom de démo ailleurs qu'après `audit demos`, donne `usage`.
 ticket n'a pas de commit d'init, ou qu'une démo est en conflit ou bloquée ; 0
 sinon — le document est émis dans les deux cas.
 
+**`--apply`** ajoute au document ce qui a été lancé (`apply` vaut `null` sans
+l'option) :
+
+```json
+"apply":{"dry_run":false,"confirmed":true,
+  "operations":[{"kind":"ticket","target":"feature/FACT-3","command":"jgit feature rebase FACT-3","status":"done","error":null},
+                {"kind":"demo","target":"client-a","command":"jgit demo rebase client-a","status":"failed",
+                 "error":{"code":"lease_rejected","message":"…"}}],
+  "left_aside":[{"ticket":"feature/MENU-3","reason":"not_mine","concerned":["Camille"],"command":"jgit feature rebase MENU-3"}]}
+```
+
+| Champ | Sens |
+| --- | --- |
+| `operations[]` | dans l'ordre : le rebase de mes tickets (`kind: ticket`), puis les commandes des démos faisables (`kind: demo`) |
+| `operations[].status` | `done`, `failed` (`error` : le code et le message de la commande), `planned` (`--dry-run`), `cancelled` (plan refusé) |
+| `left_aside[].reason` | `not_mine` : ticket d'autres personnes (`concerned`, leurs noms) ; `inferred_base` : base supposée, à vérifier avant de lancer `command` |
+
+Avec `--apply`, l'espace de travail doit être propre (`worktree_dirty`, code 1),
+et le code de sortie vaut aussi 3 si une opération a échoué. `--apply` ailleurs
+qu'avec `jgit audit` donne `usage`.
+
 ### `jgit.demo.result/1` — `create`, `add`, `drop`, `refresh`, `rebase`, `continue`
 
 ```json

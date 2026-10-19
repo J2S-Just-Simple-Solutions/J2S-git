@@ -58,6 +58,7 @@ jgit demo bases --json                           # branches dont une démo peut 
 jgit audit --json                                # état des lieux : tous les tickets, puis toutes les démos
 jgit audit tickets --json                        # les tickets seulement
 jgit audit demos [<nom>] --json                  # les démos : quoi lancer, dans l'ordre ; conflits ; qui ?
+jgit audit --apply [--dry-run] --json            # applique ce qui passe sans conflit (accord de l'humain)
 
 jgit demo create <nom> [--based-on <base>] [--from <ticket>]... --json
 jgit demo add <nom> --from <ticket>... --on-conflict pause --json
@@ -140,6 +141,13 @@ de sortie 3 si quelque chose coince ; le document est émis quand même.
 
 Présenter à l'humain : qui doit intervenir sur quoi (`concerned`), et les
 commandes dans l'ordre — pas le détail des fichiers, sauf s'il le demande.
+
+`jgit audit --apply --json` lance ce qui passe sans conflit : le rebase des
+tickets de l'humain (son identité git), puis les démos faisables. Montrer
+d'abord le plan (`jgit audit --apply --dry-run --json`, `apply.operations`) et
+**demander son accord** : ce sont des réécritures. Lire ensuite
+`apply.operations[].status` (`done`, `failed` avec `error`) et
+`apply.left_aside` (tickets des autres, bases supposées).
 Le rebase d'un ticket (`jgit feature rebase`) appartient à son propriétaire : ne
 le lance pas sans demande explicite.
 

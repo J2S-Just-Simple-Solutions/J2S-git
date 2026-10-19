@@ -80,6 +80,7 @@ JGIT_NO_FETCH=false
 JGIT_ON_CONFLICT=""
 JGIT_DEMO_SCOPE="active"
 JGIT_DRY_RUN=false
+JGIT_APPLY=false
 JGIT_KEEP_DELIVERED=false
 JGIT_KEEP_MISSING=false
 JGIT_DROP_FOREIGN=false
@@ -150,11 +151,14 @@ help() {
     printf "                                        Recrée une démo demo_<nom> (ancien format) au format actuel.\n"
     printf "  Options des commandes qui modifient : --dry-run, --drop-foreign, --on-conflict <mode>\n\n"
 
-    printf "${C_BLUE}Audit:${C_RESET} (simulation : rien n'est modifié)\n"
+    printf "${C_BLUE}Audit:${C_RESET} (simulation : rien n'est modifié, sauf avec --apply)\n"
     printf "  jgit audit                     État des lieux de tous les tickets du serveur et de toutes les démos.\n"
     printf "  jgit audit tickets             Chaque ticket est-il à jour sur sa base ? Son rebase passerait-il ?\n"
     printf "  jgit audit demos [<nom>]       Les démos : tickets à rebaser d'abord, puis remise à jour de la démo.\n"
-    printf "                                 Pour chaque action : qui doit intervenir, et la commande à lancer.\n\n"
+    printf "                                 Pour chaque action : qui doit intervenir, et la commande à lancer.\n"
+    printf "  jgit audit [tickets | demos [<nom>]] --apply [--dry-run]\n"
+    printf "                                 Applique ce qui passe sans conflit : le rebase de mes tickets,\n"
+    printf "                                 puis la mise à jour des démos. Le reste est laissé de côté et listé.\n\n"
 
     printf "${C_BLUE}Interface:${C_RESET}\n"
     printf "  jgit ui                        Les démos dans une interface en terminal (Docker ; JGIT_UI=native sans Docker).\n\n"
@@ -246,6 +250,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             JGIT_DRY_RUN=true
+            shift
+            ;;
+        --apply)
+            JGIT_APPLY=true
             shift
             ;;
         --keep-delivered)
@@ -368,10 +376,16 @@ jgit_command_is_read_only() {
     case "$JGIT_TYPE $JGIT_ACTION" in
         "ui ") return 0 ;;
         "demo list"|"demo show"|"demo candidates"|"demo bases"|"util status") return 0 ;;
-        "audit "*) return 0 ;;
+        "audit "*) [[ "$JGIT_APPLY" == true ]] || return 0 ;;
     esac
     return 1
 }
+
+# --apply n'a de sens que pour l'audit : ailleurs, il ne ferait rien en silence.
+if [[ "$JGIT_APPLY" == true && "$JGIT_TYPE" != "audit" ]]; then
+    jgit_fail usage "$JGIT_EXIT_ERROR" "--apply ne s'utilise qu'avec jgit audit." \
+        "jgit audit --apply"
+fi
 
 # Seules les commandes qui ne commitent jamais se passent d'identité git.
 case "$JGIT_TYPE $JGIT_ACTION" in

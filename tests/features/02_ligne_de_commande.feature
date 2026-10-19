@@ -72,6 +72,8 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "jgit audit                     État des lieux"
     Et la sortie contient "jgit audit tickets"
     Et la sortie contient "jgit audit demos [<nom>]"
+    Et la sortie contient "jgit audit [tickets | demos [<nom>]] --apply [--dry-run]"
+    Et la sortie contient "Applique ce qui passe sans conflit : le rebase de mes tickets,"
     Et la sortie ne contient pas "jgit demo check"
     # Util
     Et la sortie contient "jgit util clean"

@@ -157,12 +157,28 @@ export interface AuditDemo {
   conflicts: AuditDemoConflict[];
 }
 
+// jgit audit --apply : ce qui a été lancé. L'interface ne s'en sert pas
+// (elle n'appelle pas --apply) ; le type suit le contrat.
+export interface AuditApply {
+  dry_run: boolean;
+  confirmed: boolean;
+  operations: {
+    kind: 'ticket' | 'demo';
+    target: string;
+    command: string;
+    status: 'planned' | 'done' | 'failed' | 'cancelled';
+    error: { code: string; message: string } | null;
+  }[];
+  left_aside: { ticket: string; reason: 'not_mine' | 'inferred_base'; concerned: string[]; command: string }[];
+}
+
 export interface AuditDoc {
   schema: 'jgit.audit/1';
   ok: true;
   scope: 'all' | 'tickets' | 'demos';
   tickets: AuditTicket[];
   demos: AuditDemo[];
+  apply?: AuditApply | null;
   summary: {
     tickets: { total: number; up_to_date: number; to_rebase: number; conflicts: number; base_missing: number; no_init: number; delivered: number };
     demos: { total: number; up_to_date: number; feasible: number; conflicts: number; blocked: number; skipped_legacy: number };

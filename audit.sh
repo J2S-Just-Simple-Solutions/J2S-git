@@ -250,6 +250,7 @@ AUDIT_T_JSON_PART=()   # champs JSON calculés à l'évaluation (hors « demos �
 AUDIT_T_BASE_SOURCE=() # recorded | inferred
 AUDIT_T_TITLE=()       # titre de la PR sur GitHub
 AUDIT_T_PEOPLE=()      # qui doit intervenir, « A, B »
+AUDIT_T_MINE=()        # true si j'en fais partie (mon identité git)
 AUDIT_T_DEMOS=()       # démos qui contiennent le ticket, séparées par des espaces
 
 # Index d'un ticket dans les tables, dans AUDIT_I (code 1 s'il n'y est pas).
@@ -366,6 +367,10 @@ audit_tickets_preload() {
 
   AUDIT_REF_FEATURE=$(get_reference_branch feature 2>/dev/null)
   AUDIT_REF_HOTFIX=$(get_reference_branch hotfix 2>/dev/null)
+
+  # Qui je suis, pour savoir quels tickets sont les miens (--apply).
+  AUDIT_ME_NAME=$(git config user.name 2>/dev/null)
+  AUDIT_ME_EMAIL=$(git config user.email 2>/dev/null)
 
   # Les bases connues : la préprod, la production, et toute branche qu'un
   # ticket ou une démo a enregistrée comme base (une branche de projet au long
@@ -619,6 +624,22 @@ audit_ticket_people() {
     | awk -F '\037' '$1 != "" && !seen[tolower($1)]++'
 }
 
+# Cette personne est-elle moi ? Même nom ou même adresse que mon identité git,
+# sans tenir compte de la casse.
+audit_is_me() {
+  local name="$1"
+  local mail="$2"
+  local rc=1
+
+  shopt -s nocasematch
+  if [[ -n "$AUDIT_ME_EMAIL" && "$mail" == "$AUDIT_ME_EMAIL" ]] \
+     || [[ -n "$AUDIT_ME_NAME" && "$name" == "$AUDIT_ME_NAME" ]]; then
+    rc=0
+  fi
+  shopt -u nocasematch
+  return $rc
+}
+
 # Évalue un ticket (s'il ne l'a pas déjà été) : base, retard, livraison,
 # faisabilité de son rebase, et qui doit intervenir. Sans sous-shell pour le
 # JSON : il y en a des centaines.
@@ -713,9 +734,11 @@ audit_ticket_eval() {
     *) [[ -n "$people" ]] || people="$owner_name"$'\037'"$owner_email" ;;
   esac
   AUDIT_T_PEOPLE[$i]=""
+  AUDIT_T_MINE[$i]=false
   while IFS=$'\037' read -r name mail; do
     [[ -n "$name" ]] || continue
     AUDIT_T_PEOPLE[$i]="${AUDIT_T_PEOPLE[$i]:+${AUDIT_T_PEOPLE[$i]}, }$name"
+    audit_is_me "$name" "$mail" && AUDIT_T_MINE[$i]=true
     json_str_into j_name "$name"
     if [[ -n "$mail" ]]; then json_str_into j_mail "$mail"; else j_mail=null; fi
     concerned="${concerned:+$concerned,}{\"author\":$j_name,\"email\":$j_mail}"
@@ -1092,10 +1115,17 @@ audit_demo_plan() {
 
 AUDIT_D_ACTIONS_JSON=()
 
+# Les commandes des démos faisables, « démo<US>commande », pour --apply.
+AUDIT_APPLY_DEMO=()
+
 audit_demo_action() {
   local command="$1"
   local reason="$2"
   local kind="$3"
+
+  if [[ "$kind" == "demo" && "$AUDIT_D_STATUS" == "feasible" ]]; then
+    AUDIT_APPLY_DEMO[${#AUDIT_APPLY_DEMO[@]}]="$DEMO_NAME"$'\037'"$command"
+  fi
 
   printf "      %s%s%s\n        %s%s%s\n" "$C_CYAN" "$command" "$C_RESET" "$C_DIM" "$reason" "$C_RESET"
   AUDIT_D_ACTIONS_JSON[${#AUDIT_D_ACTIONS_JSON[@]}]=$(json_object \
@@ -1309,6 +1339,214 @@ audit_demo_item() {
 }
 
 ###############################################
+#            --apply : appliquer ce qui passe
+###############################################
+#
+# Après l'état des lieux, jgit audit --apply lance ce que la simulation a
+# trouvé faisable sans conflit :
+#   1. le rebase de MES tickets en retard sur leur base (mon identité git est
+#      parmi ceux qui doivent intervenir) — ceux des autres restent à faire par
+#      eux : leur branche locale divergerait sans qu'ils le sachent ;
+#   2. la mise à jour des démos faisables, commande par commande.
+# Un ticket dont la base est supposée n'est pas rebasé : une supposition ne
+# réécrit pas une branche. Il est listé avec sa commande, à vérifier.
+#
+# Chaque opération est la vraie commande jgit, lancée comme l'utilisateur la
+# lancerait (sans question, sans nouveau fetch) : même rejeu, même lease, même
+# abandon propre si un conflit survient malgré la simulation. Son document JSON
+# dit ce qui s'est passé ; ses messages vont au journal .git/jgit/audit-apply.log.
+
+AUDIT_APPLY_JSON="null"
+AUDIT_APPLY_FAILED=0
+AUDIT_APPLY_LOG=""
+
+# Lance une commande proposée par l'audit. AUDIT_R_CODE et AUDIT_R_MESSAGE
+# décrivent l'échec éventuel (code de retour de la commande).
+audit_apply_run() {
+  local command="$1"
+  local args=() word out rc
+
+  for word in ${command#jgit }; do
+    args[${#args[@]}]="$word"
+  done
+  printf '\n$ %s\n' "$command" >> "$AUDIT_APPLY_LOG"
+  out=$("$JGIT_HOME/jgit.sh" "${args[@]}" --no-interaction --no-fetch --json 2>>"$AUDIT_APPLY_LOG")
+  rc=$?
+  printf '%s\n' "$out" >> "$AUDIT_APPLY_LOG"
+
+  AUDIT_R_CODE=""
+  AUDIT_R_MESSAGE=""
+  if [[ $rc -ne 0 ]]; then
+    AUDIT_R_CODE=$(printf '%s' "$out" | sed -n 's/.*"error":{"code":"\([^"]*\)".*/\1/p')
+    AUDIT_R_MESSAGE=$(printf '%s' "$out" | sed -n 's/.*"error":{[^}]*"message":"\([^"]*\)".*/\1/p')
+    [[ -n "$AUDIT_R_CODE" ]] || AUDIT_R_CODE="exit_$rc"
+  fi
+  return $rc
+}
+
+# Supprime les branches locales qu'un rebase a dû créer pour travailler, si
+# elles ne portent rien de plus que le serveur : avant --apply, elles n'étaient
+# pas là.
+audit_apply_forget_local() {
+  local branch="$1"
+  local local_sha remote_sha
+
+  local_sha=$(git rev-parse -q --verify "refs/heads/$branch" 2>/dev/null) || return 0
+  remote_sha=$(git rev-parse -q --verify "refs/remotes/$j2s_remote/$branch" 2>/dev/null) || return 0
+  [[ "$local_sha" == "$remote_sha" ]] || return 0
+  [[ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" != "$branch" ]] || return 0
+  git branch -D "$branch" >/dev/null 2>&1
+}
+
+# « A, B » → ["A","B"], dans AUDIT_V.
+audit_people_json() {
+  local rest="$1" name j_name
+
+  AUDIT_V=""
+  while [[ -n "$rest" ]]; do
+    name="${rest%%, *}"
+    if [[ "$rest" == *", "* ]]; then rest="${rest#*, }"; else rest=""; fi
+    json_str_into j_name "$name"
+    AUDIT_V="${AUDIT_V:+$AUDIT_V,}$j_name"
+  done
+  AUDIT_V="[$AUDIT_V]"
+}
+
+audit_apply() {
+  local i line kind target command status n=0 applied=0 original created="" branch
+  local ops=() aside_others="" aside_json=() ops_json=() confirmed=false
+  local j_kind j_target j_command j_status j_code j_message j_ticket j_reason j_people error_json
+
+  # --- le plan ---------------------------------------------------------------
+  for i in ${AUDIT_T_NAME[@]+"${!AUDIT_T_NAME[@]}"}; do
+    [[ "${AUDIT_T_STATUS[$i]}" == "to_rebase" ]] || continue
+    json_str_into j_ticket "${AUDIT_T_NAME[$i]}"
+    json_str_into j_command "${AUDIT_T_COMMAND[$i]}"
+    audit_people_json "${AUDIT_T_PEOPLE[$i]}"
+    j_people="$AUDIT_V"
+    if [[ "${AUDIT_T_MINE[$i]}" != true ]]; then
+      aside_others="$aside_others${AUDIT_T_PEOPLE[$i]:-?}"$'\n'
+      aside_json[${#aside_json[@]}]="{\"ticket\":$j_ticket,\"reason\":\"not_mine\",\"concerned\":$j_people,\"command\":$j_command}"
+    elif [[ "${AUDIT_T_BASE_SOURCE[$i]}" == "inferred" ]]; then
+      aside_json[${#aside_json[@]}]="{\"ticket\":$j_ticket,\"reason\":\"inferred_base\",\"concerned\":$j_people,\"command\":$j_command}"
+    else
+      ops[${#ops[@]}]="ticket"$'\037'"${AUDIT_T_NAME[$i]}"$'\037'"${AUDIT_T_COMMAND[$i]}"
+    fi
+  done
+  for line in ${AUDIT_APPLY_DEMO[@]+"${AUDIT_APPLY_DEMO[@]}"}; do
+    ops[${#ops[@]}]="demo"$'\037'"${line%%$'\037'*}"$'\037'"${line#*$'\037'}"
+  done
+
+  printf "\n%sAPPLICATION%s — ce qui passe sans conflit\n" "$C_BLUE" "$C_RESET"
+  if [[ ${#ops[@]} -eq 0 ]]; then
+    printf "  Rien à appliquer sans conflit.\n"
+  else
+    printf "  À appliquer, dans l'ordre :\n"
+    for line in "${ops[@]}"; do
+      printf "    %s%s%s\n" "$C_CYAN" "${line##*$'\037'}" "$C_RESET"
+    done
+  fi
+  if [[ ${#aside_json[@]} -gt 0 ]]; then
+    printf "  Laissé de côté :\n"
+    for i in ${AUDIT_T_NAME[@]+"${!AUDIT_T_NAME[@]}"}; do
+      if [[ "${AUDIT_T_STATUS[$i]}" == "to_rebase" && "${AUDIT_T_MINE[$i]}" == true \
+            && "${AUDIT_T_BASE_SOURCE[$i]}" == "inferred" ]]; then
+        printf "    %s — base supposée %s, à vérifier avant de lancer : %s\n" \
+          "${AUDIT_T_NAME[$i]}" "${AUDIT_T_BASE[$i]}" "${AUDIT_T_COMMAND[$i]}"
+      fi
+    done
+    if [[ -n "$aside_others" ]]; then
+      printf "    %s ticket(s) d'autres personnes, à rebaser par elles : %s\n" \
+        "$(demo_count_lines "$aside_others")" "$(audit_count_people "$aside_others")"
+    fi
+  fi
+
+  # --- l'exécution -----------------------------------------------------------
+  if [[ "$JGIT_DRY_RUN" == true ]]; then
+    printf "  %s--dry-run : rien n'a été appliqué.%s\n" "$C_DIM" "$C_RESET"
+  elif [[ ${#ops[@]} -gt 0 ]]; then
+    if confirm_action "Appliquer le plan ci-dessus (${#ops[@]} opération(s)) ?" "y"; then
+      confirmed=true
+    else
+      printf "  Rien n'a été appliqué.\n"
+    fi
+  fi
+
+  if [[ "$confirmed" == true ]]; then
+    AUDIT_APPLY_LOG="$(cd "$(git rev-parse --git-common-dir)" && pwd)/jgit/audit-apply.log"
+    mkdir -p "$(dirname "$AUDIT_APPLY_LOG")"
+    printf 'jgit audit --apply — %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" > "$AUDIT_APPLY_LOG"
+    original=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  fi
+
+  for line in ${ops[@]+"${ops[@]}"}; do
+    IFS=$'\037' read -r kind target command <<< "$line"
+    n=$((n + 1))
+    status="planned"
+    error_json="null"
+    if [[ "$confirmed" == true ]]; then
+      # Les branches locales que le rebase va devoir créer pour travailler :
+      # on les retirera ensuite, elles n'étaient pas là.
+      if [[ "$kind" == "ticket" ]]; then
+        for branch in "$target" "$prefix_PR$target"; do
+          git show-ref --verify --quiet "refs/heads/$branch" || created="$created $branch"
+        done
+      fi
+      audit_progress "Application" "$n" "${#ops[@]}"
+      if audit_apply_run "$command"; then
+        status="done"
+        applied=$((applied + 1))
+        audit_progress_end
+        printf "  %s✔%s %s\n" "$C_GREEN" "$C_RESET" "$command"
+      else
+        status="failed"
+        AUDIT_APPLY_FAILED=$((AUDIT_APPLY_FAILED + 1))
+        audit_progress_end
+        printf "  %s✖%s %s\n" "$C_RED" "$C_RESET" "$command"
+        case "$AUDIT_R_CODE" in
+          lease_rejected) printf "      quelqu'un a poussé entre-temps : rien n'a été écrasé, relancez l'audit.\n" ;;
+          *) printf "      %s\n" "${AUDIT_R_MESSAGE:-échec ($AUDIT_R_CODE)}" ;;
+        esac
+        json_str_into j_code "$AUDIT_R_CODE"
+        json_str_into j_message "$AUDIT_R_MESSAGE"
+        error_json="{\"code\":$j_code,\"message\":$j_message}"
+      fi
+    elif [[ "$JGIT_DRY_RUN" != true && ${#ops[@]} -gt 0 ]]; then
+      status="cancelled"
+    fi
+    json_str_into j_kind "$kind"
+    json_str_into j_target "$target"
+    json_str_into j_command "$command"
+    json_str_into j_status "$status"
+    ops_json[${#ops_json[@]}]="{\"kind\":$j_kind,\"target\":$j_target,\"command\":$j_command,\"status\":$j_status,\"error\":$error_json}"
+  done
+
+  # jgit feature rebase laisse sur la branche rebasée : on revient là où
+  # l'utilisateur était, puis on retire les branches locales créées en route.
+  if [[ "$confirmed" == true ]]; then
+    if [[ -n "$original" && "$original" != "HEAD" && "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" != "$original" ]]; then
+      if ! switch_branch "$original" try >>"$AUDIT_APPLY_LOG" 2>&1; then
+        printf "  %s⚠ Impossible de revenir sur %s : vous êtes sur %s.%s\n" \
+          "$C_YELLOW" "$original" "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" "$C_RESET"
+      fi
+    fi
+    for branch in $created; do
+      audit_apply_forget_local "$branch"
+    done
+  fi
+
+  if [[ "$confirmed" == true ]]; then
+    printf "  Appliqué : %s sur %s." "$applied" "${#ops[@]}"
+    if [[ $AUDIT_APPLY_FAILED -gt 0 ]]; then
+      printf " Le détail des échecs : %s" "$AUDIT_APPLY_LOG"
+    fi
+    printf "\n"
+  fi
+
+  AUDIT_APPLY_JSON="{\"dry_run\":$JGIT_DRY_RUN,\"confirmed\":$confirmed,\"operations\":[$(IFS=,; printf '%s' "${ops_json[*]+${ops_json[*]}}")],\"left_aside\":[$(IFS=,; printf '%s' "${aside_json[*]+${aside_json[*]}}")]}"
+}
+
+###############################################
 #            jgit audit
 ###############################################
 
@@ -1320,6 +1558,12 @@ audit_cmd() {
   local ticket_items=() demo_items=()
   local t_up=0 t_rebase=0 t_conflicts=0 t_delivered=0 t_missing=0 t_no_init=0
   local d_up=0 d_feasible=0 d_conflicts=0 d_blocked=0
+
+  # --apply réécrit des branches : comme pour une démo, l'espace de travail doit
+  # être propre — jgit ne range pas le travail en cours à la place de son auteur.
+  if [[ "$JGIT_APPLY" == true && "$JGIT_DRY_RUN" != true ]]; then
+    refuse_if_worktree_dirty "Une remise à jour" || exit_safe 1
+  fi
 
   jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
 
@@ -1412,6 +1656,8 @@ audit_cmd() {
   fi
   printf ".\n"
 
+  [[ "$JGIT_APPLY" == true ]] && audit_apply
+
   json_emit "$(json_object \
     "$(json_kv_str schema "jgit.audit/1")" \
     "$(json_kv_bool ok true)" \
@@ -1434,11 +1680,12 @@ audit_cmd() {
             "$(json_kv_num feasible "$d_feasible")" \
             "$(json_kv_num conflicts "$d_conflicts")" \
             "$(json_kv_num blocked "$d_blocked")" \
-            "$(json_kv_num skipped_legacy "$skipped")")")")")")"
+            "$(json_kv_num skipped_legacy "$skipped")")")")")" \
+    "$(json_kv apply "$AUDIT_APPLY_JSON")")"
 
   # Un conflit ou un blocage prévu se lit aussi au code de sortie : un job
   # planifié peut s'arrêter dessus sans lire le rapport.
-  if [[ $((t_conflicts + t_missing + t_no_init + d_conflicts + d_blocked)) -gt 0 ]]; then
+  if [[ $((t_conflicts + t_missing + t_no_init + d_conflicts + d_blocked + AUDIT_APPLY_FAILED)) -gt 0 ]]; then
     exit "$JGIT_EXIT_CONFLICT"
   fi
 }

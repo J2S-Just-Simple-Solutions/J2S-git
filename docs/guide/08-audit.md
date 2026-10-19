@@ -1,6 +1,6 @@
 # 08 — État des lieux
 
-> `jgit audit` · `jgit audit tickets` · `jgit audit demos [<nom>]`
+> `jgit audit` · `jgit audit tickets` · `jgit audit demos [<nom>]` · `--apply`
 
 ## À quoi ça sert
 
@@ -8,7 +8,8 @@ Savoir, en une commande, **où en sont tous les tickets et toutes les démos du
 projet**, ce qu'il faut faire pour les remettre d'équerre, **dans quel ordre**,
 et surtout **qui doit intervenir**.
 
-Rien n'est modifié : tout est simulé.
+Rien n'est modifié : tout est simulé. Avec `--apply`, jgit lance ensuite ce qui
+passe sans conflit (voir « Appliquer ce qui passe » plus bas).
 
 ---
 
@@ -149,6 +150,62 @@ conflits sont signalés**, pas seulement le premier.
 
 ---
 
+## Appliquer ce qui passe : `--apply`
+
+```bash
+jgit audit --apply              # l'état des lieux, puis ce qui passe sans conflit
+jgit audit --apply --dry-run    # le plan seulement
+jgit audit tickets --apply      # mes tickets seulement, pas les démos
+jgit audit demos client-a --apply
+```
+
+Après l'état des lieux, jgit montre le plan, demande confirmation, puis lance,
+dans l'ordre :
+
+1. **le rebase de mes tickets** en retard sur leur base dont le rebase passe
+   sans conflit — « mes » tickets : ceux où je suis parmi les personnes qui
+   doivent intervenir (même nom ou même adresse que mon identité git) ;
+2. **la mise à jour des démos faisables**, avec les commandes que l'audit a
+   données.
+
+```
+APPLICATION — ce qui passe sans conflit
+  À appliquer, dans l'ordre :
+    jgit feature rebase MONPROJET-412
+    jgit demo rebase client-a
+  Laissé de côté :
+    feature/MONPROJET-88 — base supposée ripolin, à vérifier avant de lancer : jgit feature rebase MONPROJET-88 --based-on ripolin
+    3 ticket(s) d'autres personnes, à rebaser par elles : Camille (2), Dominique (1)
+Appliquer le plan ci-dessus (2 opération(s)) ? (Y/n)
+  ✔ jgit feature rebase MONPROJET-412
+  ✔ jgit demo rebase client-a
+  Appliqué : 2 sur 2.
+```
+
+Ce qui est **laissé de côté** :
+
+- **les tickets des autres** : leurs commits garderaient leur nom, mais leur
+  branche locale divergerait sans qu'ils le sachent — à eux de lancer leur
+  rebase ;
+- **les tickets à base supposée** : une supposition ne réécrit pas une branche
+  toute seule ; vérifiez la base, puis lancez la commande donnée ;
+- tout ce qui coince (conflit, base disparue, ticket sans commit d'init, démo en
+  conflit ou bloquée) : voir le rapport au-dessus.
+
+Chaque opération est **la vraie commande jgit** : même rejeu, même protection
+si quelqu'un a poussé entre-temps (rien n'est écrasé), même abandon propre si un
+conflit survient malgré la simulation. Une opération qui échoue n'arrête pas les
+suivantes ; le détail est dans `.git/jgit/audit-apply.log`. À la fin, vous êtes
+ramené sur votre branche, et les branches locales que les rebases ont dû créer
+sont retirées.
+
+L'espace de travail doit être **propre** : comme pour une démo, jgit ne range pas
+votre travail en cours à votre place. Avec `--json` (ou `--no-interaction`), le
+plan est appliqué sans question. Le code de sortie vaut 3 si une opération a
+échoué, ou si quelque chose coince encore.
+
+---
+
 ## Scénarios
 
 ### Un lundi matin : la préprod a bougé
@@ -186,6 +243,9 @@ préprod, et propose `jgit feature rebase MONPROJET-88 --based-on ripolin`.
 | démo à l'ancien format (`demo_<nom>`) | ignorée et comptée à part : la convertir avec `jgit demo migrate` |
 | démo inconnue | refusé (`demo_not_found`) |
 | un nom de démo avec `jgit audit` ou `jgit audit tickets` | refusé (`usage`) : seul `audit demos` en prend un |
+| `--apply` sur un espace de travail modifié | refusé (`worktree_dirty`) : mettez votre travail de côté (`git stash`) puis relancez |
+| `--apply` avec une autre commande que `jgit audit` | refusé (`usage`) |
+| une opération en pause sur un conflit | `--apply` refusé (`operation_in_progress`) : `continue` ou `abort` d'abord |
 | serveur injoignable | refusé (code 6) ; `--no-fetch` audite les références déjà rapatriées |
 
 ---
