@@ -219,18 +219,6 @@ Fonctionnalité: Rebase d'une feature sur sa branche de référence
     Et l'historique local de "feature/TEST-13" contient "Ajoute un autre fichier"
     Et l'historique local de "feature/TEST-13" contient "Ajoute encore un fichier"
 
-  Scénario: Une PR déjà mergée n'est plus un fast-forward et bloque le rebase
-    Étant donné je lance "jgit feature start TEST-14 --no-interaction --no-open"
-    Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"
-    Et je pousse la branche courante
-    Et la PR de "feature/TEST-14" est squash-mergée sur GitHub avec le message "TEST-14 : A (#3)"
-    Et je note l'état de la branche distante "feature/TEST-14"
-    Quand je lance "jgit feature rebase TEST-14 --no-interaction"
-    Alors jgit se termine en erreur
-    Et la sortie contient "La branche feature/TEST-14 n'est PAS un fast-forward de __PR__feature/TEST-14."
-    Et la sortie contient "Cela peut se produire si vous avez déjà cloturé la PR."
-    Et la branche distante "feature/TEST-14" est inchangée
-
   Scénario: Un commit de fusion sur la branche de travail bloque le rebase
     Étant donné je lance "jgit feature start TEST-15 --no-interaction --no-open"
     Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"
@@ -260,5 +248,5 @@ Fonctionnalité: Rebase d'une feature sur sa branche de référence
     Et la branche "__PR__feature/ORPHELINE" est supprimée sur GitHub
     Quand je lance "jgit feature rebase ORPHELINE --no-interaction"
     Alors jgit se termine en erreur
-    Et la sortie contient "Something get wrong, feature/ORPHELINE doesn't exist on remote"
+    Et la sortie contient "La branche __PR__feature/ORPHELINE n'existe pas sur origin : il n'y a rien à rebaser."
     Et la branche distante "feature/ORPHELINE" n'existe pas

@@ -51,6 +51,78 @@ fi
 
 declare -a JGIT_FROM_SOURCES
 
+# Contrat de sortie --json : document unique, codes de sortie (json.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/json.sh"
+# Rejeu de commits : cherry-pick, pause et reprise sur conflit (replay.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/replay.sh"
+
+###############################################
+#            Couleurs
+###############################################
+#
+# Une seule décision pour toute la sortie : on colore face à un terminal, et
+# seulement là. Un journal Jenkins, un conteneur sans TERM ou une IA qui lit la
+# sortie n'ont que faire des séquences ANSI — et tput, sans TERM exploitable,
+# écrit même ses propres erreurs au milieu des messages.
+#
+# La décision est prise une fois, au chargement : dans une substitution de
+# commande ($(jgit_tput …)), la sortie standard n'est plus un terminal et le
+# test donnerait toujours « non ».
+#
+#   JGIT_COLOR=auto (défaut) | always | never
+#   NO_COLOR (https://no-color.org) désactive la couleur dans tous les cas.
+jgit_init_colors() {
+  local enabled=false
+
+  case "${JGIT_COLOR:-auto}" in
+    always) enabled=true ;;
+    never)  enabled=false ;;
+    *)
+      if [[ -t 1 && -n "${TERM:-}" && "${TERM:-}" != "dumb" ]]; then
+        enabled=true
+      fi
+      ;;
+  esac
+
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    enabled=false
+  fi
+
+  JGIT_COLOR_ENABLED=$enabled
+
+  if [[ $enabled == true ]]; then
+    C_RED=$'\033[1;31m'
+    C_GREEN=$'\033[1;32m'
+    C_YELLOW=$'\033[1;33m'
+    C_BLUE=$'\033[1;34m'
+    C_CYAN=$'\033[1;36m'
+    C_ORANGE=$'\033[38;5;214m'
+    C_DIM=$'\033[2m'
+    C_BOLD=$'\033[1m'
+    C_RESET=$'\033[0m'
+  else
+    C_RED="" C_GREEN="" C_YELLOW="" C_BLUE="" C_CYAN="" C_ORANGE=""
+    C_DIM="" C_BOLD="" C_RESET=""
+  fi
+}
+
+# Coupe la couleur pour le reste de l'exécution (sortie --json notamment).
+jgit_disable_colors() {
+  JGIT_COLOR=never
+  jgit_init_colors
+}
+
+# Remplace tput dans tout le dépôt : muet quand la couleur est coupée, et jamais
+# bavard sur stderr quand le terminal ne sait pas répondre.
+jgit_tput() {
+  [[ "${JGIT_COLOR_ENABLED:-false}" == true ]] || return 0
+  command tput "$@" 2>/dev/null
+}
+
+if [[ -z "${JGIT_COLOR_ENABLED+x}" ]]; then
+  jgit_init_colors
+fi
+
 ###############################################
 #            Helpers génériques
 ###############################################
@@ -63,26 +135,65 @@ warn_deprecated_syntax() {
   local new_form="$2"
 
   printf "%s[déprécié] « %s » : utilisez désormais « %s ».%s\n" \
-    "$(tput setaf 3)" "$old_form" "$new_form" "$(tput sgr0)" >&2
+    "$(jgit_tput setaf 3)" "$old_form" "$new_form" "$(jgit_tput sgr0)" >&2
   printf "%sL'ancienne forme fonctionne encore mais sera retirée dans une prochaine version.%s\n" \
-    "$(tput setaf 3)" "$(tput sgr0)" >&2
+    "$(jgit_tput setaf 3)" "$(jgit_tput sgr0)" >&2
 }
 
-# jgit ne tourne aujourd'hui que sur macOS : plusieurs commandes s'appuient sur
-# des outils BSD dont l'équivalent GNU se comporte différemment, et un rebase
-# lancé ailleurs écraserait la branche de travail au lieu de la rejouer.
+# jgit tourne sur macOS (poste des développeurs) et sous Linux (Docker,
+# agents Jenkins). Les deux sont joués par la suite de tests ; tout autre
+# système est refusé, parce que personne n'y a vérifié que les outils de base
+# (sed, awk, grep…) s'y comportent comme jgit l'attend — et qu'un écart y a
+# déjà, par le passé, vidé une branche de travail en silence.
 # Le détail et l'inventaire sont dans docs/05-portabilite.md.
 ensure_supported_platform() {
   local system
   system=$(uname -s 2>/dev/null)
 
-  if [[ "$system" == "Darwin" ]]; then
+  case "$system" in
+    Darwin|Linux) return 0 ;;
+  esac
+
+  jgit_error_set platform_unsupported "jgit ne fonctionne que sur macOS et Linux (système détecté : ${system:-inconnu})."
+  printf "${C_RED}jgit ne fonctionne que sur macOS et Linux (système détecté : %s).${C_RESET}\n" "${system:-inconnu}" >&2
+  printf "Les outils de base de ce système n'ont pas été vérifiés, et un écart de comportement peut détruire du travail.\n" >&2
+  printf "Voir docs/05-portabilite.md pour le détail.\n" >&2
+  return 1
+}
+
+# Un dépôt superficiel (clone --depth, fréquent sur un agent de CI) n'a pas
+# l'historique dont jgit a besoin : les commits d'init, la branche d'origine,
+# l'ancêtre commun d'un rebase. Les commandes y échoueraient au milieu, ou
+# pire, concluraient à tort qu'une trace n'existe pas.
+ensure_full_history() {
+  if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" != "true" ]]; then
     return 0
   fi
 
-  printf "\033[1;31mjgit ne fonctionne que sur macOS (système détecté : %s).\033[0m\n" "${system:-inconnu}" >&2
-  printf "Certaines commandes s'appuient sur des outils BSD et détruiraient du travail ailleurs.\n" >&2
-  printf "Voir docs/05-portabilite.md pour le détail et l'état d'avancement.\n" >&2
+  jgit_error_set shallow_repository "Ce dépôt est un clone superficiel (--depth) : jgit a besoin de l'historique complet." \
+    "git fetch --unshallow $j2s_remote"
+  printf "${C_RED}Ce dépôt est un clone superficiel (--depth) : jgit a besoin de l'historique complet.${C_RESET}\n" >&2
+  printf "Les commits d'initialisation et la branche d'origine des branches ne s'y trouvent pas.\n" >&2
+  printf "\nRécupérez l'historique complet puis relancez :\n" >&2
+  printf "  git fetch --unshallow %s\n" "$j2s_remote" >&2
+  return 1
+}
+
+# jgit commite (commits d'init, cherry-picks, merges de release) : sans
+# identité git, la commande échouerait au premier commit, après avoir déjà
+# créé des branches. Cas typique : un conteneur ou un agent Jenkins neuf.
+ensure_git_identity() {
+  if git var GIT_COMMITTER_IDENT >/dev/null 2>&1 && git var GIT_AUTHOR_IDENT >/dev/null 2>&1; then
+    return 0
+  fi
+
+  jgit_error_set git_identity_missing "Aucune identité git n'est configurée : jgit ne peut pas créer de commit." \
+    "git config --global user.name \"Prénom Nom\" && git config --global user.email \"prenom.nom@example.com\""
+  printf "${C_RED}Aucune identité git n'est configurée : jgit ne peut pas créer de commit.${C_RESET}\n" >&2
+  printf "Rien n'a été modifié.\n" >&2
+  printf "\nConfigurez-la puis relancez :\n" >&2
+  printf "  git config --global user.name \"Prénom Nom\"\n" >&2
+  printf "  git config --global user.email \"prenom.nom@example.com\"\n" >&2
   return 1
 }
 
@@ -126,9 +237,13 @@ confirm_action() {
     user_input="$default_response"
   fi
 
-  if [[ "$user_input" == "y" ]]; then
-    return 0
-  fi
+  # Insensible à la casse : la majuscule du suffixe incite à taper « Y ».
+  # (tr plutôt que ${var,,}, absent du bash 3.2 de macOS)
+  user_input=$(printf '%s' "$user_input" | tr '[:upper:]' '[:lower:]')
+
+  case "$user_input" in
+    y|yes|o|oui) return 0 ;;
+  esac
 
   return 1
 }
@@ -190,7 +305,9 @@ refuse_if_worktree_dirty() {
 
   [[ -n $(git status --porcelain) ]] || return 0
 
-  printf "\033[1;31mVotre espace de travail contient des modifications non commitées.\033[0m\n" >&2
+  jgit_error_set worktree_dirty "Votre espace de travail contient des modifications non commitées." \
+    "git stash push -u -m \"avant jgit\""
+  printf "${C_RED}Votre espace de travail contient des modifications non commitées.${C_RESET}\n" >&2
   printf "%s ne se fabrique pas sur un dépôt en cours de modification.\n" "$what" >&2
   printf "\nMettez-les de côté puis relancez :\n" >&2
   printf "  git stash push -u -m \"avant jgit\"\n" >&2
@@ -212,7 +329,10 @@ refuse_if_branch_ahead() {
   ahead=$(git rev-list --count "$remote_ref..$branch" 2>/dev/null) || return 0
   [[ -n "$ahead" && $ahead -gt 0 ]] || return 0
 
-  printf "\033[1;31mLa branche %s porte %s commit(s) qui ne sont pas sur %s.\033[0m\n" \
+  jgit_error_set branch_ahead "La branche $branch porte $ahead commit(s) qui ne sont pas sur $remote_ref." \
+    "git push $j2s_remote $branch"
+
+  printf "${C_RED}La branche %s porte %s commit(s) qui ne sont pas sur %s.${C_RESET}\n" \
     "$branch" "$ahead" "$remote_ref" >&2
   printf "%s doit partir de la version du serveur, et jgit ne décide pas à votre place du sort de commits que vous n'avez pas publiés.\n" "$what" >&2
   printf "\nPubliez-les :\n" >&2
@@ -252,7 +372,7 @@ report_pr_creation_failure() {
     local branch="$1"
     local branch_PR="$2"
 
-    printf "\033[1;31mLa pull request n'a pas pu être créée sur GitHub.\033[0m\n" >&2
+    printf "${C_RED}La pull request n'a pas pu être créée sur GitHub.${C_RESET}\n" >&2
     printf "Les branches %s et %s sont bien poussées : il ne reste que la PR à ouvrir.\n" "$branch" "$branch_PR" >&2
     printf "Relancez « gh pr create --base=%s --head=%s » ou ouvrez-la depuis GitHub.\n" "$branch_PR" "$branch" >&2
 }
@@ -308,20 +428,20 @@ get_reference_branch() {
     # La fonction est appelée en substitution de commande : un exit_safe ne
     # quitterait que le sous-shell et le message partirait sur stdout, donc
     # serait lu comme un nom de branche. On passe par stderr + code de retour.
-    printf "\033[1;31mErreur : aucune branche de référence valide trouvée.\033[0m\n" >&2
+    printf "${C_RED}Erreur : aucune branche de référence valide trouvée.${C_RESET}\n" >&2
     return 1
 }
 
-# Fonction pour récupérer le dernier commit contenant le pattern de commit d'init jgit.
+# Renvoie le dernier commit dont une ligne du message commence exactement par
+# le texte donné (commit d'init jgit le plus souvent).
+#
+# Le texte est cherché au caractère près : ses crochets ne sont pas une classe
+# de caractères. L'expression reste une BRE POSIX, sans extension GNU, pour que
+# git l'interprète de la même façon sur macOS et sous Linux.
 get_last_commit_with_pattern() {
   local pattern="$1"
 
-  # Échapper les caractères spéciaux comme [ ] et ( )
-  local escaped_pattern
-  escaped_pattern=$(echo "$pattern" | sed 's/\[/\\[/g; s/\]/\\]/g; s/(/\\(/g; s/)/\\)/g')
-
-  # Chercher le commit correspondant avec le pattern modifié
-  git log --grep="^$escaped_pattern\?" -n 1 --pretty=format:"%H"
+  git log --basic-regexp --grep="^$(escape_basic_regex "$pattern")" -n 1 --pretty=format:"%H"
 }
 
 # Fonction pour lister tous les commits depuis celui trouvé (incluant ce commit)
@@ -410,7 +530,7 @@ read_based_on() {
   local branch="${2:-$ref}"
   local commit base
 
-  commit=$(git log -n 1 --format="%H" \
+  commit=$(git log -n 1 --format="%H" --basic-regexp \
     --grep="^$trailer_branch: $(escape_basic_regex "$branch")\$" "$ref" 2>/dev/null)
   [[ -n "$commit" ]] || return 1
 
@@ -452,7 +572,7 @@ ensure_base_branch() {
     return 0
   fi
 
-  printf "\033[1;31mLa branche de base %s n'existe pas (ni en local ni sur %s).\033[0m\n" \
+  printf "${C_RED}La branche de base %s n'existe pas (ni en local ni sur %s).${C_RESET}\n" \
     "${base:-<vide>}" "$j2s_remote" >&2
 
   case "$provenance" in
@@ -531,7 +651,7 @@ squash_commits_after() {
   local first_commit="$2"
 
   if [[ -z "$base_commit" || -z "$first_commit" ]]; then
-    printf "\033[1;31mErreur : squash impossible, commit de base ou premier commit manquant.\033[0m\n" >&2
+    printf "${C_RED}Erreur : squash impossible, commit de base ou premier commit manquant.${C_RESET}\n" >&2
     return 1
   fi
 
@@ -543,7 +663,7 @@ squash_commits_after() {
     echo "[no-interaction] Message du commit squashé : $default_message"
   else
     printf "%sMessage du commit squashé (Entrée pour conserver « %s ») :%s\n" \
-      "$(tput setaf 2)" "$default_message" "$(tput sgr0)"
+      "$(jgit_tput setaf 2)" "$default_message" "$(jgit_tput sgr0)"
     read -r -p "> " message
   fi
 
@@ -553,91 +673,17 @@ squash_commits_after() {
 
   # reset --soft : on conserve l'intégralité du code, seul l'historique est réécrit.
   if ! git reset --soft "$base_commit" --quiet; then
-    printf "\033[1;31mErreur : impossible de repositionner la branche sur %s.\033[0m\n" "$base_commit" >&2
+    printf "${C_RED}Erreur : impossible de repositionner la branche sur %s.${C_RESET}\n" "$base_commit" >&2
     return 1
   fi
 
   if ! git commit --allow-empty -m "$message" --quiet; then
-    printf "\033[1;31mErreur : le squash des commits a échoué.\033[0m\n" >&2
+    printf "${C_RED}Erreur : le squash des commits a échoué.${C_RESET}\n" >&2
     return 1
   fi
 
-  printf "%sCommits squashés dans un unique commit : %s%s\n" "$(tput setaf 2)" "$message" "$(tput sgr0)"
+  printf "%sCommits squashés dans un unique commit : %s%s\n" "$(jgit_tput setaf 2)" "$message" "$(jgit_tput sgr0)"
   return 0
-}
-
-# Fonction pour effectuer un cherry-pick sur chaque commit du tableau
-# Renvoie 1 dès qu'un cherry-pick n'a pas pu aboutir, à charge de l'appelant
-# de restaurer l'état local.
-cherry_pick_commits() {
-  local commits=("$@")
-  local head_before subject
-
-  for commit in "${commits[@]}"; do
-    head_before=$(git rev-parse HEAD)
-
-    if ! cherry_pick "$commit"; then
-      return 1
-    fi
-
-    # Un commit d'init rejoué porte encore l'origine d'avant le rebase. On la
-    # remplace au moment où on le repose, seul instant où il est en tête.
-    # Le garde-fou sur HEAD évite de toucher au commit de résolution de conflit
-    # du développeur, ou à un commit déjà présent que cherry_pick a sauté.
-    if [[ -n "$JGIT_RESTAMP_BRANCH" && "$(git rev-parse HEAD)" != "$head_before" ]]; then
-      subject=$(git log -n 1 --format=%s HEAD)
-      if [[ "$subject" == *"$suffix_init_commit"* ]]; then
-        restamp_based_on_head "$JGIT_RESTAMP_BRANCH" "$JGIT_RESTAMP_BASED_ON"
-      fi
-    fi
-  done
-
-  return 0
-}
-
-# Fonction pour effectuer un cherry-pick sur le hash passé en argument si celui n'existe pas déjà.
-# Renvoie 0 si le commit a bien été appliqué, 1 si le cherry-pick a été abandonné.
-cherry_pick() {
-    local commit=$1
-
-    # Vérifier si le commit est déjà dans l'historique de la branche courante
-    if git merge-base --is-ancestor "$commit" HEAD; then
-      echo "Commit $commit déjà appliqué, passage au suivant..."
-      return 0
-    fi
-
-    echo "Cherry-picking commit: $commit"
-    if git cherry-pick "$commit" --allow-empty; then
-      return 0
-    fi
-
-    # Le cherry-pick a échoué : un conflit doit être résolu.
-    echo ""
-    printf "%sErreur lors du cherry-pick du commit %s. Conflit détecté.%s\n" \
-      "$(tput setaf 1)" "$commit" "$(tput sgr0)"
-
-    # Un conflit réclame une intervention humaine : il est hors de question de
-    # le "valider" tout seul en mode non interactif.
-    if [[ $JGIT_NO_INTERACTION == true ]]; then
-      printf "%sLe mode --no-interaction ne permet pas de résoudre un conflit.%s\n" \
-        "$(tput setaf 1)" "$(tput sgr0)"
-      printf "%sRelancez la même commande sans --no-interaction pour traiter ce conflit à la main.%s\n" \
-        "$(tput setaf 1)" "$(tput sgr0)"
-      git cherry-pick --abort >/dev/null 2>&1
-      return 1
-    fi
-
-    printf "%sMerci de ne rien faire ici tant que le conflit n'est pas résolu et commité%s\n" \
-      "$(tput setaf 1)" "$(tput sgr0)"
-
-    # Demander confirmation à l'utilisateur
-    if ! confirm_action "Avez vous résolu et commité la résolution de conflit ?" "y"; then
-        echo "Opération annulée."
-        git cherry-pick --abort >/dev/null 2>&1
-        return 1
-    fi
-
-    return 0
 }
 
 # Permet d'afficher le git log bien présenté depuis le dernier noeud en commun avec la $reference_branch et avec les couleurs et l'arbres des commits
@@ -645,7 +691,7 @@ git_history_with_merges() {
   local feature_branch="${1:-HEAD}"     # Branche à afficher (par défaut HEAD)
   local reference_branch="${2}"         # Branche de référence (optionnelle)
 
-  printf "\033[1;31mHistorique A VERIFIER de la branche '%s'%s :\033[0m\n" "$feature_branch" "$( [[ -n "$reference_branch" ]] && printf " depuis '%s' (A lire de bas en haut)" "$reference_branch" )"
+  printf "${C_RED}Historique A VERIFIER de la branche '%s'%s :${C_RESET}\n" "$feature_branch" "$( [[ -n "$reference_branch" ]] && printf " depuis '%s' (A lire de bas en haut)" "$reference_branch" )"
 
   if [[ -n "$reference_branch" ]]; then
     git log --oneline --graph --decorate --abbrev-commit --boundary \
@@ -731,8 +777,14 @@ jgit_fetch_once() {
 
   # --prune : une branche supprimée sur le serveur doit disparaître du miroir
   # local, sinon jgit continue de la croire disponible.
-  if ! git fetch "$j2s_remote" --prune --quiet; then
-    printf "\033[1;31mImpossible de contacter %s.\033[0m\n" "$j2s_remote" >&2
+  #
+  # Le refspec est explicite : un clone réduit à une branche (--single-branch,
+  # courant sur un agent de CI) ne rapatrierait sinon que celle-là, et jgit
+  # croirait develop, les tickets ou les démos inexistants.
+  if ! git fetch "$j2s_remote" --prune --quiet \
+       "+refs/heads/*:refs/remotes/$j2s_remote/*"; then
+    jgit_error_set remote_unreachable "Impossible de contacter $j2s_remote." "Vérifiez votre connexion puis relancez."
+    printf "${C_RED}Impossible de contacter %s.${C_RESET}\n" "$j2s_remote" >&2
     printf "jgit travaille toujours sur les dernières versions du serveur : vérifiez votre connexion.\n" >&2
     return 1
   fi
@@ -760,14 +812,14 @@ sync_branch_with_remote() {
 
   local counts behind ahead
   if ! counts=$(git rev-list --left-right --count "$remote_ref...$branch"); then
-    printf "\033[1;31mImpossible de comparer %s à %s.\033[0m\n" "$branch" "$remote_ref" >&2
+    printf "${C_RED}Impossible de comparer %s à %s.${C_RESET}\n" "$branch" "$remote_ref" >&2
     return 1
   fi
   behind=$(awk '{print $1}' <<< "$counts")
   ahead=$(awk '{print $2}' <<< "$counts")
 
   if [[ $behind -gt 0 && $ahead -gt 0 ]]; then
-    printf "\033[1;31mLa branche %s a divergé de %s.\033[0m\n" "$branch" "$remote_ref" >&2
+    printf "${C_RED}La branche %s a divergé de %s.${C_RESET}\n" "$branch" "$remote_ref" >&2
     printf "%s commit(s) uniquement en local, %s commit(s) uniquement sur le serveur.\n" "$ahead" "$behind" >&2
     printf "jgit ne choisit pas à votre place : réconciliez la branche (rebase ou merge) puis relancez.\n" >&2
     return 1
@@ -775,7 +827,7 @@ sync_branch_with_remote() {
 
   if [[ $behind -gt 0 ]]; then
     if ! git merge --ff-only "$remote_ref" --quiet; then
-      printf "\033[1;31mLa mise à jour de %s depuis %s a échoué.\033[0m\n" "$branch" "$remote_ref" >&2
+      printf "${C_RED}La mise à jour de %s depuis %s a échoué.${C_RESET}\n" "$branch" "$remote_ref" >&2
       return 1
     fi
     printf "%s mise à jour depuis %s (%s commit(s)).\n" "$branch" "$remote_ref" "$behind"
@@ -839,7 +891,7 @@ switch_branch() {
   [[ "$mode" == "try" ]] && fatal=false
 
   if [[ -z "$branch" ]]; then
-    printf "\033[1;31mErreur : Aucun nom de branche fourni.\033[0m\n" >&2
+    printf "${C_RED}Erreur : Aucun nom de branche fourni.${C_RESET}\n" >&2
     [[ $fatal == true ]] && exit_safe 1
     return 1
   fi
@@ -851,7 +903,7 @@ switch_branch() {
 
   if git show-ref --verify --quiet "refs/heads/$branch"; then
     if ! git checkout "$branch" --quiet; then
-      printf "\033[1;31mImpossible de basculer sur %s.\033[0m\n" "$branch" >&2
+      printf "${C_RED}Impossible de basculer sur %s.${C_RESET}\n" "$branch" >&2
       [[ $fatal == true ]] && exit_safe 1
       return 1
     fi
@@ -861,19 +913,19 @@ switch_branch() {
     fi
   elif git show-ref --verify --quiet "refs/remotes/$j2s_remote/$branch"; then
     if ! git checkout -b "$branch" "$j2s_remote/$branch" --quiet; then
-      printf "\033[1;31mImpossible de créer %s depuis %s/%s.\033[0m\n" "$branch" "$j2s_remote" "$branch" >&2
+      printf "${C_RED}Impossible de créer %s depuis %s/%s.${C_RESET}\n" "$branch" "$j2s_remote" "$branch" >&2
       [[ $fatal == true ]] && exit_safe 1
       return 1
     fi
   elif [[ "$mode" == "create" ]]; then
     echo "Bascule vers '$branch' (Création depuis la branche courante)"
     if ! git checkout -b "$branch" --quiet; then
-      printf "\033[1;31mImpossible de créer la branche %s.\033[0m\n" "$branch" >&2
+      printf "${C_RED}Impossible de créer la branche %s.${C_RESET}\n" "$branch" >&2
       [[ $fatal == true ]] && exit_safe 1
       return 1
     fi
   else
-    printf "\033[1;31mLa branche %s n'existe pas (ni en local ni sur %s).\033[0m\n" "$branch" "$j2s_remote" >&2
+    printf "${C_RED}La branche %s n'existe pas (ni en local ni sur %s).${C_RESET}\n" "$branch" "$j2s_remote" >&2
     [[ $fatal == true ]] && exit_safe 1
     return 1
   fi
@@ -885,7 +937,7 @@ switch_branch() {
 clean_branches() {
   # Récupérer toutes les branches locales correspondant aux préfixes
   local branches_to_delete
-  branches_to_delete=$(git branch | grep -E "^\s*(jgit_rebase_|__PR__|jgit_verify_rebase)")
+  branches_to_delete=$(git branch | grep -E "^[[:space:]]*(jgit_rebase_|jgit_demo_|__PR__|jgit_verify_rebase)")
 
   # Vérifier si des branches correspondent
   if [[ -z "$branches_to_delete" ]]; then
@@ -1033,7 +1085,7 @@ util_check_rebase() {
   local branch
 
   if [[ ${#sources[@]} -gt 1 ]]; then
-    printf "\033[1;31mErreur : une seule branche à la fois, via --from.\033[0m\n" >&2
+    printf "${C_RED}Erreur : une seule branche à la fois, via --from.${C_RESET}\n" >&2
     return 1
   fi
 
@@ -1046,7 +1098,7 @@ util_check_rebase() {
   # Le rebase à blanc bascule de branche : il lui faut un dépôt propre. On le
   # dit avant de travailler, pas au milieu.
   if [[ -n $(git status --porcelain) ]]; then
-    printf "\033[1;31mVotre espace de travail contient des modifications non commitées.\033[0m\n" >&2
+    printf "${C_RED}Votre espace de travail contient des modifications non commitées.${C_RESET}\n" >&2
     printf "La vérification rejoue un rebase à blanc : elle a besoin d'un dépôt propre.\n" >&2
     printf "\nMettez-les de côté puis relancez :\n" >&2
     printf "  git stash push -u -m \"avant jgit\"\n" >&2
@@ -1061,13 +1113,13 @@ util_check_rebase() {
   elif git show-ref --verify --quiet "refs/remotes/$j2s_remote/$branch"; then
     branch_ref="$j2s_remote/$branch"
   else
-    printf "\033[1;31mLa branche %s n'existe pas (ni en local ni sur %s).\033[0m\n" "$branch" "$j2s_remote" >&2
+    printf "${C_RED}La branche %s n'existe pas (ni en local ni sur %s).${C_RESET}\n" "$branch" "$j2s_remote" >&2
     return 1
   fi
 
   local base
   if ! base=$(read_based_on "$branch_ref" "$branch"); then
-    printf "\033[1;31mDésolé : jgit ne sait pas répondre pour les anciennes branches.\033[0m\n" >&2
+    printf "${C_RED}Désolé : jgit ne sait pas répondre pour les anciennes branches.${C_RESET}\n" >&2
     printf "La branche %s ne porte pas sa branche d'origine : elle a été créée avant que jgit ne l'enregistre.\n" "$branch" >&2
     printf "\nSeules les branches créées ou rebasées par une version récente de jgit portent cette trace.\n" >&2
     printf "En attendant, la question se pose à la main, en nommant la base vous-même :\n" >&2
@@ -1083,7 +1135,7 @@ util_check_rebase() {
   elif git show-ref --verify --quiet "refs/heads/$base"; then
     base_ref="$base"
   else
-    printf "\033[1;31mLa branche d'origine %s n'existe plus (ni en local ni sur %s).\033[0m\n" "$base" "$j2s_remote" >&2
+    printf "${C_RED}La branche d'origine %s n'existe plus (ni en local ni sur %s).${C_RESET}\n" "$base" "$j2s_remote" >&2
     printf "%s en est pourtant partie : la base a sans doute été livrée puis supprimée.\n" "$branch" >&2
     printf "\nIl n'y a plus rien à quoi se comparer. Choisissez une base vivante :\n" >&2
     printf "  jgit util verify_rebase --from %s --into <branche>   # la question, sans rien modifier\n" "$branch" >&2
@@ -1093,32 +1145,32 @@ util_check_rebase() {
 
   local counts behind ahead
   if ! counts=$(git rev-list --left-right --count "$base_ref...$branch_ref" 2>/dev/null); then
-    printf "\033[1;31mImpossible de comparer %s à %s.\033[0m\n" "$branch" "$base_ref" >&2
+    printf "${C_RED}Impossible de comparer %s à %s.${C_RESET}\n" "$branch" "$base_ref" >&2
     return 1
   fi
   behind=$(awk '{print $1}' <<< "$counts")
   ahead=$(awk '{print $2}' <<< "$counts")
 
-  printf "%sBranche   :%s %s\n" "$(tput setaf 2)" "$(tput sgr0)" "$branch"
-  printf "%sBasée sur :%s %s (%s)\n" "$(tput setaf 2)" "$(tput sgr0)" "$base" "$base_ref"
-  printf "%sAvance    :%s %s commit(s) absents de %s\n" "$(tput setaf 2)" "$(tput sgr0)" "$ahead" "$base"
+  printf "%sBranche   :%s %s\n" "$(jgit_tput setaf 2)" "$(jgit_tput sgr0)" "$branch"
+  printf "%sBasée sur :%s %s (%s)\n" "$(jgit_tput setaf 2)" "$(jgit_tput sgr0)" "$base" "$base_ref"
+  printf "%sAvance    :%s %s commit(s) absents de %s\n" "$(jgit_tput setaf 2)" "$(jgit_tput sgr0)" "$ahead" "$base"
 
   if [[ $behind -eq 0 ]]; then
     printf "%sÉtat      : à jour sur %s, il n'y a rien à rebaser.%s\n" \
-      "$(tput setaf 2)" "$base" "$(tput sgr0)"
+      "$(jgit_tput setaf 2)" "$base" "$(jgit_tput sgr0)"
     return 0
   fi
 
   printf "%sÉtat      : en retard de %s commit(s) sur %s.%s\n" \
-    "$(tput setaf 3)" "$behind" "$base" "$(tput sgr0)"
+    "$(jgit_tput setaf 3)" "$behind" "$base" "$(jgit_tput sgr0)"
 
   if rebase_dry_run "$branch" "$branch_ref" "$base" "$base_ref"; then
-    printf "%sRebase    : passerait sans conflit.%s\n" "$(tput setaf 2)" "$(tput sgr0)"
+    printf "%sRebase    : passerait sans conflit.%s\n" "$(jgit_tput setaf 2)" "$(jgit_tput sgr0)"
     print_rebase_suggestion "$branch"
     return 2
   fi
 
-  printf "%sRebase    : des conflits sont à prévoir.%s\n" "$(tput setaf 1)" "$(tput sgr0)"
+  printf "%sRebase    : des conflits sont à prévoir.%s\n" "$(jgit_tput setaf 1)" "$(jgit_tput sgr0)"
   print_rebase_suggestion "$branch"
   printf "L'option --squash ramène tous vos commits à un seul, donc les conflits à un seul.\n"
   return 3
@@ -1177,7 +1229,7 @@ is_fast_forward() {
 
     # Vérifier que les branches existent
     if ! git rev-parse --verify "$base_branch" >/dev/null 2>&1 || ! git rev-parse --verify "$target_branch" >/dev/null 2>&1; then
-        printf "\033[1;31mErreur : Une des branches n'existe pas.\033[0m\n" >&2
+        printf "${C_RED}Erreur : Une des branches n'existe pas.${C_RESET}\n" >&2
         return 2  # Code d'erreur spécifique
     fi
 

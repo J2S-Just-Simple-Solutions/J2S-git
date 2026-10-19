@@ -37,26 +37,56 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "--no-interaction"
     Et la sortie contient "--no-open"
     Et la sortie contient "--squash"
+    Et la sortie contient "--json"
+    Et la sortie contient "--no-fetch"
+    Et la sortie contient "--on-conflict <mode>"
     # Feature & hotfix : chaque action avec les options qu'elle lit vraiment
     Et la sortie contient "jgit feature start <ticket> [--based-on <branch>] [--no-open]"
     Et la sortie contient "jgit feature restart <ticket> [--no-open]"
-    Et la sortie contient "jgit feature rebase <ticket> [--based-on <branch>] [--squash]"
+    Et la sortie contient "jgit feature rebase <ticket> [--based-on <branch>] [--squash] [--on-conflict <mode>]"
+    Et la sortie contient "PR validée : seule __PR__ est reconstruite, la branche de travail supprimée."
+    Et la sortie contient "PR déjà mergée dans sa base : ses deux branches sont supprimées."
+    Et la sortie contient "jgit feature continue <ticket>"
+    Et la sortie contient "jgit feature abort <ticket>"
     # Release : finish accepte --into, au même titre que merge
     Et la sortie contient "jgit release start [<x.y.z>]"
     Et la sortie contient "jgit release merge [<x.y.z>] --from <branch> [--into <branch>]"
     Et la sortie contient "jgit release finish [--into <x.y.z>]"
     # Demo
-    Et la sortie contient "jgit demo start [<demo_name>] [--based-on <branch>]"
-    Et la sortie contient "jgit demo merge [--from feature/<ticket>]... [--into <branch>]"
-    Et la sortie contient "jgit demo list"
-    Et la sortie contient "jgit demo remove [--no-interaction]"
+    Et la sortie contient "jgit demo list [--archived | --all]"
+    Et la sortie contient "jgit demo show [<nom>]"
+    Et la sortie contient "jgit demo candidates [<nom>] [--based-on <branch>]"
+    Et la sortie contient "jgit demo bases"
+    Et la sortie contient "jgit demo create <nom> [--based-on <branch>] [--from <ticket>]..."
+    Et la sortie contient "jgit demo add [<nom>] --from <ticket>..."
+    Et la sortie contient "jgit demo drop [<nom>] --from <ticket>..."
+    Et la sortie contient "jgit demo refresh [<nom>] --from <ticket>..."
+    Et la sortie contient "jgit demo rebase [<nom>] [--based-on <branch>] [--from <ticket>]... [--keep-delivered] [--keep-missing]"
+    Et la sortie contient "jgit demo continue [<nom>] | abort [<nom>]"
+    Et la sortie contient "--dry-run, --drop-foreign, --on-conflict <mode>"
+    Et la sortie contient "jgit demo archive <nom>"
+    Et la sortie contient "jgit demo unarchive <archive>"
+    Et la sortie contient "jgit demo delete <nom|archive>"
+    Et la sortie contient "jgit demo migrate <nom> [--based-on <branch>]"
+    Et la sortie contient "jgit demo start [<nom>]        → jgit demo create <nom>"
+    Et la sortie contient "jgit demo remove               → jgit demo delete <nom>"
+    # Audit : l'état des lieux, en lecture seule
+    Et la sortie contient "jgit audit                     État des lieux"
+    Et la sortie contient "jgit audit tickets"
+    Et la sortie contient "jgit audit demos [<nom>]"
+    Et la sortie contient "jgit audit [tickets | demos [<nom>]] --apply [--dry-run]"
+    Et la sortie contient "Applique ce qui passe sans conflit : le rebase de mes tickets,"
+    Et la sortie ne contient pas "jgit demo check"
     # Util
     Et la sortie contient "jgit util clean"
+    Et la sortie contient "jgit util status"
+    # Interface
+    Et la sortie contient "jgit ui"
     Et la sortie contient "jgit util check_rebase [--from <branche>]"
     Et la sortie contient "jgit util verify_rebase --from <branche_source> --into <branche_cible>"
     # L'aide doit dire ce que util clean supprime réellement, y compris les
     # branches laissées par util verify_rebase.
-    Et la sortie contient "jgit_rebase_*, jgit_verify_rebase_* et __PR__*"
+    Et la sortie contient "jgit_rebase_*, jgit_demo_*, jgit_verify_rebase_* et __PR__*"
 
   # RÈGLE : la réponse appliquée quand on valide sans rien saisir est toujours
   # signalée par la majuscule. Une question dont les deux lettres sont en
@@ -107,6 +137,9 @@ Fonctionnalité: Analyse de la ligne de commande
     Quand je lance "jgit util bidule"
     Alors jgit se termine en erreur
     Et la sortie contient "Action 'bidule' non supportée pour util."
+    Quand je lance "jgit audit bidule"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Action 'bidule' non supportée pour audit."
 
   Scénario: Un scope sans action affiche l'aide et sort en erreur
     Quand je lance "jgit feature"
@@ -195,3 +228,11 @@ Fonctionnalité: Analyse de la ligne de commande
     Alors jgit se termine en erreur
     Et la sortie contient "Arguments supplémentaires non reconnus : --no-open"
     Et la branche distante "feature/TEST-1" n'existe pas
+
+  # L'interface se lance sans action : une action en trop est une faute de frappe.
+  Scénario: jgit ui n'accepte pas d'action
+    Quand je lance "jgit ui demo --json" en lisant le JSON
+    Alors jgit se termine avec le code 1
+    Et le JSON a "error.code" égal à "usage"
+    Et le JSON a "error.message" égal à "jgit ui ne prend pas d'action : jgit ui"
+

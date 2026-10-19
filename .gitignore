@@ -25,3 +25,7 @@ __pycache__/
 # Les tests créent leurs dépôts jetables et leurs journaux dans le répertoire
 # temporaire du système : rien à ignorer ici, sauf exécution manuelle.
 tests/**/tmp/
+
+# Interface en terminal (ui/) : dépendances et compilation.
+ui/node_modules/
+ui/dist/

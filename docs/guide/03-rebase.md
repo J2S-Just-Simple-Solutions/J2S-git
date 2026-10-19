@@ -75,14 +75,14 @@ comportement des versions précédentes.
 quand il diffère :
 
 ```
-La branche feature/MONPROJET-412 est partie de demo_sprint12, et non de la
+La branche feature/MONPROJET-412 est partie de demo/sprint12, et non de la
 référence du projet develop.
-Rebaser sur demo_sprint12 ? (Y/n)
+Rebaser sur demo/sprint12 ? (Y/n)
 ```
 
 | Votre réponse | Ce qui se passe |
 | --- | --- |
-| Entrée ou `y` | le rebase vise `demo_sprint12`, votre vraie base |
+| Entrée ou `y` | le rebase vise `demo/sprint12`, votre vraie base |
 | `n` | le rebase vise `develop`, la référence du projet — votre branche change officiellement de base |
 
 La majuscule le dit : **votre base d'origine est la réponse par défaut**, et c'est
@@ -106,6 +106,49 @@ qu'une branche d'avant ce mécanisme en acquiert une.
 
 ---
 
+## Après la validation de la PR
+
+Une fois votre PR validée (« Squash and merge »), c'est la branche de PR qui sera
+mergée dans sa **branche finale** — celle dont votre ticket est parti. Ce merge
+n'a pas toujours lieu tout de suite. Si la branche finale bouge entre-temps, il
+risque de coincer, et c'est celui qui merge qui hérite du conflit.
+
+Lancez simplement la même commande :
+
+```bash
+jgit feature rebase MONPROJET-123
+```
+
+`jgit` reconnaît que la PR a été validée et ne reconstruit **que la branche de
+PR**, sur la branche finale à jour. Le conflit éventuel, c'est vous qui le
+résolvez — vous connaissez le code —, et le merge pourra ensuite passer sans
+intervention.
+
+```
+La PR de feature/MONPROJET-123 a été validée : seule la branche
+__PR__feature/MONPROJET-123 est reconstruite, pour que son merge dans develop
+passe sans conflit.
+La branche de travail feature/MONPROJET-123 a exactement le même code : elle ne
+sert plus, elle sera supprimée en local et sur le serveur.
+```
+
+| Votre situation | Ce que fait `jgit` |
+| --- | --- |
+| La branche de travail a **exactement le même code** que la branche de PR | il reconstruit la branche de PR, et supprime la branche de travail **dans le même envoi** au serveur : les deux, ou aucune |
+| La branche de travail a déjà été supprimée | il reconstruit la branche de PR, c'est tout |
+| Vous avez ajouté du code **après** la validation, poussé ou non | il **refuse**, sans rien toucher : ce travail n'a pas été relu (voir *Ce qui bloque*) |
+| La branche de PR est **déjà mergée** dans la branche finale | il n'y a rien à rebaser ; il propose de supprimer ses branches, qui ne servent plus |
+
+Les conflits se traitent exactement comme pour un rebase ordinaire, y compris en
+pause (`--on-conflict pause`, puis `continue`). `--squash` est sans effet : les
+commits validés sont repris tels quels.
+
+> **Et si le ticket doit repartir ?** Un `jgit feature restart` recrée la
+> branche de travail à partir de la branche de PR reconstruite, comme
+> d'habitude.
+
+---
+
 ## Les conflits
 
 Comme vos commits sont rejoués **un par un**, chacun peut produire son propre
@@ -121,6 +164,51 @@ Vous résolvez le conflit **dans un autre terminal**, vous commitez, puis vous
 répondez `y` dans celui de `jgit`, qui reprend où il en était.
 
 Si vous répondez `n`, tout est annulé : rien n'a été publié.
+
+### Mettre le conflit en pause : `--on-conflict pause`
+
+Plutôt que de garder `jgit` ouvert dans un terminal pendant que vous résolvez
+dans un autre, vous pouvez lui demander de **s'arrêter** sur le conflit et de
+reprendre plus tard. C'est aussi la façon dont une IA résout un conflit à votre
+place.
+
+```bash
+jgit feature rebase MONPROJET-123 --on-conflict pause
+```
+
+```
+Conflit pendant le rebase de feature/MONPROJET-123 sur develop.
+Commit en cause : a1b2c3d « Modifie la facturation » (branche jgit_rebase_feature/MONPROJET-123)
+Fichiers en conflit :
+  - src/facturation.php (modifié des deux côtés)
+
+L'opération est en pause : rien n'a été poussé.
+Résolvez les conflits dans les fichiers, marquez-les résolus (git add <fichier>), puis :
+  jgit feature continue MONPROJET-123
+Pour tout annuler :
+  jgit feature abort MONPROJET-123
+```
+
+Vous résolvez **dans le même terminal**, `git add` les fichiers, puis
+`jgit feature continue MONPROJET-123`. `jgit` termine le commit, rejoue les
+suivants — et se remet en pause s'il en rencontre un autre —, puis vous montre
+l'historique et publie.
+
+`jgit feature abort MONPROJET-123` remet tout comme avant : rien n'a été poussé.
+
+Tant que l'opération est en pause, **toute autre commande `jgit` refuse** : elle
+occupe votre espace de travail, et une bascule de branche la détruirait.
+
+| Conduite | Quand | Ce que fait `jgit` sur un conflit |
+| --- | --- | --- |
+| `ask` | défaut en interactif | attend que vous ayez résolu **et commité** ailleurs |
+| `abort` | défaut avec `--no-interaction` ou `--json` | annule tout ; rien n'a été poussé |
+| `pause` | sur demande | s'arrête, vous laisse résoudre, reprend avec `continue` |
+
+> **Un collègue a poussé pendant ce temps ?** Le rebase a lu la version du
+> serveur au départ, et ne publie que si elle n'a pas bougé
+> (`--force-with-lease`). Sinon, rien n'est écrasé : vos branches locales
+> reviennent à leur état d'avant, et il suffit de relancer le rebase.
 
 ### Réduire les conflits à un seul : `--squash`
 
@@ -160,6 +248,7 @@ sur un conflit impossible à résoudre — **votre historique d'origine est rest
 | `--based-on <branche>` | se rebaser sur une autre branche que la référence habituelle — fait autorité, aucune question n'est posée |
 | `--squash` | regrouper vos commits de travail en un seul avant de rejouer |
 | `--no-interaction` | ne rien demander — **ne déclenche jamais le squash** et **ne peut pas traiter un conflit** |
+| `--on-conflict <ask\|abort\|pause>` | la conduite face à un conflit (voir [Les conflits](#les-conflits)) |
 
 ---
 
@@ -247,8 +336,10 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 
 | Situation | Ce que fait `jgit` | Pourquoi |
 | --- | --- | --- |
-| Votre branche ou sa branche de PR n'existe pas sur le serveur | refuse en la nommant | il n'y a rien à republier |
-| Votre PR a **déjà été mergée** | refuse : *« n'est PAS un fast-forward … Cela peut se produire si vous avez déjà cloturé la PR »* | le cas n'est pas géré ; faites un `restart` à la place |
+| Votre branche de travail, en cours de développement, n'existe pas sur le serveur | refuse en la nommant | poussez-la d'abord |
+| Votre PR a été validée, mais votre branche de travail contient du code ajouté **après** | refuse, sans rien modifier (code `2`, `pr_validated_new_work`), et donne la commande pour voir ce code | ce travail n'a pas été relu ; supprimer la branche le perdrait |
+| Votre branche de travail a disparu et la PR n'a **jamais été validée** | refuse (code `2`, `pr_not_validated`), et donne la commande pour supprimer la branche de PR si le ticket est abandonné | il n'y a rien à rebaser |
+| La branche de PR n'existe plus sur le serveur | refuse en la nommant | il n'y a rien à reconstruire ni à publier |
 | Un **commit de fusion** est présent dans l'historique | refuse en le nommant | une fusion ne se rejoue pas commit par commit ; ne mélangez pas merge et rebase |
 | La base enregistrée n'existe plus (ni en local ni sur le serveur) | **refuse**, sans rien modifier, et demande de nommer la base avec `--based-on` | se rabattre sur la référence du projet déplacerait la branche, et le résultat partirait en `push --force` |
 | `--based-on` sur une branche inconnue | **même refus, mot pour mot** | une saisie fausse et une base disparue sont le même problème |
@@ -256,16 +347,20 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 | Vous répondez `n` à la seconde question | supprime les branches réécrites et récupère votre branche de travail du serveur | l'état d'avant est rétabli, le serveur n'a jamais bougé |
 | Conflit **avec** `--no-interaction` | s'arrête proprement, annule tout, restaure votre historique | un conflit demande un humain : il n'est jamais validé tout seul |
 | Votre branche a divergé du serveur | s'arrête sans rien modifier | |
+| Un collègue a poussé sur votre branche ou sa branche de PR **pendant** le rebase | ne publie rien, remet vos branches locales comme avant, code de sortie `4` | son travail n'est jamais écrasé |
+| Une opération est en pause sur un conflit | toute autre commande refuse (code `5`) et rappelle `continue` / `abort` | l'opération occupe l'espace de travail |
+| `continue` alors que des fichiers sont encore en conflit, ou qu'il reste des marqueurs `<<<<<<<` | reste en pause et liste les fichiers (code `3`) | on ne publie pas une résolution inachevée |
 
-> **Le remote n'est poussé qu'en toute dernière étape.** Quel que soit le motif
-> d'arrêt avant cela, ce qui est sur le serveur est intact.
+> **Le remote n'est poussé qu'en toute dernière étape**, et les deux branches
+> partent ensemble ou pas du tout. Quel que soit le motif d'arrêt avant cela, ce
+> qui est sur le serveur est intact.
 
 ---
 
 ## Limites connues
 
-- **Un `rebase` ne sait pas traiter une PR déjà mergée puis rouverte.** Le message
-  vous oriente vers `restart`.
+- **Après la validation, la branche finale est celle dont le ticket est parti.**
+  Pour une autre, nommez-la avec `--based-on`.
 - **Les commits de fusion sont rédhibitoires.** Si vous avez fusionné la préprod
   dans votre branche par le passé, `jgit` ne pourra plus la rebaser : il faudra la
   reprendre à la main, ou passer par un `restart` après validation de la PR.

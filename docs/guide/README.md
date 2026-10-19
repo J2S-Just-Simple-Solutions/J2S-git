@@ -18,6 +18,7 @@ ici est ce que fait l'outil — et ce qui est vérifié par sa suite de tests.
 | mettre votre branche à jour sans casser votre PR | [03 — Rebase](03-rebase.md) |
 | préparer et livrer une version | [04 — Release](04-release.md) |
 | montrer plusieurs sujets ensemble avant de livrer | [05 — Démo](05-demo.md) |
+| savoir où en sont tous les tickets et les démos, et qui doit faire quoi | [08 — État des lieux](08-audit.md) |
 | savoir si votre branche est à jour, faire le ménage, tester un rebase à blanc | [06 — Utilitaires](06-utilitaires.md) |
 | comprendre les options, les refus, la configuration | [07 — Règles communes](07-regles-communes.md) |
 
@@ -47,7 +48,7 @@ Chaque fiche de commande suit le même plan :
 
 ## Prérequis
 
-- **Un Mac.** `jgit` refuse de démarrer ailleurs
+- **macOS ou Linux.** `jgit` refuse de démarrer ailleurs
   ([pourquoi](../05-portabilite.md)).
 - Git, et le client GitHub `gh` installé et connecté.
 - Un dépôt dont le serveur (`origin`) est sur le GitHub de J2S.

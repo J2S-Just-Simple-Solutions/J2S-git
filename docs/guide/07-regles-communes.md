@@ -9,12 +9,14 @@ ses questions, ce qu'il exige de votre dépôt, et comment l'adapter à votre pr
 
 | Option | Ce qu'elle fait | Où elle sert |
 | --- | --- | --- |
-| `--based-on <branche>` | impose le point de départ | `feature start`, `feature rebase`, `demo start` |
-| `--from <branche>` | désigne une source à intégrer — **répétable** | `release merge`, `demo merge`, `util verify_rebase` |
-| `--into <branche>` | désigne explicitement la cible | `release merge`, `release finish`, `demo merge`, `util verify_rebase` |
+| `--based-on <branche>` | impose le point de départ | `feature start`, `feature rebase`, `demo create`, `demo rebase`, `demo migrate` |
+| `--from <branche>` | désigne une source à intégrer — **répétable** | `release merge`, `demo create`, `demo add`, `demo drop`, `demo refresh`, `util verify_rebase` |
+| `--into <branche>` | désigne explicitement la cible | `release merge`, `release finish`, `util verify_rebase` |
 | `--no-open` | ne pas ouvrir de pull request | `feature start`, `feature restart` |
 | `--squash` | regrouper les commits avant de rejouer | `feature rebase` |
 | `--no-interaction` | ne poser aucune question | partout |
+| `--json` | répondre par un document JSON, pour un programme (IA, interface, Jenkins) ; implique `--no-interaction` | partout |
+| `--no-fetch` | ne pas contacter le serveur, travailler sur ce qui a déjà été récupéré | partout |
 | `-h`, `--help` | afficher l'aide complète | partout |
 
 Une option donnée à une commande qui ne la lit pas est **ignorée en silence** :
@@ -24,6 +26,26 @@ aucun squash.
 En revanche, une option **inconnue** (`--bidule`) ou privée de sa valeur
 (`--based-on` en fin de ligne) fait échouer la commande immédiatement, avant toute
 action sur le dépôt.
+
+### Faire piloter `jgit` par un programme
+
+Avec `--json`, `jgit` répond par **un seul document JSON** sur sa sortie
+standard, et écrit ses messages habituels sur la sortie d'erreur. C'est ainsi
+qu'une IA, l'interface en terminal ou Jenkins le pilotent :
+
+```bash
+jgit release start --json
+```
+
+```json
+{"schema":"jgit.error/1","ok":false,"command":"release start",
+ "error":{"code":"worktree_dirty","exit_code":1,
+          "message":"Votre espace de travail contient des modifications non commitées.",
+          "hint":"git stash push -u -m \"avant jgit\""}}
+```
+
+Le contrat complet — schémas, codes de sortie — est dans
+[`docs/06-contrat-cli.md`](../06-contrat-cli.md).
 
 ---
 
@@ -168,11 +190,11 @@ squash_threshold=8
 ### Si la branche de base n'existe pas
 
 Une commande qui part d'une branche — `feature start`, `hotfix start`,
-`feature rebase`, `demo start` — tient cette branche de l'un de trois endroits :
+`feature rebase`, `demo create` — tient cette branche de l'un de trois endroits :
 
 | D'où vient la valeur | Exemple |
 | --- | --- |
-| votre saisie | `--based-on demo_sprint12` |
+| votre saisie | `--based-on demo/sprint12` |
 | la branche d'origine enregistrée à la création | un `feature rebase` sans `--based-on` |
 | le calcul automatique de la référence du projet | `develop` pour une feature |
 
@@ -182,7 +204,7 @@ contrôle donc toutes les trois, au même endroit, et **refuse dans les mêmes
 termes** — seule la ligne qui dit d'où vient la valeur change :
 
 ```
-La branche de base demo_sprint12 n'existe pas (ni en local ni sur origin).
+La branche de base demo/sprint12 n'existe pas (ni en local ni sur origin).
 C'est la branche d'origine de feature/MONPROJET-412, enregistrée à sa création :
 elle a sans doute été livrée puis supprimée depuis.
 Rien n'a été modifié : ni vos branches, ni le serveur.
@@ -270,18 +292,22 @@ précisant ce qui reste à faire à la main — et seulement cela.
 
 ---
 
-## `jgit` ne fonctionne que sur Mac
+## `jgit` fonctionne sur Mac et sous Linux
 
-L'outil refuse de démarrer sur un autre système. Ce n'est pas un confort : sur
-Linux, certaines commandes se comporteraient mal **sans le signaler**, et un rebase
-pourrait publier votre branche vidée de votre travail.
+Le Mac est le poste des développeurs ; Linux est celui des conteneurs Docker et
+des agents Jenkins. Tout autre système est refusé avant la moindre action : un
+écart de comportement d'un outil système pourrait, sans le signaler, publier
+votre branche vidée de votre travail.
 
 ```
-jgit ne fonctionne que sur macOS (système détecté : Linux).
+jgit ne fonctionne que sur macOS et Linux (système détecté : FreeBSD).
 ```
 
-Seule l'aide (`jgit --help`) reste accessible. Le détail et l'état d'avancement
-sont dans [`docs/05-portabilite.md`](../05-portabilite.md).
+Seule l'aide (`jgit --help`) reste accessible. Deux autres refus visent surtout
+les machines de CI : un **clone superficiel** (`git clone --depth …`), auquel il
+manque l'historique dont `jgit` a besoin, et l'**absence d'identité git**, sans
+laquelle aucun commit n'est possible. Le détail est dans
+[`docs/05-portabilite.md`](../05-portabilite.md).
 
 ---
 
@@ -293,4 +319,4 @@ sont dans [`docs/05-portabilite.md`](../05-portabilite.md).
 | le vocabulaire et le cycle complet | [01 — Concepts](01-concepts.md) |
 | une commande précise | fiches [02](02-feature-et-hotfix.md) à [06](06-utilitaires.md) |
 | ce qui est vérifié par les tests | [Parcours couverts](../02-parcours-couverts.md) |
-| pourquoi `jgit` ne tourne que sur Mac | [Portabilité](../05-portabilite.md) |
+| sur quels systèmes tourne `jgit` | [Portabilité](../05-portabilite.md) |

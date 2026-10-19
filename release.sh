@@ -1,5 +1,5 @@
 #!/bin/bash
-source "$(dirname "$0")/functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/functions.sh"
 
 ####################################
 #            RELEASE
@@ -22,7 +22,7 @@ checkout_release_branch() {
     local branch="$1"
 
     if [[ -z "$branch" ]]; then
-        printf "\033[1;31mErreur : aucune branche de release fournie.\033[0m\n"
+        printf "${C_RED}Erreur : aucune branche de release fournie.${C_RESET}\n"
         exit_safe 1
     fi
 
@@ -71,25 +71,28 @@ release_start() {
         future_tag="$requested_version"
     else
         local current_tag
-        current_tag=$(git tag -l --sort=-creatordate | head -n 1)
+        # Le tag le plus récent ; à date égale (deux tags dans la même seconde,
+        # ce qu'un script ou une CI produit sans peine), le plus haut numéro.
+        # git applique la dernière clé --sort en premier.
+        current_tag=$(git tag -l --sort=-v:refname --sort=-creatordate | head -n 1)
         echo "Current tag: ${current_tag}"
 
         local major=0
-        local feature=0
         local minor=0
         local regex='([0-9]+)\.([0-9]+)\.([0-9]+)'
 
         if [[ $current_tag =~ $regex ]]; then
             major="${BASH_REMATCH[1]}"
-            feature="${BASH_REMATCH[2]}"
-            minor="${BASH_REMATCH[3]}"
+            minor="${BASH_REMATCH[2]}"
         else
             echo "A tag must already exists (x.x.x format)"
             exit_safe 1
         fi
 
-        feature=$((feature + 1))
-        future_tag="${major}.${feature}.${minor}"
+        # Version suivante : le chiffre du milieu avance, le dernier (celui des
+        # correctifs) repart de zéro — 1.2.3 donne 1.3.0.
+        minor=$((10#$minor + 1))
+        future_tag="${major}.${minor}.0"
     fi
 
     local branch
@@ -120,7 +123,7 @@ release_merge_single() {
     local resolved_branch
     resolved_branch=$(resolve_release_source_branch "$source_branch")
     if [[ -z "$resolved_branch" ]]; then
-        printf "\033[1;31mAucune branche source fournie.\033[0m\n"
+        printf "${C_RED}Aucune branche source fournie.${C_RESET}\n"
         exit_safe 1
     fi
 
@@ -133,7 +136,7 @@ release_merge_single() {
         echo "Remote branch exists, use it..."
         merge_source="$j2s_remote/$resolved_branch"
     else
-        printf "\033[1;31m/!\\ Feature branch '%s' was not found!\033[0m\n" "$resolved_branch"
+        printf "${C_RED}/!\\ Feature branch '%s' was not found!${C_RESET}\n" "$resolved_branch"
         exit_safe 1
     fi
 
@@ -145,7 +148,7 @@ release_merge_single() {
     local last_commit_subject
     last_commit_subject=$(git log -1 --pretty=%s "$merge_source")
     if [[ "$last_commit_subject" == "$prefix_init_commit $work_branch $suffix_init_commit" ]]; then
-        printf "\033[1;31m/!\\ La branche '%s' ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release.\033[0m\n" "$resolved_branch"
+        printf "${C_RED}/!\\ La branche '%s' ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release.${C_RESET}\n" "$resolved_branch"
         exit_safe 1
     fi
 
@@ -155,7 +158,7 @@ release_merge_single() {
     # tout de même poussée, amputée de tout ce qui suit. On s'arrête net.
     if ! git merge --no-ff "$merge_source" -m "$prefix_commit Release merge feature branch : $resolved_branch"; then
         git merge --abort >/dev/null 2>&1
-        printf "\033[1;31mConflit lors de l'intégration de %s dans %s.\033[0m\n" "$resolved_branch" "$release_branch" >&2
+        printf "${C_RED}Conflit lors de l'intégration de %s dans %s.${C_RESET}\n" "$resolved_branch" "$release_branch" >&2
         printf "Le merge a été annulé : la release n'a pas été poussée et rien n'est perdu.\n" >&2
         printf "Résolvez le conflit à la main (« git merge --no-ff %s »), puis relancez jgit pour les sources restantes.\n" "$merge_source" >&2
         exit_safe 1
@@ -198,6 +201,31 @@ release_merge() {
     git push "$j2s_remote" "$release_branch"
 }
 
+# Dit si la version $1 (x.y.z) vient strictement après la version $2 : le
+# premier chiffre d'abord, puis celui du milieu, puis le dernier. Une 1.0.0
+# vient donc après une 0.19.0, même si son chiffre du milieu est plus petit.
+# Une version $2 absente ou illisible compte comme 0.0.0.
+version_is_after() {
+    local regex='^([0-9]+)\.([0-9]+)\.([0-9]+)$'
+    local next_major next_minor next_patch
+    local major=0 minor=0 patch=0
+
+    [[ $1 =~ $regex ]] || return 1
+    next_major=$((10#${BASH_REMATCH[1]}))
+    next_minor=$((10#${BASH_REMATCH[2]}))
+    next_patch=$((10#${BASH_REMATCH[3]}))
+
+    if [[ $2 =~ $regex ]]; then
+        major=$((10#${BASH_REMATCH[1]}))
+        minor=$((10#${BASH_REMATCH[2]}))
+        patch=$((10#${BASH_REMATCH[3]}))
+    fi
+
+    [[ $next_major -ne $major ]] && { [[ $next_major -gt $major ]]; return; }
+    [[ $next_minor -ne $minor ]] && { [[ $next_minor -gt $minor ]]; return; }
+    [[ $next_patch -gt $patch ]]
+}
+
 release_finish() {
     local requested_target="$1"
     local branch="$requested_target"
@@ -226,16 +254,17 @@ release_finish() {
 
     if [[ $branch =~ $regex_branch ]]; then
         echo "Already in release branch"
-        local future_feature="${BASH_REMATCH[2]}"
+        local future_version="${branch#release/}"
 
         local current_tag
-        current_tag=$(git tag -l --sort=-creatordate | head -n 1)
-        local current_feature=0
-        if [[ $current_tag =~ $regex_tag ]]; then
-            current_feature="${BASH_REMATCH[2]}"
-        fi
+        # Le tag le plus récent ; à date égale (deux tags dans la même seconde,
+        # ce qu'un script ou une CI produit sans peine), le plus haut numéro.
+        # git applique la dernière clé --sort en premier.
+        current_tag=$(git tag -l --sort=-v:refname --sort=-creatordate | head -n 1)
 
-        if [[ $future_feature -le $current_feature ]]; then
+        # La version entière est comparée, pas seulement son chiffre du
+        # milieu : sinon une 1.0.0 passerait pour plus ancienne qu'une 0.19.0.
+        if ! version_is_after "$future_version" "$current_tag"; then
             echo "/!\\ Local release does not have the right tag, switching to new branch"
             release_start
             branch=$(git rev-parse --abbrev-ref HEAD)
@@ -260,9 +289,9 @@ release_finish() {
 
     if [[ $branch =~ $regex_branch ]]; then
         local major="${BASH_REMATCH[1]}"
-        local feature="${BASH_REMATCH[2]}"
-        local minor="${BASH_REMATCH[3]}"
-        local future_tag="${major}.${feature}.${minor}"
+        local minor="${BASH_REMATCH[2]}"
+        local patch="${BASH_REMATCH[3]}"
+        local future_tag="${major}.${minor}.${patch}"
         echo "Future tag: ${future_tag}"
         switch_branch "$prod_branch"
         # La branche de release va être supprimée : sans cela, exit_safe
@@ -275,7 +304,7 @@ release_finish() {
         echo "Merging release ${branch} in $prod_branch branch..."
         if ! git merge --no-ff "${branch}" -m "Merge release branch : ${branch}"; then
             git merge --abort >/dev/null 2>&1
-            printf "\033[1;31mConflit lors de la fusion de %s dans %s.\033[0m\n" "$branch" "$prod_branch" >&2
+            printf "${C_RED}Conflit lors de la fusion de %s dans %s.${C_RESET}\n" "$branch" "$prod_branch" >&2
             printf "Aucun tag n'a été posé, rien n'a été poussé et la branche de release est intacte.\n" >&2
             printf "Résolvez le conflit à la main puis relancez « jgit release finish --into %s ».\n" "$branch" >&2
             exit_safe 1
@@ -292,7 +321,7 @@ release_finish() {
         # release GitHub manque, le message doit le dire sans laisser croire
         # qu'il faut rejouer la release entière.
         if ! gh release create "${future_tag}" --generate-notes; then
-            printf "\033[1;31mLa release GitHub %s n'a pas pu être créée.\033[0m\n" "${future_tag}" >&2
+            printf "${C_RED}La release GitHub %s n'a pas pu être créée.${C_RESET}\n" "${future_tag}" >&2
             printf "Le merge sur %s et le tag %s sont poussés : il ne reste que la release GitHub.\n" "$prod_branch" "${future_tag}" >&2
             printf "Relancez « gh release create %s --generate-notes ».\n" "${future_tag}" >&2
             exit_safe 1

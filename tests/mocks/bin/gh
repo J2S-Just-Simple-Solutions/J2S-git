@@ -9,6 +9,9 @@
 #   JGIT_GH_LOG   fichier de journal (obligatoire, cree par le bac a sable)
 #   JGIT_GH_FAIL  motif (grep -E) : si la commande correspond, le mock echoue
 #   JGIT_GH_CODE  code de sortie utilise en cas d'echec simule (defaut : 1)
+#   JGIT_GH_PRS   les PR ouvertes, « branche<TAB>titre » : « pr create » y
+#                 ajoute la sienne, « pr list --json » les rend comme le ferait
+#                 gh avec --jq '.[] | [.headRefName, .title] | @tsv'
 
 set -u
 
@@ -34,7 +37,29 @@ fi
 case "${1:-}" in
     pr)
         case "${2:-}" in
-            create) echo "https://github.com/J2S-mock/repo/pull/1" ;;
+            create)
+                title=""
+                head=""
+                shift 2
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --title) title="${2:-}"; shift ;;
+                        --title=*) title="${1#--title=}" ;;
+                        --head) head="${2:-}"; shift ;;
+                        --head=*) head="${1#--head=}" ;;
+                    esac
+                    shift
+                done
+                if [[ -n "${JGIT_GH_PRS:-}" && -n "$head" ]]; then
+                    printf '%s\t%s\n' "$head" "$title" >> "$JGIT_GH_PRS"
+                fi
+                echo "https://github.com/J2S-mock/repo/pull/1"
+                ;;
+            list)
+                case " $* " in
+                    *" --json "*) [[ -f "${JGIT_GH_PRS:-}" ]] && cat "$JGIT_GH_PRS" ;;
+                esac
+                ;;
             *)      : ;;
         esac
         ;;

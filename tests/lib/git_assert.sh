@@ -302,6 +302,121 @@ assert_jgit_output_not_contains() {
 }
 
 ###############################################
+#            Document JSON (--json)
+###############################################
+
+json_query() {
+    python3 "$JGIT_TESTS_DIR/lib/json_query.py" "$SANDBOX/stdout.json" "$@"
+}
+
+assert_json_document() {
+    local error
+
+    if error=$(json_query check 2>&1); then
+        assert_ok "sortie standard = un unique document JSON"
+    else
+        assert_failed "sortie standard = un unique document JSON" "$error"
+    fi
+}
+
+json_value_at() {
+    local path="$1"
+    local value
+
+    if ! value=$(json_query get "$path" 2>&1); then
+        assert_failed "valeur JSON $path" "$value" "--- document ---" "$(cat "$SANDBOX/stdout.json")"
+    fi
+    printf '%s' "$value"
+}
+
+assert_json_equals() {
+    local path="$1"
+    local expected="$2"
+    local actual
+
+    actual=$(json_value_at "$path") || exit 1
+    assert_equals "$expected" "$actual" "JSON $path"
+}
+
+assert_json_type() {
+    local path="$1"
+    local expected="$2"
+    local actual
+
+    if ! actual=$(json_query type "$path" 2>&1); then
+        assert_failed "type JSON de $path" "$actual"
+    fi
+    assert_equals "$expected" "$actual" "type JSON de $path"
+}
+
+assert_json_length() {
+    local path="$1"
+    local expected="$2"
+    local actual
+
+    if ! actual=$(json_query len "$path" 2>&1); then
+        assert_failed "longueur JSON de $path" "$actual"
+    fi
+    assert_equals "$expected" "$actual" "longueur JSON de $path"
+}
+
+assert_json_missing() {
+    local path="$1"
+
+    if json_query get "$path" >/dev/null 2>&1; then
+        assert_failed "JSON $path absent" "valeur trouvee : $(json_query get "$path")"
+    fi
+    assert_ok "JSON $path absent"
+}
+
+###############################################
+#            Demos
+###############################################
+
+assert_remote_demo_tickets() {
+    local branch="$1"
+    local expected="$2"
+    local actual
+
+    actual=$(remote_demo_tickets "$branch")
+    assert_equals "$expected" "$actual" "tickets de la demo $branch, dans l'ordre"
+}
+
+# Aucune copie de travail temporaire (git worktree) ne reste apres jgit.
+assert_no_extra_worktree() {
+    local count
+    count=$(repo_git worktree list 2>/dev/null | wc -l | tr -d ' ')
+    assert_equals "1" "$count" "aucune copie de travail temporaire ne reste"
+}
+
+###############################################
+#            Operation en pause
+###############################################
+
+assert_operation_paused() {
+    if [[ -f "$(repo_operation_state_file)" ]]; then
+        assert_ok "une operation jgit est en pause"
+    else
+        assert_failed "une operation jgit est en pause" "aucun fichier d'etat"
+    fi
+}
+
+assert_no_operation_paused() {
+    if [[ -f "$(repo_operation_state_file)" ]]; then
+        assert_failed "aucune operation jgit en pause" "$(cat "$(repo_operation_state_file)")"
+    fi
+    assert_ok "aucune operation jgit en pause"
+}
+
+# Ni sequence ANSI ni plainte de tput : ce que lit un journal Jenkins ou une IA.
+assert_jgit_output_plain() {
+    local esc=$'\033'
+
+    assert_not_contains "$JGIT_OUTPUT" "$esc" "sortie de jgit sans sequence de couleur"
+    assert_not_contains "$JGIT_OUTPUT" "tput:" "sortie de jgit sans erreur de tput"
+}
+
+###############################################
 #            Historique local
 ###############################################
 
@@ -372,6 +487,20 @@ assert_remote_branch_unchanged() {
     fi
     actual=$(origin_git rev-parse "refs/heads/$branch" 2>/dev/null) || actual="(branche absente)"
     assert_equals "$expected" "$actual" "$label"
+}
+
+# La branche a avance sans reecriture : l'etat note en est un ancetre.
+assert_remote_branch_fast_forwarded() {
+    local branch="$1"
+    local before current
+
+    before=$(remote_snapshot_read "$branch")
+    current=$(origin_git rev-parse "refs/heads/$branch" 2>/dev/null)
+    if [[ -n "$before" && "$before" != "$current" ]] && origin_git merge-base --is-ancestor "$before" "$current"; then
+        assert_ok "$branch a avance sans reecriture"
+    else
+        assert_failed "$branch a avance sans reecriture" "avant : $before" "apres : $current"
+    fi
 }
 
 assert_remote_branch_changed() {

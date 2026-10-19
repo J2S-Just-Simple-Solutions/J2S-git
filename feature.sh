@@ -1,5 +1,5 @@
 #!/bin/bash
-source "$(dirname "$0")/functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/functions.sh"
 
 feature_start() {
     local feature_type=$1
@@ -41,7 +41,7 @@ feature_start() {
         fi
 
         printf "%sJGit va créer la branche %s%s%s%s et sa PR associée qui se basera sur la branche %s%s%s\n" \
-        "$(tput setaf 2)" "$(tput setaf 1)" "$branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$reference_branch" "$(tput sgr0)"
+        "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$branch" "$(jgit_tput sgr0)"  "$(jgit_tput setaf 2)" "$(jgit_tput setaf 1)" "$reference_branch" "$(jgit_tput sgr0)"
         # Demander confirmation à l'utilisateur
         if ! confirm_action "Souhaitez-vous continuer ?" "y"; then
             echo "Opération annulée."
@@ -99,7 +99,7 @@ feature_restart() {
     # Vérifier le résultat et afficher un message personnalisé
     if [[ $? -ne 0 ]]; then
         echo "🚨 ATTENTION : Le code de '$branch' et '$branch_PR' est différent !"
-        printf "\033[1;31mLe restart ne peut se faire que sur deux branches identiques d'un point de vue code\033[0m\n"
+        printf "${C_RED}Le restart ne peut se faire que sur deux branches identiques d'un point de vue code${C_RESET}\n"
 
         exit_safe 1
     else

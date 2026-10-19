@@ -157,6 +157,12 @@ l'alias `jgit` du poste de travail.
 limites de bash 3.2 (pas de tableaux associatifs). Le code des tests s'interdit
 donc les facilités de bash 4+.
 
+**Complément : Linux dans Docker.** Depuis que `jgit` doit tourner dans un
+conteneur et sur un agent Jenkins, la même suite est aussi jouée sous Debian
+(bash 5.2, outils GNU) par `./tests/run-in-docker.sh`. L'image de test
+(`tests/docker/Dockerfile`) n'ajoute que `git` et `python3` : la règle « aucune
+dépendance supplémentaire » vaut pour les deux plateformes.
+
 ---
 
 ## 9. Un bac à sable neuf et totalement isolé par scénario
@@ -283,3 +289,264 @@ contenait quelque chose.
 **Migration.** Aucune. Les branches créées avant ce mécanisme n'ont pas la trace,
 et on ne la leur invente pas : `util check_rebase` refuse de répondre pour
 elles, et `feature rebase` la leur donne au passage.
+
+---
+
+## 13. Une sortie JSON en bash pur, sur un descripteur à part
+
+**Contexte.** `jgit` doit être pilotable par une IA, par une interface en
+terminal et par Jenkins. Ces programmes ont besoin d'un résultat structuré, pas
+de phrases colorées. Mais le code existant écrit ses messages sur la sortie
+standard, partout.
+
+**Décision.** Avec `--json`, `jgit.sh` duplique la sortie standard sur le
+descripteur 3 puis redirige la sortie standard vers la sortie d'erreur. Le code
+existant n'est pas touché : ses messages partent désormais sur la sortie
+d'erreur. Seul `json_emit` écrit sur le descripteur 3, une seule fois. Un
+`trap EXIT` garantit qu'il y a toujours un document, même sur un `exit` imprévu.
+Le JSON est fabriqué en bash pur (`json.sh`).
+
+**Conséquences.** Une commande existante devient pilotable sans réécriture : elle
+produit au minimum `jgit.result/1` ou `jgit.error/1`. Les commandes nouvelles
+(démos) produisent des documents riches. En contrepartie, les erreurs doivent être
+identifiées (`jgit_fail`) pour être utiles à un programme.
+
+**Écarté.** `jq` : absent des postes, et la règle n°8 interdit toute dépendance
+supplémentaire. Un mode « JSON » qui remplacerait chaque `echo` : des centaines de
+lignes à toucher, pour un résultat identique.
+
+**Piège connu.** bash 5.2 donne un sens spécial à `&` dans le remplacement de
+`${s//motif/remplacement}` s'il n'est pas entre guillemets. Toutes les
+substitutions de `json_str` sont protégées.
+
+---
+
+## 14. Un conflit peut se mettre en pause, et la publication ne force rien
+
+**Contexte.** Le rebase gérait un conflit de deux façons : attendre que le
+développeur ait résolu et commité dans un autre terminal, ou tout annuler sans
+interaction. Une IA ne sait pas répondre à une question posée par un processus
+qui tourne : il lui faut une commande qui s'arrête, puis une commande qui
+reprend. Et la publication faisait deux `push --force` successifs.
+
+**Décision.** Un seul moteur de rejeu (`replay.sh`), commun au rebase et aux
+démos, avec trois conduites choisies par `--on-conflict` : `ask`, `abort`,
+`pause`. En pause, tout ce qu'il faut pour terminer est enregistré dans
+`.git/jgit/operation.state` (variables `OP_*`), le cherry-pick reste en cours,
+et `continue` / `abort` repartent de cet état. La publication est un seul
+`git push --atomic` avec `--force-with-lease=<ref>:<sha lu au départ>` pour
+chaque branche.
+
+**Conséquences.**
+- Une seule opération en pause par dépôt ; toute autre commande refuse (code 5).
+- La reprise garde la conduite choisie au départ : un rebase lancé en pause se
+  remet en pause au conflit suivant.
+- Un collègue qui pousse pendant un rebase n'est jamais écrasé : le push est
+  refusé, les branches locales reviennent à leur état d'avant (code 4).
+- `git rerere` est activé pendant le rejeu : une résolution déjà faite sur le
+  poste est réappliquée dans les fichiers. Rien n'en dépend.
+- Un commit qui devient vide au rejeu est conservé vide
+  (`--keep-redundant-commits`) au lieu d'interrompre le rebase.
+
+**Écarté.**
+- Un verrou : `jgit` tourne sur chaque poste, un verrou local ne protège de
+  personne. La seule protection partagée est celle du serveur, le lease.
+- `--force-with-lease` sans valeur : il compare à la référence de suivi locale,
+  qu'un `git fetch` d'arrière-plan (un IDE) met à jour en silence — la protection
+  disparaît sans que personne le sache.
+- `--json` impliquant `pause` : Jenkins utilise `--json` et ne doit jamais
+  laisser un dépôt au milieu d'une opération.
+
+---
+
+## 15. Une démo est une recette écrite dans sa propre branche
+
+**Contexte.** La première version des démos rejouait la démo par-dessus chaque
+ticket ajouté (`git rebase origin/feature/X`). La base dérivait vers celle du
+dernier ticket, les SHA changeaient à chaque ajout, et la détection « déjà
+présent » reposait sur des SHA que `jgit feature rebase` recalcule de toute
+façon. Il n'y avait pas de vue d'ensemble, pas de retrait possible.
+
+**Décision.**
+- Une démo est une base et une liste ordonnée de tickets, **écrite dans la
+  branche** `demo/<nom>` : commit d'init (trailers `jgit-branch`,
+  `jgit-based-on`, `jgit-demo-format: 2`), puis, pour chaque ticket, ses commits
+  cherry-pickés tels quels et un **repère qui clôt le segment**
+  (`[jgit] DEMO ticket <T> [empty_commit]`). Le repère ferme le segment plutôt
+  que de l'ouvrir : ce qui suit le dernier repère est, sans ambiguïté, un commit
+  poussé à la main.
+- Un ticket est identifié par ses repères ; un commit, par son **empreinte**
+  (adresse de l'auteur, date d'auteur, sujet), que le cherry-pick conserve — et
+  donc aussi le rebase de `jgit`. Jamais par un SHA.
+- « Livré » se lit dans les traces jgit que la release fait remonter dans la
+  base : le commit d'init de la branche de PR, le merge de release.
+- Toute modification passe par un plan (`init`, `pick`, `marker`) déroulé sur une
+  branche temporaire par le moteur de rejeu commun (choix n°14), puis un seul
+  `push --force-with-lease=<ref>:<sha lu>`. Ajouter est une avance rapide ;
+  retirer, reprendre et rebaser reconstruisent **à partir de la démo
+  elle-même**, ce qui rejoue les résolutions de conflit déjà faites.
+- Une démo inchangée n'est jamais republiée.
+- Archiver renomme la branche `demo-archive/<AAAA-MM-JJ>_<nom>` (`<AAAA-MM-JJ>.<n>_<nom>`
+  pour la n-ième du jour) : le suffixe porte sur la date, jamais sur le nom, pour
+  qu'un nom qui finit par `-2` reste lisible. Chaque renommage est un seul push
+  `--atomic`, protégé par lease des deux côtés.
+- Les démos `demo_<nom>` de la première version sont lues (marqueurs
+  `[jgit] DEMO merge …`) mais ne se modifient plus : `migrate` les recrée.
+
+**Conséquences.** La démo se lit sans autre source ; `show` sait dire, ticket par
+ticket, ce qui est à jour, ce qui a avancé, ce qui a été réécrit ou livré. Une IA
+ou Jenkins pilote le tout par `--json`. En contrepartie, un ticket squashé ou
+réécrit à la main n'est plus reconnu commit par commit : il passe en
+« réécrit », et `refresh` le reprend.
+
+**Écarté.**
+- Des commits de fusion (`merge --no-ff` de chaque ticket) : un ticket rebasé par
+  `jgit` n'est plus un ancêtre de sa version précédente, et le rebase de feature
+  existant procède par cherry-pick — deux mécaniques pour un même métier.
+- Un fichier de recette à part (branche de métadonnées) : une seconde source de
+  vérité, susceptible de diverger de la branche réelle.
+- `git rerere` comme mémoire des résolutions : son cache est local au poste ;
+  Jenkins et les collègues ne l'auraient pas. La résolution vit dans la démo.
+- Une copie de travail séparée (`git worktree`) : la règle n°3 (un seul point de
+  bascule de branche) et le rebase existant travaillent dans l'espace de travail ;
+  une seule façon de faire.
+
+---
+
+## 16. Une interface en TypeScript et Ink, livrée dans Docker
+
+**Contexte.** Les démos doivent être pilotables par quelqu'un qui ne retient pas
+les commandes. L'équipe maîtrise TypeScript ; le bash, lui, ne sait pas faire
+d'interface au clavier digne de ce nom.
+
+**Décision.**
+- Une interface en terminal en TypeScript avec Ink (React pour le terminal),
+  dans `ui/`. Elle **n'a aucune logique git** : elle appelle `jgit … --json` et
+  lit les documents du contrat (choix n°13). Le bash reste le moteur, et la seule
+  source de vérité.
+- Les réécritures passent par `--dry-run` : le plan est montré avant d'être
+  appliqué. Toute modification est lancée avec `--on-conflict pause` : un
+  conflit ouvre un écran dédié plutôt qu'un échec.
+- Un projet a souvent des centaines de branches de tickets : on les cherche à
+  la frappe plutôt qu'on ne les parcourt, et toute liste n'affiche qu'une
+  fenêtre qui tient dans le terminal — un écran plus haut que le terminal, Ink
+  le réimprime à chaque touche et le terminal défile au lieu de la sélection.
+  Un ticket seul à correspondre est coché d'office mais ne s'ajoute qu'avec ⏎ :
+  en tapant « 1234 », « 123 » peut déjà être unique.
+- Ouvrir un éditeur ou Claude Code demande le terminal : l'interface se démonte,
+  le lanceur (`cli.tsx`) exécute la commande, puis relance l'interface, qui
+  relit `jgit util status`.
+- Livraison dans Docker : image `j2s/jgit:local` (Debian, Node 22, git,
+  openssh, nano, tzdata), construite par `docker-compose.yml`, lancée par
+  `jgit ui` avec `docker run`. Le dépôt est monté au même chemin, le conteneur
+  tourne sous l'identité de l'hôte (un point d'entrée la déclare dans
+  `/etc/passwd`, sans quoi ssh refuse de démarrer), `safe.directory` est fixé par
+  variables d'environnement (`GIT_CONFIG_COUNT`), le fuseau horaire du poste est
+  transmis.
+- Sur Mac, l'agent SSH de Docker Desktop est un socket `root:root` en
+  `rw-rw----` : le conteneur reçoit le groupe root (`--group-add 0`) pour s'en
+  servir sans changer d'identité. `docker compose run` ne sait pas ajouter un
+  groupe : compose construit, `docker run` lance.
+
+**Conséquences.** Rien à installer sur un poste que Docker ; la même image sert
+la ligne de commande à un agent de CI. Les remotes doivent être en SSH (le
+trousseau macOS n'est pas visible du conteneur). `JGIT_UI=native` lance
+l'interface avec le Node du poste, sans Docker.
+
+**Écarté.**
+- Go et Bubble Tea : un binaire autonome, mais une technologie que l'équipe ne
+  pratique pas.
+- Une application web : un second produit à héberger et maintenir, sans gain
+  pour le premier usage.
+- Réécrire la logique des démos en TypeScript : deux moteurs à garder d'accord,
+  et la suite Gherkin à dupliquer.
+
+---
+
+## 17. L'état des lieux simule : fusion pour les tickets, copie de travail pour les démos
+
+**Contexte.** Avant de remettre les démos à jour — ou de laisser un job
+planifié le faire —, on veut savoir si ça passera, et sinon qui est concerné.
+Et la question vaut pour chaque ticket, avant même les démos : sa base a-t-elle
+avancé, son rebase passerait-il ? Sur un vrai projet, il y a des centaines de
+branches.
+
+**Décision.** `jgit audit` simule tout, sans rien modifier.
+
+- **Un ticket** est simulé comme `jgit feature rebase` le rejouerait : seuls ses
+  propres commits, ceux qui suivent son commit d'init. `git merge-tree
+  --write-tree --merge-base=<commit d'init>` (git 2.40) les applique d'un coup
+  sur la base, **sans copie de travail** ; à défaut, ils sont rejoués un par un
+  dans la copie de travail des démos. Sortie en code 1 : les fichiers en
+  conflit ; les auteurs des commits du ticket qui les touchent (hors commits de
+  la base fusionnés dans le ticket) sont **ceux qui doivent intervenir**.
+- **Sa base** est celle enregistrée à sa création. Un ticket créé avant que jgit
+  l'enregistre n'en a pas : sa base est **supposée** — parmi la préprod, la
+  production et toute branche qu'un ticket ou une démo a enregistrée comme base,
+  celle dont il s'écarte le moins. La comparer à la préprod par défaut accusait
+  à tort, sur un vrai projet, des dizaines de tickets partis d'une branche de
+  projet : la simulation y rejouait tout l'historique de cette branche.
+- **Lectures groupées.** Base enregistrée, commit d'init, propriétaire, PR
+  (sujet de la branche `__PR__`, titre sur GitHub par `gh pr list`) sont lus une
+  fois pour tous les tickets et joints par `awk` ; l'avance et le retard de
+  chaque ticket sur chaque base connue, en un appel par base
+  (`for-each-ref --format=%(ahead-behind:…)`, git 2.41 ; à défaut, ticket par
+  ticket). Le détail d'un conflit (fichiers, « en face ») tient en deux appels à
+  git par ticket, et son JSON se construit sans sous-shell. Un appel à git par
+  ticket et par information, et sous bash 3.2 l'extraction d'une valeur dans une
+  longue chaîne (`${var#*motif}`, de coût quadratique), coûtaient 49 secondes
+  pour 300 tickets — 4 secondes ensuite.
+- **Une démo** : ce que feraient `jgit feature rebase` de ses tickets en retard,
+  puis `jgit demo rebase` et `add`, rejoué dans une **copie de travail
+  temporaire** (`git worktree add --detach`, sous `.git/jgit/audit/`), avec la
+  même mécanique de cherry-pick que la vraie fabrication. Un ticket dont le
+  rebase sur sa base coince n'y est pas simulé : sa version résolue n'existe pas
+  encore. Un segment qui coince est d'abord repris depuis la branche du ticket
+  (`--from`) : son auteur a pu y résoudre le conflit. Un ticket qui coince encore
+  est écarté et la simulation reprend sans lui. Pour chaque fichier en conflit,
+  le dernier commit qui l'a touché dans la démo donne « en face » : auteur et
+  provenance. La copie est supprimée en sortant, quelle que soit la sortie
+  (`jgit_on_exit`).
+- **Le rapport humain** ne dit que qui doit intervenir et quoi lancer ; le
+  détail reste dans `--json`.
+- **`--apply`** lance ce que la simulation a trouvé faisable, en appelant **les
+  vraies commandes** (`jgit feature rebase`, `jgit demo …`) comme l'utilisateur
+  le ferait, sans question et sans nouveau fetch, et en lisant leur document
+  JSON : un seul moteur de rejeu, les mêmes leases, le même abandon propre si la
+  réalité contredit la simulation. Seuls **mes** tickets sont rebasés (ceux où
+  mon identité git doit intervenir) : réécrire la branche d'un collègue ferait
+  diverger sa copie locale sans qu'il le sache. Un ticket à base supposée n'est
+  pas rebasé : une supposition ne réécrit pas une branche.
+
+**Conséquences.** L'audit ne touche ni à l'espace de travail de l'utilisateur
+(même modifié), ni à sa branche courante, ni au serveur ; il peut tourner
+pendant qu'une opération est en pause, pour une IA ou un job planifié. Il n'a
+pas besoin de l'identité git du poste. Les commits de simulation n'ont de
+branche nulle part : git les oublie. La copie de simulation est une **exception
+assumée** à la règle n°3 (un seul `git checkout`) : elle n'est pas l'espace de
+travail de l'utilisateur. La fusion juge un ticket sur l'ensemble de ses
+modifications : rarement, un rebase commit par commit peut s'arrêter sur un
+commit intermédiaire alors que l'ensemble passe — `jgit feature rebase` s'arrête
+alors sur ce conflit comme d'habitude.
+
+**Écarté.**
+- Simuler dans l'espace de travail, comme `util verify_rebase` : il faudrait un
+  dépôt propre et des bascules de branche, pour une question qui ne modifie rien.
+- Rejouer chaque ticket commit par commit dans la copie de travail : exact, mais
+  des dizaines de secondes sur un projet de centaines de branches (c'est le
+  repli quand git est trop ancien).
+- Fusionner la branche entière avec sa base (`git merge-tree` sans
+  `--merge-base`) : tout l'historique depuis leur point commun est jugé, y
+  compris des commits que le ticket a seulement hérités — ce n'est pas ce que
+  `jgit feature rebase` rejoue.
+- Lister dans le rapport les fichiers et les commits en conflit : illisible sur
+  un vrai projet (des dizaines de fichiers par ticket) ; seul compte qui doit
+  intervenir.
+- `git merge-tree --merge-base` pour les démos (rejouer chaque commit sans copie
+  de travail) : exige git 2.40, absent de Debian bookworm (image Docker, agents
+  Jenkins).
+- Simuler la démo avec les tickets dont le rebase coince : le conflit qu'elle
+  rencontrerait est celui que leur auteur doit résoudre chez lui.
+- S'arrêter au premier conflit : le rapport ne dirait pas qui d'autre est
+  concerné.
+

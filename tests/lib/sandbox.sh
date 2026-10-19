@@ -12,6 +12,7 @@
 #     github/        clone technique pour simuler les actions faites sur GitHub
 #     bin/gh         mock du client GitHub CLI
 #     gh-calls.log   journal des appels au mock
+#     gh-prs.tsv     les PR ouvertes connues du mock (branche, titre)
 
 SANDBOX=""
 JGIT_OUTPUT=""
@@ -35,9 +36,13 @@ sandbox_create() {
     export TERM="${TERM:-xterm}"
     export JGIT_GH_LOG="$SANDBOX/gh-calls.log"
     : > "$JGIT_GH_LOG"
+    export JGIT_GH_PRS="$SANDBOX/gh-prs.tsv"
+    : > "$JGIT_GH_PRS"
     # Les scenarios d'un meme fichier partagent le processus : une panne gh
-    # simulee ne doit pas deborder sur le scenario suivant.
+    # simulee, un lien d'appel ou un terminal retire ne doivent pas deborder sur
+    # le scenario suivant.
     unset JGIT_GH_FAIL
+    JGIT_BIN_ALIAS=""
 
     cat > "$GIT_CONFIG_GLOBAL" <<'GITCONFIG'
 [user]
@@ -188,6 +193,102 @@ repo_use_non_standard_branches() {
     info "le projet n'a plus que la branche $trunk"
 }
 
+# Simule la livraison d'un ticket dans une branche de base : sa branche de PR
+# y est fusionnee avec le message de traçabilite d'une release jgit. C'est ce
+# que la base recoit quand la release qui contient le ticket y est reportee.
+github_deliver_pr() {
+    local branch="$1"
+    local base="$2"
+    local pr_branch="${JGIT_PREFIX_PR:-__PR__}$branch"
+
+    github_git fetch --quiet origin
+    github_git checkout --quiet -B "$base" "origin/$base"
+    github_git merge --no-ff --quiet "origin/$pr_branch" \
+        -m "[jgit] Release merge feature branch : $pr_branch" || \
+        assert_failed "livraison de $branch" "le merge de $pr_branch dans $base a echoue"
+    github_git push --quiet origin "$base"
+    info "GitHub : $pr_branch livree dans $base"
+}
+
+# Reproduit une demo telle que la fabriquait la premiere version de jgit
+# (branche demo_<nom>) : commit d'init, puis pour chaque ticket un marqueur
+# « [jgit] DEMO merge » suivi d'un rebase de la demo PAR-DESSUS le ticket.
+# Ces demos existent sur les depots : jgit doit savoir les lire et les migrer.
+#
+#   github_create_legacy_demo <nom> <base> <base enregistree : true|false> <ticket>...
+github_create_legacy_demo() {
+    local name="$1"
+    local base="$2"
+    local record="$3"
+    shift 3
+    local branch="demo_$name"
+    local ticket
+
+    github_git fetch --quiet origin
+    github_git checkout --quiet -B "$branch" "origin/$base"
+    if [[ "$record" == true ]]; then
+        github_git commit --quiet --allow-empty -m "[jgit] INIT demo $branch [empty_commit]" \
+            -m "jgit-branch: $branch
+jgit-based-on: $base"
+    else
+        github_git commit --quiet --allow-empty -m "[jgit] INIT demo $branch [empty_commit]"
+    fi
+    for ticket in "$@"; do
+        github_git commit --quiet --allow-empty -m "[jgit] DEMO merge ${ticket%%/*} $ticket [empty_commit]"
+        github_git rebase --quiet "origin/$ticket" >/dev/null 2>&1 || \
+            assert_failed "demo a l'ancien format" "le rebase sur $ticket a echoue"
+    done
+    github_git push --quiet origin "$branch"
+    info "GitHub : demo a l'ancien format $branch ($*)"
+}
+
+# Tickets d'une demo, dans l'ordre, lus directement sur le remote a partir des
+# reperes qui closent chaque segment.
+remote_demo_tickets() {
+    local branch="$1"
+
+    origin_git log --first-parent --reverse --format=%s "refs/heads/$branch" 2>/dev/null \
+        | sed -n 's/^\[jgit\] DEMO ticket \([^ ]*\) \[empty_commit\]$/\1/p' \
+        | awk '!seen[$0]++'
+}
+
+# Simule le titre d'une PR sur GitHub, que gh pr list rendra : la PR est
+# renommée, ou ouverte à la main avec ce titre si jgit ne l'a pas ouverte
+# (--no-open).
+github_rename_pr() {
+    local branch="$1"
+    local title="$2"
+
+    awk -F '\t' -v b="$branch" 'BEGIN { OFS = "\t" } $1 != b { print }' \
+        "$JGIT_GH_PRS" > "$JGIT_GH_PRS.tmp" && mv "$JGIT_GH_PRS.tmp" "$JGIT_GH_PRS"
+    printf '%s\t%s\n' "$branch" "$title" >> "$JGIT_GH_PRS"
+    info "GitHub : la PR de $branch s'intitule « $title »"
+}
+
+# Simule un ticket créé par une version de jgit d'avant la branche d'origine :
+# même structure (branche de PR et son commit d'init, branche de travail et son
+# commit de démarrage), mais aucun trailer ne dit de quelle branche il part.
+github_create_old_ticket() {
+    local ticket="$1"
+    local base="$2"
+    local path="$3"
+    local content="$4"
+    local pr_branch="${JGIT_PREFIX_PR:-__PR__}$ticket"
+
+    github_git fetch --quiet origin
+    github_git checkout --quiet -B "$pr_branch" "origin/$base"
+    github_git commit --quiet --allow-empty -m "[jgit] INIT $ticket [empty_commit]"
+    github_git checkout --quiet -B "$ticket"
+    github_git commit --quiet --allow-empty \
+        -m "[jgit] commit for automatic PR creation - this commit will be deleted by squash and merge - START $ticket [empty_commit]"
+    mkdir -p "$(dirname "$SANDBOX/github/$path")"
+    printf '%s\n' "$content" > "$SANDBOX/github/$path"
+    github_git add "$path"
+    github_git commit --quiet -m "Ajoute $path"
+    github_git push --quiet origin "$pr_branch" "$ticket"
+    info "GitHub : ancien ticket $ticket parti de $base, sans branche d'origine enregistree"
+}
+
 github_delete_branch() {
     local branch="$1"
     github_git push --quiet origin --delete "$branch"
@@ -202,6 +303,21 @@ gh_calls() {
 #            Execution de jgit
 ###############################################
 
+# Chemin par lequel jgit est appele : jgit.sh lui-meme, ou un lien symbolique
+# vers lui (installation dans le PATH, image Docker).
+jgit_invoked_path() {
+    printf '%s' "${JGIT_BIN_ALIAS:-$JGIT_BIN}"
+}
+
+# Installe un lien symbolique vers jgit.sh hors du depot jgit, et l'utilise pour
+# les appels suivants du scenario.
+jgit_use_symlink() {
+    mkdir -p "$SANDBOX/install/bin"
+    ln -s "$JGIT_BIN" "$SANDBOX/install/bin/jgit"
+    JGIT_BIN_ALIAS="$SANDBOX/install/bin/jgit"
+    info "jgit appele via le lien $JGIT_BIN_ALIAS"
+}
+
 # Lance jgit dans le depot de travail. La sortie complete est rangee dans
 # $JGIT_OUTPUT et le code de sortie dans $JGIT_STATUS.
 run_jgit() {
@@ -211,12 +327,35 @@ run_jgit() {
     printf '%s$ jgit %s\n' "$ASSERT_INDENT" "$*"
     # $JGIT_LAUNCHER est vide dans le cas nominal : jgit.sh est lance via son shebang.
     # shellcheck disable=SC2086
-    output=$(cd "$SANDBOX/repo" && $JGIT_LAUNCHER "$JGIT_BIN" "$@" < /dev/null 2>&1) || status=$?
+    output=$(cd "$SANDBOX/repo" && $JGIT_LAUNCHER "$(jgit_invoked_path)" "$@" < /dev/null 2>&1) || status=$?
 
     JGIT_OUTPUT="$output"
     JGIT_STATUS=$status
 
     printf '%s\n' "$output" | sed "s/^/${ASSERT_INDENT}| /"
+    printf '%s(code de sortie : %s)\n' "$ASSERT_INDENT" "$status"
+    return 0
+}
+
+# Variante de run_jgit qui garde separees la sortie standard (le document JSON,
+# dans $SANDBOX/stdout.json) et la sortie d'erreur. $JGIT_OUTPUT contient les
+# deux, pour que les verifications habituelles sur la sortie restent valables.
+run_jgit_json() {
+    local status=0
+
+    printf '%s$ jgit %s   (sortie standard capturee a part)\n' "$ASSERT_INDENT" "$*"
+    # shellcheck disable=SC2086
+    (cd "$SANDBOX/repo" && $JGIT_LAUNCHER "$(jgit_invoked_path)" "$@" \
+        < /dev/null > "$SANDBOX/stdout.json" 2> "$SANDBOX/stderr.txt") || status=$?
+
+    JGIT_STDOUT=$(cat "$SANDBOX/stdout.json")
+    JGIT_STDERR=$(cat "$SANDBOX/stderr.txt")
+    JGIT_OUTPUT="$JGIT_STDERR
+$JGIT_STDOUT"
+    JGIT_STATUS=$status
+
+    printf '%s\n' "$JGIT_STDERR" | sed "s/^/${ASSERT_INDENT}| /"
+    printf '%s\n' "$JGIT_STDOUT" | sed "s/^/${ASSERT_INDENT}> /"
     printf '%s(code de sortie : %s)\n' "$ASSERT_INDENT" "$status"
     return 0
 }
@@ -230,6 +369,27 @@ repo_write_file() {
     mkdir -p "$(dirname "$SANDBOX/repo/$path")"
     printf '%s\n' "$content" > "$SANDBOX/repo/$path"
     info "fichier $path modifie sans commit"
+}
+
+# Resout un conflit comme le ferait un developpeur (ou une IA) : ecrit la
+# version retenue du fichier, puis le marque resolu.
+repo_resolve_file() {
+    local path="$1"
+    local content="$2"
+
+    printf '%s\n' "$content" > "$SANDBOX/repo/$path"
+    repo_git add "$path"
+    info "conflit resolu sur $path"
+}
+
+# Marque un fichier resolu tel quel, marqueurs de conflit compris.
+repo_mark_resolved() {
+    repo_git add "$1"
+    info "$1 marque resolu tel quel"
+}
+
+repo_operation_state_file() {
+    printf '%s/.git/jgit/operation.state' "$SANDBOX/repo"
 }
 
 # Cree une branche locale sans y basculer.
@@ -251,6 +411,30 @@ repo_merge_branch() {
     repo_git merge --no-ff --quiet "$branch" -m "Merge $branch" || \
         assert_failed "merge de $branch" "le merge a echoue dans le depot de test"
     info "merge de $branch dans $(repo_current_branch)"
+}
+
+# Remplace le depot de travail par un nouveau clone du remote, avec les options
+# donnees (--depth, --single-branch…). C'est ainsi qu'arrive un agent de CI.
+repo_reclone() {
+    local conf="$SANDBOX/conf_local.sh.saved"
+
+    cp "$SANDBOX/repo/.jgit/conf_local.sh" "$conf"
+    rm -rf "$SANDBOX/repo"
+    # file:// : --depth est ignore pour un chemin local.
+    git clone --quiet "$@" "file://$SANDBOX/origin.git" "$SANDBOX/repo" 2>/dev/null || \
+        assert_failed "clone du remote" "options : $*"
+    mkdir -p "$SANDBOX/repo/.jgit"
+    cp "$conf" "$SANDBOX/repo/.jgit/conf_local.sh"
+    info "depot de travail reclone ($*)"
+}
+
+# Retire toute identite git : ni variables d'environnement, ni configuration,
+# et interdiction a git d'en deviner une (nom d'hote, utilisateur systeme).
+repo_remove_git_identity() {
+    unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL
+    git config --global --remove-section user 2>/dev/null
+    git config --global user.useConfigOnly true
+    info "aucune identite git configuree"
 }
 
 # Retire le remote : permet de verifier le garde-fou ensure_remote.
@@ -287,6 +471,16 @@ github_commit_file() {
     github_git commit --quiet -m "$message"
     github_git push --quiet origin "$branch"
     info "GitHub : $message pousse sur $branch"
+}
+
+# Meme chose, au nom d'une personne : son nom est l'auteur du commit, son
+# adresse <prenom en minuscules>@example.invalid.
+github_commit_file_as() {
+    local person="$1"
+    shift
+    local email
+    email="$(printf '%s' "$person" | tr '[:upper:]' '[:lower:]')@example.invalid"
+    GIT_AUTHOR_NAME="$person" GIT_AUTHOR_EMAIL="$email" github_commit_file "$@"
 }
 
 ###############################################
