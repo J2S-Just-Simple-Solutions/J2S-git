@@ -822,18 +822,22 @@ Fichier : [`tests/features/21_demo_archive.feature`](../tests/features/21_demo_a
 Fichier : [`tests/features/22_audit.feature`](../tests/features/22_audit.feature)
 
 `jgit audit` fait l'état des lieux de tous les tickets du serveur, puis de
-toutes les démos, et dit quoi lancer, dans l'ordre, et qui est concerné — sans
-rien modifier.
+toutes les démos, et dit quoi lancer, dans l'ordre, et qui doit intervenir —
+sans rien modifier.
 
 | Situation | Comportement attendu |
 | --- | --- |
-| Tout à jour | tickets `up_to_date` (base enregistrée, propriétaire, PR non validée, démos qui les contiennent) ; démo `up_to_date`, aucune action |
+| Tout à jour | tickets `up_to_date` (base enregistrée, propriétaire, PR non validée, personne à appeler, démos qui les contiennent) ; démo `up_to_date`, aucune action |
 | Base qui a avancé, sans conflit | tickets `to_rebase` avec `jgit feature rebase <id>` ; démo `feasible` : d'abord les tickets (chez eux), puis `jgit demo rebase <nom>` et sa raison |
-| Le rebase d'un ticket sur sa base coince | ticket `conflicts` : commit et auteur, fichier, **en face** le commit de la base et son auteur ; commande avec `--on-conflict pause` ; la démo le met de côté (`held`) et le reprendra depuis sa branche (`--from`) ; code de sortie 3 |
+| Le rebase d'un ticket sur sa base coince | ticket `conflicts` : le rapport dit qui doit intervenir et la commande (avec `--on-conflict pause`), sans fichiers ni commits ; le JSON garde le commit et son auteur, le fichier et **en face** le commit de la base et son auteur ; la démo le met de côté (`held`) et le reprendra depuis sa branche (`--from`) ; code de sortie 3 |
+| Plusieurs personnes sur la branche | seuls les auteurs des commits qui touchent les fichiers en conflit sont appelés |
+| Titre de la PR | lu sur GitHub, sans la clé du ticket, affiché sous le ticket |
+| Ancien ticket sans base enregistrée | base supposée (la base connue dont il s'écarte le moins) ; commande avec `--based-on`, qui passe |
+| Ticket sans commit d'init | `no_init`, à rebaser à la main ; code de sortie 3 |
 | Le ticket rebasé et résolu par son auteur | la démo est faisable avec `--from` ; la commande proposée passe, et la démo contient la version résolue |
-| Conflit entre deux tickets | dans la démo, à l'ajout : le nouveau commit (et son auteur) en face du ticket déjà dans la démo, qui est nommé |
+| Conflit entre deux tickets | dans la démo, à l'ajout : qui est concerné (l'auteur du nouveau commit, et en face celui du ticket déjà dans la démo) ; le détail dans le JSON |
 | Plusieurs conflits dans une démo | **tous** sont signalés, chacun avec son vis-à-vis |
-| Tickets hors démo | audités aussi ; rapport humain : le détail de ce qui coince, les autres comptés par propriétaire |
+| Tickets hors démo | audités aussi ; rapport humain : le détail de ce qui coince, les autres comptés par personne |
 | Base d'un ticket disparue | `base_missing`, commande avec `--based-on <branche>` ; `audit tickets` n'audite pas les démos |
 | Ticket livré | `delivered` ; annoncé comme retiré par le rebase de la démo |
 | Espace de travail modifié | l'audit fonctionne ; rien n'a bougé : fichier, branche, serveur ; aucune copie temporaire ne reste |

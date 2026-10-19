@@ -138,59 +138,87 @@ audit_other_side() {
   done <<< "$AUDIT_C_LINES"
 }
 
-# Le conflit courant, mis en forme : AUDIT_C_REPORT (texte, chaque ligne
-# précédée de $1), AUDIT_C_COMMIT_JSON et AUDIT_C_FILES_JSON. Rien n'est
-# affiché ici : l'appelant décide où le rapport va.
-audit_conflict_report() {
-  local indent="$1"
-  local info c_subject c_author c_email c_date text
-  local line code path kind other sha author email subject origin
-  local files_json=()
+# Le conflit courant, pour le JSON : AUDIT_C_COMMIT_JSON (le commit en
+# cause) et AUDIT_C_FILES_JSON (les fichiers, et en face de chacun le dernier
+# commit qui l'a touché). Le rapport humain n'en garde que les personnes
+# (audit_conflict_people) : c'est ce qu'il faut savoir pour agir.
+audit_conflict_json() {
+  local info c_subject c_author c_email c_date
+  local line code path kind k found sha author email subject origin
+  local o_path=() o_rest=() files="" j_path j_kind j_sha j_subject j_author j_email j_origin
+  local j_c_sha j_c_subject j_c_author j_c_email j_c_date
 
   info=$(git log -n 1 --format='%s%x1f%an%x1f%ae%x1f%ad' --date=short "$AUDIT_C_SHA" 2>/dev/null)
   IFS=$'\037' read -r c_subject c_author c_email c_date <<< "$info"
+  AUDIT_C_AUTHOR="$c_author"
 
-  printf -v text '%scommit %s « %s »\n%spar %s <%s>, le %s\n' \
-    "$indent" "${AUDIT_C_SHA:0:7}" "$c_subject" "$indent" "$c_author" "$c_email" "$c_date"
-  AUDIT_C_REPORT="$text"
+  # Sans sous-shell : un conflit peut toucher des dizaines de fichiers, et un
+  # audit compter des dizaines de conflits.
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    o_path[${#o_path[@]}]="${line%%$'\037'*}"
+    if [[ "$line" == *$'\037'* ]]; then o_rest[${#o_rest[@]}]="${line#*$'\037'}"; else o_rest[${#o_rest[@]}]=""; fi
+  done <<< "$AUDIT_C_OTHERS"
 
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     code="${line:0:2}"
     path="${line:3}"
-    kind=$(replay_conflict_kind "$code")
-    other=$(printf '%s\n' "$AUDIT_C_OTHERS" | awk -F '\037' -v p="$path" '$1 == p { print; exit }')
-    printf -v text '%s%s (%s)\n' "$indent" "$path" "$(replay_conflict_kind_label "$code")"
-    AUDIT_C_REPORT="$AUDIT_C_REPORT$text"
+    case "$code" in
+      UU) kind="both_modified" ;;
+      AA) kind="both_added" ;;
+      DD) kind="both_deleted" ;;
+      AU) kind="added_by_us" ;;
+      UA) kind="added_by_them" ;;
+      DU) kind="deleted_by_us" ;;
+      UD) kind="deleted_by_them" ;;
+      MK) kind="conflict_markers" ;;
+      *) kind="unknown" ;;
+    esac
+    json_str_into j_path "$path"
+    json_str_into j_kind "$kind"
 
-    if [[ "$other" == *$'\037'* ]]; then
-      IFS=$'\037' read -r path sha author email subject origin <<< "$other"
-      printf -v text '%s  en face : %s « %s » par %s <%s> (%s)\n' \
-        "$indent" "${sha:0:7}" "$subject" "$author" "$email" "$origin"
-      AUDIT_C_REPORT="$AUDIT_C_REPORT$text"
-      files_json[${#files_json[@]}]=$(json_object \
-        "$(json_kv_str path "$path")" \
-        "$(json_kv_str kind "$kind")" \
-        "$(json_kv other "$(json_object \
-            "$(json_kv_str sha "$sha")" \
-            "$(json_kv_str subject "$subject")" \
-            "$(json_kv_str author "$author")" \
-            "$(json_kv_str email "$email")" \
-            "$(json_kv_str origin "$origin")")")")
+    found=""
+    for k in ${o_path[@]+"${!o_path[@]}"}; do
+      if [[ "${o_path[$k]}" == "$path" ]]; then
+        found="${o_rest[$k]}"
+        break
+      fi
+    done
+    if [[ -n "$found" ]]; then
+      IFS=$'\037' read -r sha author email subject origin <<< "$found"
+      json_str_into j_sha "$sha"
+      json_str_into j_subject "$subject"
+      json_str_into j_author "$author"
+      json_str_into j_email "$email"
+      json_str_into j_origin "$origin"
+      files="${files:+$files,}{\"path\":$j_path,\"kind\":$j_kind,\"other\":{\"sha\":$j_sha,\"subject\":$j_subject,\"author\":$j_author,\"email\":$j_email,\"origin\":$j_origin}}"
     else
-      files_json[${#files_json[@]}]=$(json_object \
-        "$(json_kv_str path "$path")" "$(json_kv_str kind "$kind")" "$(json_kv_null other)")
+      files="${files:+$files,}{\"path\":$j_path,\"kind\":$j_kind,\"other\":null}"
     fi
   done <<< "$AUDIT_C_LINES"
 
-  AUDIT_C_COMMIT_JSON=$(json_object \
-    "$(json_kv_str sha "$AUDIT_C_SHA")" \
-    "$(json_kv_str subject "$c_subject")" \
-    "$(json_kv_str author "$c_author")" \
-    "$(json_kv_str email "$c_email")" \
-    "$(json_kv_str date "$c_date")")
-  AUDIT_C_FILES_JSON=$(json_array ${files_json[@]+"${files_json[@]}"})
+  json_str_into j_c_sha "$AUDIT_C_SHA"
+  json_str_into j_c_subject "$c_subject"
+  json_str_into j_c_author "$c_author"
+  json_str_into j_c_email "$c_email"
+  json_str_into j_c_date "$c_date"
+  AUDIT_C_COMMIT_JSON="{\"sha\":$j_c_sha,\"subject\":$j_c_subject,\"author\":$j_c_author,\"email\":$j_c_email,\"date\":$j_c_date}"
+  AUDIT_C_FILES_JSON="[$files]"
 }
+
+# Qui est concerné par le conflit courant d'une démo : l'auteur du commit qui
+# ne passe pas, et en face ceux qui ont touché les mêmes fichiers, chacun avec
+# sa provenance. « Camille (feature/B), Yann (feature/A) ».
+audit_conflict_people() {
+  { printf '%s\037%s\n' "$AUDIT_C_AUTHOR" "$AUDIT_C_TICKET"; printf '%s' "$AUDIT_C_OTHERS"; } \
+    | awk -F '\037' '
+        NR == 1 && $1 != "" { who = $1; from = ($2 == "-" ? "commit ajouté à la main" : $2) }
+        NR > 1 && NF >= 6 { who = $3; from = $6 }
+        who != "" && !seen[who "|" from]++ { printf "%s%s (%s)", (n++ ? ", " : ""), who, from }
+        { who = "" }'
+}
+
 
 # Progression, seulement face à un terminal : un audit de centaines de
 # tickets prend quelques dizaines de secondes.
@@ -213,13 +241,15 @@ audit_progress_end() {
 # audit_ticket_index.
 
 AUDIT_T_NAME=()
-AUDIT_T_STATUS=()      # up_to_date | to_rebase | conflicts | delivered | base_missing
+AUDIT_T_STATUS=()      # up_to_date | to_rebase | conflicts | delivered | base_missing | no_init
 AUDIT_T_BASE=()
 AUDIT_T_BEHIND=()
 AUDIT_T_COMMAND=()
 AUDIT_T_OWNER=()
 AUDIT_T_JSON_PART=()   # champs JSON calculés à l'évaluation (hors « demos »)
-AUDIT_T_REPORT=()      # rapport humain du conflit, s'il y en a un
+AUDIT_T_BASE_SOURCE=() # recorded | inferred
+AUDIT_T_TITLE=()       # titre de la PR sur GitHub
+AUDIT_T_PEOPLE=()      # qui doit intervenir, « A, B »
 AUDIT_T_DEMOS=()       # démos qui contiennent le ticket, séparées par des espaces
 
 # Index d'un ticket dans les tables, dans AUDIT_I (code 1 s'il n'y est pas).
@@ -268,44 +298,59 @@ audit_ticket_provenance() {
 # ticket et par information coûterait des dizaines de secondes sur un projet
 # de centaines de branches. AUDIT_P_NAME[k] / AUDIT_P_DATA[k] : les tickets du
 # serveur, du plus récemment modifié au plus ancien, et pour chacun
-# « base<US>auteur<US>email<US>date<US>sujet de sa PR ». Des tableaux, pas
-# une longue chaîne : bash 3.2 met un temps quadratique à y extraire une valeur.
+# « base<US>auteur<US>email<US>date<US>sujet de sa PR<US>titre de sa PR ».
+# Des tableaux, pas une longue chaîne : bash 3.2 met un temps quadratique à y
+# extraire une valeur.
 AUDIT_P_NAME=()
 AUDIT_P_DATA=()
+AUDIT_P_MEASURE=()     # « base<US>origine<US>avance<US>retard » (audit_tickets_measure)
 AUDIT_REMOTE_REFS=""
 AUDIT_MERGE_TREE=""
 AUDIT_REF_FEATURE=""
 AUDIT_REF_HOTFIX=""
+AUDIT_KNOWN_BASES=""   # bases connues, pour supposer celle d'un ticket qui n'en a pas
 AUDIT_DC_BASES=()      # caches « livré » par base (voir audit_delivered)
 AUDIT_DC_TICKETS=()
 
+# Les titres des PR ouvertes sur GitHub, « branche<TAB>titre ». Sans gh, sans
+# réseau, ou avec --no-fetch : rien, et le rapport s'en passe.
+audit_pr_titles() {
+  [[ "$JGIT_NO_FETCH" == true ]] && return 0
+  command -v gh >/dev/null 2>&1 || return 0
+  GH_PROMPT_DISABLED=1 gh pr list --state open --limit 1000 --json headRefName,title \
+    --jq '.[] | [.headRefName, .title] | @tsv' 2>/dev/null
+}
+
 # La table des tickets du serveur, une ligne par ticket :
-# « ticket<US>base<US>auteur<US>email<US>date<US>sujet de sa PR ». Trois
-# lectures, jointes par awk :
+# « ticket<US>base<US>auteur<US>email<US>date<US>sujet de sa PR<US>titre de sa PR<US>commit d'init ».
+# Quatre lectures, jointes par awk :
 #   B  sa base : le trailer jgit-based-on du commit d'init le plus récent qui
-#      nomme la branche (jgit-branch), comme read_based_on ;
+#      nomme la branche (jgit-branch), comme read_based_on — et ce commit ;
 #   P  le sujet du dernier commit de sa branche de PR ;
+#   G  le titre de sa PR sur GitHub ;
 #   T  les tickets, du plus récemment modifié au plus ancien.
 audit_tickets_table() {
   local remote="refs/remotes/$j2s_remote"
 
   {
-    git log --format="B%x09%(trailers:key=$trailer_branch,valueonly,separator=%x2C)%x09%(trailers:key=$trailer_based_on,valueonly,separator=%x2C)" \
+    git log --format="B%x09%(trailers:key=$trailer_branch,valueonly,separator=%x2C)%x09%(trailers:key=$trailer_based_on,valueonly,separator=%x2C)%x09%H" \
         --basic-regexp --grep="^$trailer_branch: " \
         $(git for-each-ref --format='%(refname)' "$remote/feature" "$remote/hotfix") 2>/dev/null
     git for-each-ref --format='P%09%(refname:strip=3)%09%(subject)' "$remote" 2>/dev/null \
       | sed -n "s#^P	$prefix_PR#P	#p"
+    audit_pr_titles | sed 's/^/G	/'
     git for-each-ref --sort=-committerdate \
         --format='T%09%(refname:strip=3)%09%(authorname)%09%(authoremail:trim)%09%(committerdate:iso-strict)' \
         "$remote/feature" "$remote/hotfix" 2>/dev/null
   } | awk -F '\t' '
-    $1 == "B" && $2 != "" && !($2 in base) { n = split($3, b, ","); base[$2] = b[n]; next }
+    $1 == "B" && $2 != "" && !($2 in base) { n = split($3, b, ","); base[$2] = b[n]; start[$2] = $4; next }
     $1 == "P" { pr[$2] = $3; next }
-    $1 == "T" { printf "%s\037%s\037%s\037%s\037%s\037%s\n", $2, base[$2], $3, $4, $5, pr[$2] }'
+    $1 == "G" && !($2 in title) { title[$2] = $3; next }
+    $1 == "T" { printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n", $2, base[$2], $3, $4, $5, pr[$2], title[$2], start[$2] }'
 }
 
 audit_tickets_preload() {
-  local line k=0
+  local line k=0 base
 
   AUDIT_P_NAME=()
   AUDIT_P_DATA=()
@@ -322,13 +367,37 @@ audit_tickets_preload() {
   AUDIT_REF_FEATURE=$(get_reference_branch feature 2>/dev/null)
   AUDIT_REF_HOTFIX=$(get_reference_branch hotfix 2>/dev/null)
 
-  # git merge-tree --write-tree (git 2.38) simule une fusion sans copie de
-  # travail : bien plus rapide que de rejouer chaque ticket.
-  if git merge-tree --write-tree HEAD HEAD >/dev/null 2>&1; then
+  # Les bases connues : la préprod, la production, et toute branche qu'un
+  # ticket ou une démo a enregistrée comme base (une branche de projet au long
+  # cours, par exemple).
+  AUDIT_KNOWN_BASES=""
+  audit_known_base_add "$AUDIT_REF_FEATURE"
+  audit_known_base_add "$AUDIT_REF_HOTFIX"
+  for k in ${AUDIT_P_DATA[@]+"${!AUDIT_P_DATA[@]}"}; do
+    base="${AUDIT_P_DATA[$k]%%$'\037'*}"
+    [[ -n "$base" ]] && audit_known_base_add "$base"
+  done
+  while IFS= read -r base; do
+    audit_known_base_add "$base"
+  done < <(git log --format="%(trailers:key=$trailer_based_on,valueonly,separator=%x0A)" \
+             --basic-regexp --grep="^$trailer_branch: $DEMO_PREFIX" \
+             $(git for-each-ref --format='%(refname)' "refs/remotes/$j2s_remote/$DEMO_PREFIX") 2>/dev/null \
+           | sed '/^$/d' | sort -u)
+
+  # git merge-tree --write-tree --merge-base (git 2.40) simule le rebase d'un
+  # ticket sans copie de travail : bien plus rapide que de le rejouer.
+  if git merge-tree --write-tree --merge-base=HEAD HEAD HEAD >/dev/null 2>&1; then
     AUDIT_MERGE_TREE=true
   else
     AUDIT_MERGE_TREE=false
   fi
+}
+
+audit_known_base_add() {
+  [[ -n "$1" ]] || return 0
+  audit_remote_exists "$1" || return 0
+  demo_list_has "$AUDIT_KNOWN_BASES" "$1" && return 0
+  AUDIT_KNOWN_BASES="${AUDIT_KNOWN_BASES:+$AUDIT_KNOWN_BASES }$1"
 }
 
 # Les données préchargées d'un ticket, dans AUDIT_V (vide s'il n'est pas sur
@@ -338,13 +407,16 @@ audit_preloaded() {
   local k="$2"
 
   AUDIT_V=""
+  AUDIT_K=""
   if [[ -n "$k" && "${AUDIT_P_NAME[$k]}" == "$ticket" ]]; then
     AUDIT_V="${AUDIT_P_DATA[$k]}"
+    AUDIT_K="$k"
     return 0
   fi
   for k in ${AUDIT_P_NAME[@]+"${!AUDIT_P_NAME[@]}"}; do
     if [[ "${AUDIT_P_NAME[$k]}" == "$ticket" ]]; then
       AUDIT_V="${AUDIT_P_DATA[$k]}"
+      AUDIT_K="$k"
       return 0
     fi
   done
@@ -353,6 +425,78 @@ audit_preloaded() {
 
 audit_remote_exists() {
   [[ "$AUDIT_REMOTE_REFS" == *$'\n'"$1"$'\n'* ]]
+}
+
+# Pour tous les tickets d'un coup : leur base (enregistrée, ou supposée : la
+# base connue dont ils s'écartent le moins, la référence de leur type en premier
+# à égalité) et leur avance et leur retard sur elle. Un appel à git par base
+# connue (%(ahead-behind), git 2.41) au lieu de plusieurs par ticket. À
+# appeler une fois les bases des démos connues. Sans git 2.41, rien :
+# audit_ticket_eval compte alors ticket par ticket.
+audit_tickets_measure() {
+  local k cand base line
+
+  AUDIT_P_MEASURE=()
+  git for-each-ref --count=1 --format='%(ahead-behind:HEAD)' >/dev/null 2>&1 || return 0
+
+  k=0
+  while IFS= read -r line; do
+    AUDIT_P_MEASURE[$k]="$line"
+    k=$((k + 1))
+  done < <(
+    {
+      for k in ${AUDIT_P_NAME[@]+"${!AUDIT_P_NAME[@]}"}; do
+        base="${AUDIT_P_DATA[$k]%%$'\037'*}"
+        printf 'R\t%s\t%s\n' "${AUDIT_P_NAME[$k]}" "$base"
+      done
+      for cand in $AUDIT_KNOWN_BASES; do
+        git for-each-ref --format="A%09$cand%09%(refname:strip=3)%09%(ahead-behind:refs/remotes/$j2s_remote/$cand)" \
+          "refs/remotes/$j2s_remote/feature" "refs/remotes/$j2s_remote/hotfix" 2>/dev/null
+      done
+    } | awk -F '\t' -v cands="$AUDIT_KNOWN_BASES" -v reff="$AUDIT_REF_FEATURE" -v refh="$AUDIT_REF_HOTFIX" '
+      $1 == "R" { order[++n] = $2; rec[$2] = $3; next }
+      $1 == "A" { split($4, ab, " "); ahead[$3, $2] = ab[1]; behind[$3, $2] = ab[2]; next }
+      END {
+        nc = split(cands, c, " ")
+        for (i = 1; i <= n; i++) {
+          t = order[i]
+          if (rec[t] != "") {
+            b = rec[t]; src = "recorded"
+          } else {
+            src = "inferred"
+            b = (substr(t, 1, 7) == "hotfix/") ? refh : reff
+            best = ((t, b) in ahead) ? ahead[t, b] : ""
+            for (j = 1; j <= nc; j++) {
+              if (!((t, c[j]) in ahead)) continue
+              if (best == "" || ahead[t, c[j]] + 0 < best + 0) { best = ahead[t, c[j]]; b = c[j] }
+            }
+          }
+          if ((t, b) in ahead) printf "%s\037%s\037%s\037%s\n", b, src, ahead[t, b], behind[t, b]
+          else printf "%s\037%s\037\037\n", b, src
+        }
+      }'
+  )
+}
+
+# La base d'un ticket qui n'en a pas d'enregistrée (créé avant que jgit
+# l'enregistre) : parmi les bases connues, celle dont il s'écarte le moins. La
+# référence du projet pour son type passe en premier à égalité. AUDIT_V.
+audit_infer_base() {
+  local ticket_ref="refs/remotes/$j2s_remote/$1"
+  local type="$2"
+  local first cand n best="" best_n="" candidates
+
+  if [[ "$type" == "hotfix" ]]; then first="$AUDIT_REF_HOTFIX"; else first="$AUDIT_REF_FEATURE"; fi
+  candidates="$first $AUDIT_KNOWN_BASES"
+  for cand in $candidates; do
+    audit_remote_exists "$cand" || continue
+    n=$(git rev-list --count "refs/remotes/$j2s_remote/$cand..$ticket_ref" 2>/dev/null) || continue
+    if [[ -z "$best_n" || $n -lt $best_n ]]; then
+      best="$cand"
+      best_n=$n
+    fi
+  done
+  AUDIT_V="${best:-$first}"
 }
 
 # Le ticket est-il livré dans cette base ? Un cache par base : les tickets
@@ -375,43 +519,49 @@ audit_delivered() {
   demo_ticket_is_delivered "$ticket"
 }
 
-# Le rebase d'un ticket sur sa base passerait-il ? Code 0 : oui ; 1 : conflit
-# (AUDIT_C_* renseignés). git merge-tree juge le résultat d'ensemble ; à
-# défaut (git trop ancien), les commits sont rejoués un par un.
+# Le rebase d'un ticket sur sa base passerait-il ? Comme jgit feature rebase,
+# seuls ses propres commits comptent : ceux qui suivent son commit d'init
+# (start). Code 0 : oui ; 1 : conflit (AUDIT_C_* renseignés). git merge-tree
+# juge l'ensemble en prenant le commit d'init pour ancêtre commun ; à défaut
+# (git avant 2.40), les commits sont rejoués un par un.
 audit_ticket_rebase_check() {
   local ticket="$1"
   local base="$2"
+  local start="$3"
   local ticket_ref="refs/remotes/$j2s_remote/$ticket" base_ref="refs/remotes/$j2s_remote/$base"
-  local out status files messages path code fork sha info author email subject
+  local out status files messages path code fork sha paths=()
 
   if [[ "$AUDIT_MERGE_TREE" != true ]]; then
     AUDIT_PLAN=()
     while IFS= read -r sha; do
       [[ -n "$sha" ]] || continue
       AUDIT_PLAN[${#AUDIT_PLAN[@]}]="$sha"$'\037'"$ticket"$'\037'"ticket_rebase"
-    done < <(demo_ticket_log "$ticket" "$base")
+    done < <(git log --first-parent --reverse --no-merges --format=%H "$start..$ticket_ref" 2>/dev/null)
     AUDIT_TICKET_BASE="$base"
     audit_replay "$base_ref" audit_ticket_provenance
-    [[ $? -eq 1 ]] && return 1
-    return 0
+    [[ $? -eq 1 ]] || return 0
+    AUDIT_C_FILES=$(printf '%s' "$AUDIT_C_LINES" | cut -c4-)
+    return 1
   fi
 
-  out=$(LC_ALL=C git -c core.quotePath=false merge-tree --write-tree --name-only "$base_ref" "$ticket_ref" 2>/dev/null)
+  out=$(LC_ALL=C git -c core.quotePath=false merge-tree --write-tree --name-only \
+          --merge-base="$start" "$base_ref" "$ticket_ref" 2>/dev/null)
   status=$?
   [[ $status -eq 1 ]] || return 0
 
   # Sortie : l'arbre, les fichiers en conflit, une ligne vide, les messages.
   files=$(printf '%s\n' "$out" | sed -n '2,/^$/p' | sed '/^$/d')
   messages=$(printf '%s\n' "$out" | sed -n '/^$/,$p')
-  fork=$(git merge-base "$base_ref" "$ticket_ref" 2>/dev/null)
+  fork=$(git merge-base "$base_ref" "$start" 2>/dev/null)
 
   AUDIT_C_TICKET="$ticket"
   AUDIT_C_STEP="ticket_rebase"
-  AUDIT_C_SHA=""
   AUDIT_C_LINES=""
-  AUDIT_C_OTHERS=""
+  AUDIT_C_FILES="$files"
+  paths=()
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
+    paths[${#paths[@]}]="$path"
     case "$messages" in
       *"CONFLICT (add/add)"*"$path"*) code="AA" ;;
       *"CONFLICT (modify/delete): $path deleted in $ticket_ref"*) code="UD" ;;
@@ -419,84 +569,165 @@ audit_ticket_rebase_check() {
       *) code="UU" ;;
     esac
     AUDIT_C_LINES="$AUDIT_C_LINES$code $path"$'\n'
-
-    # Côté ticket : le commit du ticket qui a touché le fichier en dernier.
-    if [[ -z "$AUDIT_C_SHA" ]]; then
-      AUDIT_C_SHA=$(git log -n 1 --format=%H "$fork..$ticket_ref" -- "$path" 2>/dev/null)
-    fi
-    # En face : le dernier commit de la base qui l'a touché depuis le départ du ticket.
-    info=$(git log -n 1 --format='%H%x1f%an%x1f%ae%x1f%s' "$fork..$base_ref" -- "$path" 2>/dev/null)
-    if [[ -n "$info" ]]; then
-      IFS=$'\037' read -r sha author email subject <<< "$info"
-      AUDIT_C_OTHERS="$AUDIT_C_OTHERS$path"$'\037'"$sha"$'\037'"$author"$'\037'"$email"$'\037'"$subject"$'\037'"$base"$'\n'
-    else
-      AUDIT_C_OTHERS="$AUDIT_C_OTHERS$path"$'\n'
-    fi
   done <<< "$files"
 
+  # Côté ticket : le dernier de ses commits qui a touché ces fichiers.
+  AUDIT_C_SHA=$(git log -n 1 --format=%H "$start..$ticket_ref" -- ${paths[@]+"${paths[@]}"} 2>/dev/null)
   [[ -n "$AUDIT_C_SHA" ]] || AUDIT_C_SHA=$(git rev-parse "$ticket_ref")
+
+  # En face : pour chaque fichier, le dernier commit de la base qui l'a touché
+  # depuis le départ du ticket. Un seul parcours de l'historique pour tous les
+  # fichiers : un par fichier coûtait des secondes sur un gros projet.
+  AUDIT_C_OTHERS=$(
+    {
+      printf '%s\n' "$files"
+      printf '\036\n'
+      git -c core.quotePath=false log --format='%x1d%H%x1f%an%x1f%ae%x1f%s' --name-only \
+        "$fork..$base_ref" -- ${paths[@]+"${paths[@]}"} 2>/dev/null
+    } | awk -v base="$base" '
+        BEGIN { phase = 0 }
+        $0 == "\036" { phase = 1; next }
+        phase == 0 { if ($0 != "") { want[$0] = 1; order[++n] = $0 } next }
+        /^\035/ { info = substr($0, 2); next }
+        $0 != "" && ($0 in want) && !($0 in found) { found[$0] = info }
+        END {
+          for (i = 1; i <= n; i++) {
+            p = order[i]
+            if (p in found) printf "%s\037%s\037%s\n", p, found[p], base
+            else printf "%s\n", p
+          }
+        }')
   return 1
 }
 
-# Évalue un ticket (s'il ne l'a pas déjà été) : base, retard, livraison, et
-# faisabilité de son rebase. Sans sous-shell pour le JSON : il y en a des
-# centaines.
+# Qui doit intervenir sur le rebase d'un ticket qui coince : ceux qui ont écrit,
+# depuis son commit d'init, les commits qui touchent les fichiers en conflit —
+# hors commits de la base fusionnés dans le ticket, qui ne sont pas les siens.
+# Une ligne « nom<US>email » par personne (un même nom n'apparaît qu'une fois).
+#   audit_ticket_people <start> <ticket_ref> <base_ref> <fichiers, un par ligne>
+audit_ticket_people() {
+  local start="$1"
+  local ticket_ref="$2"
+  local base_ref="$3"
+  local paths=() path
+
+  while IFS= read -r path; do
+    [[ -n "$path" ]] && paths[${#paths[@]}]="$path"
+  done <<< "$4"
+  git log --no-merges --format='%an%x1f%ae' "$ticket_ref" "^$start" "^$base_ref" \
+      -- ${paths[@]+"${paths[@]}"} 2>/dev/null \
+    | awk -F '\037' '$1 != "" && !seen[tolower($1)]++'
+}
+
+# Évalue un ticket (s'il ne l'a pas déjà été) : base, retard, livraison,
+# faisabilité de son rebase, et qui doit intervenir. Sans sous-shell pour le
+# JSON : il y en a des centaines.
 audit_ticket_eval() {
   local ticket="$1"
-  local i base base_recorded=true base_ref behind=0 status command="" conflict_json="null"
-  local type="${ticket%%/*}" id="${ticket#*/}"
-  local owner_name="" owner_email="" last_activity="" pr_subject pr_validated="null" report=""
-  local j_ticket j_type j_id j_base j_status j_owner j_email j_last j_command
+  local i base base_source="recorded" base_ref ticket_ref counts="" behind=0 ahead=0 start=""
+  local status command="" conflict_json="null" people="" line name mail
+  local type="${ticket%%/*}" id="${ticket#*/}" reference
+  local owner_name="" owner_email="" last_activity="" pr_subject="" pr_title="" pr_validated="null"
+  local j_ticket j_type j_id j_base j_status j_owner j_email j_last j_command j_title j_name j_mail concerned=""
 
   audit_ticket_register "$ticket"
   i="$AUDIT_I"
   [[ -n "${AUDIT_T_STATUS[$i]}" ]] && return 0
 
   audit_preloaded "$ticket" "$i"
-  IFS=$'\037' read -r base owner_name owner_email last_activity pr_subject <<< "$AUDIT_V"
+  IFS=$'\037' read -r base owner_name owner_email last_activity pr_subject pr_title start <<< "$AUDIT_V"
+  if [[ "$type" == "hotfix" ]]; then reference="$AUDIT_REF_HOTFIX"; else reference="$AUDIT_REF_FEATURE"; fi
 
-  # Sa base : celle enregistrée à sa création, sinon la référence du projet.
-  if [[ -z "$base" ]]; then
-    base_recorded=false
-    if [[ "$type" == "hotfix" ]]; then base="$AUDIT_REF_HOTFIX"; else base="$AUDIT_REF_FEATURE"; fi
+  # Sa base : celle enregistrée à sa création ; à défaut, la base connue dont
+  # il s'écarte le moins (un ticket parti d'une branche de projet n'a rien à
+  # faire sur la préprod). Mesurée d'avance pour tous les tickets si git le
+  # permet (audit_tickets_measure), sinon ici.
+  if [[ -n "$AUDIT_K" && -n "${AUDIT_P_MEASURE[$AUDIT_K]}" ]]; then
+    IFS=$'\037' read -r base base_source ahead behind <<< "${AUDIT_P_MEASURE[$AUDIT_K]}"
+    [[ -n "$ahead" ]] && counts="$behind $ahead"
+  elif [[ -z "$base" ]]; then
+    base_source="inferred"
+    audit_infer_base "$ticket" "$type"
+    base="$AUDIT_V"
   fi
   base_ref="refs/remotes/$j2s_remote/$base"
+  ticket_ref="refs/remotes/$j2s_remote/$ticket"
 
   if [[ "$pr_subject" == "$prefix_init_commit $ticket $suffix_init_commit" ]]; then
     pr_validated=false
   elif [[ -n "$pr_subject" ]]; then
     pr_validated=true
   fi
+  pr_title=$(audit_title_without_key "$pr_title" "$id")
+
+  # La commande de rebase : la base supposée se donne explicitement, sinon
+  # jgit feature rebase partirait sur la référence du projet.
+  command="jgit $type rebase $id"
+  if [[ "$base_source" == "inferred" && "$base" != "$reference" ]]; then
+    command="$command --based-on $base"
+  fi
 
   if [[ -z "$base" ]] || ! audit_remote_exists "$base"; then
     status="base_missing"
     command="jgit $type rebase $id --based-on <branche>"
+  elif audit_delivered "$ticket" "$base"; then
+    status="delivered"
   else
-    if audit_delivered "$ticket" "$base"; then
+    [[ -n "$counts" ]] || counts=$(git rev-list --left-right --count "$base_ref...$ticket_ref" 2>/dev/null)
+    behind="${counts%%[[:space:]]*}"
+    ahead="${counts##*[[:space:]]}"
+    if [[ "${ahead:-0}" -eq 0 ]]; then
+      # Tous ses commits sont déjà dans sa base.
       status="delivered"
+    elif [[ "${behind:-0}" -eq 0 ]]; then
+      status="up_to_date"
     else
-      behind=$(git rev-list --count "refs/remotes/$j2s_remote/$ticket..$base_ref" 2>/dev/null)
-      if [[ "${behind:-0}" -eq 0 ]]; then
-        status="up_to_date"
-      elif audit_ticket_rebase_check "$ticket" "$base"; then
+      # Son commit d'init : celui qui porte sa branche d'origine, sinon le
+      # dernier commit d'init qui lui est propre.
+      if [[ -z "$start" ]]; then
+        start=$(git log --first-parent -n 1 --format=%H -F --grep="$suffix_init_commit" "$base_ref..$ticket_ref" 2>/dev/null)
+      fi
+      if [[ -z "$start" ]]; then
+        # Sans commit d'init, jgit ne sait pas quels commits sont les siens.
+        status="no_init"
+      elif audit_ticket_rebase_check "$ticket" "$base" "$start"; then
         status="to_rebase"
-        command="jgit $type rebase $id"
       else
         status="conflicts"
-        command="jgit $type rebase $id --on-conflict pause"
-        audit_conflict_report "      "
-        report="${AUDIT_C_REPORT%$'\n'}"
+        command="$command --on-conflict pause"
+        audit_conflict_json
         conflict_json="{\"commit\":$AUDIT_C_COMMIT_JSON,\"files\":$AUDIT_C_FILES_JSON}"
+        people=$(audit_ticket_people "$start" "$ticket_ref" "$base_ref" "$AUDIT_C_FILES")
       fi
     fi
   fi
+  case "$status" in
+    up_to_date|delivered) command="" ;;
+    no_init) command="" ;;
+  esac
+
+  # Qui doit intervenir : pour un conflit, les auteurs des commits en cause ;
+  # sinon, le dernier à avoir travaillé sur la branche.
+  case "$status" in
+    up_to_date|delivered) people="" ;;
+    *) [[ -n "$people" ]] || people="$owner_name"$'\037'"$owner_email" ;;
+  esac
+  AUDIT_T_PEOPLE[$i]=""
+  while IFS=$'\037' read -r name mail; do
+    [[ -n "$name" ]] || continue
+    AUDIT_T_PEOPLE[$i]="${AUDIT_T_PEOPLE[$i]:+${AUDIT_T_PEOPLE[$i]}, }$name"
+    json_str_into j_name "$name"
+    if [[ -n "$mail" ]]; then json_str_into j_mail "$mail"; else j_mail=null; fi
+    concerned="${concerned:+$concerned,}{\"author\":$j_name,\"email\":$j_mail}"
+  done <<< "$people"
 
   AUDIT_T_STATUS[$i]="$status"
   AUDIT_T_BASE[$i]="$base"
+  AUDIT_T_BASE_SOURCE[$i]="$base_source"
   AUDIT_T_BEHIND[$i]="${behind:-0}"
   AUDIT_T_COMMAND[$i]="$command"
   AUDIT_T_OWNER[$i]="$owner_name"
-  AUDIT_T_REPORT[$i]="$report"
+  AUDIT_T_TITLE[$i]="$pr_title"
 
   json_str_into j_ticket "$ticket"
   json_str_into j_type "$type"
@@ -507,8 +738,9 @@ audit_ticket_eval() {
   if [[ -n "$owner_email" ]]; then json_str_into j_email "$owner_email"; else j_email=null; fi
   if [[ -n "$last_activity" ]]; then json_str_into j_last "$last_activity"; else j_last=null; fi
   if [[ -n "$command" ]]; then json_str_into j_command "$command"; else j_command=null; fi
+  if [[ -n "$pr_title" ]]; then json_str_into j_title "$pr_title"; else j_title=null; fi
 
-  AUDIT_T_JSON_PART[$i]="{\"ticket\":$j_ticket,\"type\":$j_type,\"id\":$j_id,\"base\":$j_base,\"base_recorded\":$base_recorded,\"behind_base\":${behind:-0},\"status\":$j_status,\"delivered\":$([[ "$status" == delivered ]] && echo true || echo false),\"pr_validated\":$pr_validated,\"owner\":{\"author\":$j_owner,\"email\":$j_email},\"last_activity\":$j_last,\"command\":$j_command,\"conflict\":$conflict_json}"
+  AUDIT_T_JSON_PART[$i]="{\"ticket\":$j_ticket,\"type\":$j_type,\"id\":$j_id,\"pr_title\":$j_title,\"base\":$j_base,\"base_source\":\"$base_source\",\"behind_base\":${behind:-0},\"status\":$j_status,\"delivered\":$([[ "$status" == delivered ]] && echo true || echo false),\"pr_validated\":$pr_validated,\"owner\":{\"author\":$j_owner,\"email\":$j_email},\"last_activity\":$j_last,\"concerned\":[$concerned],\"command\":$j_command,\"conflict\":$conflict_json}"
 }
 
 # L'objet JSON complet d'un ticket : ce que l'évaluation a calculé, plus les
@@ -525,12 +757,66 @@ audit_ticket_json() {
   AUDIT_T_JSON="${part%\}},\"demos\":[$demos]}"
 }
 
-# Rapport humain des tickets : le détail de ce qui coince, et des tickets des
-# démos ; pour les autres tickets à rebaser, un compte par propriétaire — sur
-# un projet de centaines de branches, la liste complète noierait l'essentiel
-# (elle est dans --json).
+# Le titre d'une PR sans la clé du ticket qu'il répète souvent en tête :
+# « F4DEV-731 - OpenSearch — … » → « OpenSearch — … » ; vide s'il n'y a que la clé.
+audit_title_without_key() {
+  local title="$1"
+  local id="$2"
+  local rest
+
+  case "$title" in
+    "$id") printf '' ; return ;;
+    "$id "*|"$id:"*|"$id-"*)
+      rest="${title#"$id"}"
+      # Les tirets longs se retirent entiers : hors locale UTF-8, « ? » ne
+      # désignerait qu'un de leurs octets.
+      while :; do
+        case "$rest" in
+          "—"*) rest="${rest#"—"}" ;;
+          "–"*) rest="${rest#"–"}" ;;
+          [[:space:]]*|-*|:*) rest="${rest#?}" ;;
+          *) break ;;
+        esac
+      done
+      printf '%s' "${rest:-$title}"
+      ;;
+    *) printf '%s' "$title" ;;
+  esac
+}
+
+# « Yann (12), Camille (3) » : combien de tickets attendent chaque personne,
+# sans tenir compte de la casse (« barry » et « Barry » sont la même personne).
+# Une ligne par ticket, « A, B » quand plusieurs personnes y sont attendues.
+audit_count_people() {
+  printf '%s' "$1" | awk -F ', ' '
+      { for (i = 1; i <= NF; i++) if ($i != "") { k = tolower($i); if (!(k in name)) name[k] = $i; c[k]++ } }
+      END { for (k in c) printf "%d\t%s\n", c[k], name[k] }' \
+    | sort -t "$(printf '\t')" -k1,1nr -k2,2 \
+    | awk -F '\t' '{ printf "%s%s (%s)", (NR > 1 ? ", " : ""), $2, $1 }'
+}
+
+# « develop », ou « ripolin (base supposée) » pour un ticket sans base enregistrée.
+audit_ticket_base_text() {
+  local i="$1"
+
+  if [[ "${AUDIT_T_BASE_SOURCE[$i]}" == "inferred" ]]; then
+    printf '%s (base supposée)' "${AUDIT_T_BASE[$i]}"
+  else
+    printf '%s' "${AUDIT_T_BASE[$i]:-?}"
+  fi
+}
+
+# Rapport humain des tickets : pour ce qui demande une action, qui doit
+# intervenir et quoi lancer — le détail des fichiers et des commits est dans
+# --json. Les tickets hors démo simplement à rebaser sont comptés par personne :
+# sur un projet de centaines de branches, la liste complète noierait l'essentiel.
 audit_print_tickets() {
-  local order="" order0="" order1="" order2="" order3="" i status who demos up=0 delivered=0 others=0 owners=""
+  local order0="" order1="" order2="" order3="" i
+
+  AUDIT_PRINT_UP=0
+  AUDIT_PRINT_DELIVERED=0
+  AUDIT_PRINT_OTHERS=""
+  AUDIT_PRINT_NO_INIT=""
 
   printf "\n%sTICKETS%s (%s)\n" "$C_BLUE" "$C_RESET" "${#AUDIT_T_NAME[@]}"
 
@@ -538,53 +824,75 @@ audit_print_tickets() {
   for i in ${AUDIT_T_NAME[@]+"${!AUDIT_T_NAME[@]}"}; do
     case "${AUDIT_T_STATUS[$i]}" in
       conflicts) order0="$order0 $i" ;;
-      base_missing) order1="$order1 $i" ;;
+      base_missing|no_init) order1="$order1 $i" ;;
       to_rebase) order2="$order2 $i" ;;
       *) order3="$order3 $i" ;;
     esac
   done
-  order="$order0 $order1 $order2 $order3"
 
-  for i in $order; do
-    status="${AUDIT_T_STATUS[$i]}"
-    who="${AUDIT_T_OWNER[$i]:-?}"
-    demos=""
-    [[ -n "${AUDIT_T_DEMOS[$i]}" ]] && demos=" · démos : ${AUDIT_T_DEMOS[$i]}"
-    case "$status" in
-      conflicts)
-        printf "  %s✖ %s%s — en retard de %s commit(s) sur %s, son rebase coince\n" \
-          "$C_RED" "${AUDIT_T_NAME[$i]}" "$C_RESET" "${AUDIT_T_BEHIND[$i]}" "${AUDIT_T_BASE[$i]}"
-        printf "%s\n" "${AUDIT_T_REPORT[$i]}"
-        printf "      → %s%s%s   (propriétaire : %s%s)\n" "$C_CYAN" "${AUDIT_T_COMMAND[$i]}" "$C_RESET" "$who" "$demos"
-        ;;
-      base_missing)
-        printf "  %s✖ %s%s — sa base %s n'existe plus\n" "$C_RED" "${AUDIT_T_NAME[$i]}" "$C_RESET" "${AUDIT_T_BASE[$i]:-?}"
-        printf "      → %s%s%s   (propriétaire : %s%s)\n" "$C_CYAN" "${AUDIT_T_COMMAND[$i]}" "$C_RESET" "$who" "$demos"
-        ;;
-      to_rebase)
-        if [[ -n "${AUDIT_T_DEMOS[$i]}" ]]; then
-          printf "  %s↻ %s%s — en retard de %s commit(s) sur %s, son rebase passe\n" \
-            "$C_YELLOW" "${AUDIT_T_NAME[$i]}" "$C_RESET" "${AUDIT_T_BEHIND[$i]}" "${AUDIT_T_BASE[$i]}"
-          printf "      → %s%s%s   (propriétaire : %s%s)\n" "$C_CYAN" "${AUDIT_T_COMMAND[$i]}" "$C_RESET" "$who" "$demos"
-        else
-          others=$((others + 1))
-          owners="$owners$who"$'\n'
-        fi
-        ;;
-      up_to_date) up=$((up + 1)) ;;
-      delivered) delivered=$((delivered + 1)) ;;
-    esac
+  for i in $order0 $order1; do
+    audit_print_ticket "$i"
   done
+  if [[ -n "$AUDIT_PRINT_NO_INIT" ]]; then
+    printf "  %s✖ %s autre(s) ticket(s) en retard, sans commit d'init : à rebaser à la main%s\n" \
+      "$C_RED" "$(demo_count_lines "$AUDIT_PRINT_NO_INIT")" "$C_RESET"
+    printf "      à faire par : %s\n" "$(audit_count_people "$AUDIT_PRINT_NO_INIT")"
+  fi
+  for i in $order2 $order3; do
+    audit_print_ticket "$i"
+  done
+  if [[ -n "$AUDIT_PRINT_OTHERS" ]]; then
+    printf "  %s↻ %s autre(s) ticket(s) en retard sur leur base, rebase sans conflit%s\n" \
+      "$C_YELLOW" "$(demo_count_lines "$AUDIT_PRINT_OTHERS")" "$C_RESET"
+    printf "      à faire par : %s\n" "$(audit_count_people "$AUDIT_PRINT_OTHERS")"
+  fi
+  if [[ $((AUDIT_PRINT_UP + AUDIT_PRINT_DELIVERED)) -gt 0 ]]; then
+    printf "  %s✔ %s à jour sur leur base, %s déjà livré(s)%s\n" "$C_GREEN" "$AUDIT_PRINT_UP" "$AUDIT_PRINT_DELIVERED" "$C_RESET"
+  fi
+  printf "  %sLe détail, ticket par ticket (fichiers, commits) : jgit audit tickets --json%s\n" "$C_DIM" "$C_RESET"
+}
 
-  if [[ $others -gt 0 ]]; then
-    printf "  %s↻ %s autre(s) ticket(s) en retard sur leur base, rebase sans conflit%s — par propriétaire : %s\n" \
-      "$C_YELLOW" "$others" "$C_RESET" \
-      "$(printf '%s' "$owners" | sed '/^$/d' | sort | uniq -c | sort -rn | awk '{ n = $1; $1 = ""; sub(/^ /, ""); printf "%s%s (%s)", (NR > 1 ? ", " : ""), $0, n }')"
-  fi
-  if [[ $((up + delivered)) -gt 0 ]]; then
-    printf "  %s✔ %s à jour sur leur base, %s déjà livré(s)%s\n" "$C_GREEN" "$up" "$delivered" "$C_RESET"
-  fi
-  printf "  %sLa liste complète, ticket par ticket : jgit audit tickets --json%s\n" "$C_DIM" "$C_RESET"
+# Un ticket du rapport humain : ce qui se passe, le titre de sa PR, qui doit
+# intervenir, quoi lancer. Les tickets hors démo simplement à rebaser, ou sans
+# commit d'init, sont mis de côté pour être comptés par personne.
+audit_print_ticket() {
+  local i="$1"
+  local name="${AUDIT_T_NAME[$i]}" demos="" command="${AUDIT_T_COMMAND[$i]}"
+
+  [[ -n "${AUDIT_T_DEMOS[$i]}" ]] && demos="   (démos : ${AUDIT_T_DEMOS[$i]})"
+  case "${AUDIT_T_STATUS[$i]}" in
+    conflicts)
+      printf "  %s✖ %s%s — en retard de %s commit(s) sur %s : son rebase coince\n" \
+        "$C_RED" "$name" "$C_RESET" "${AUDIT_T_BEHIND[$i]}" "$(audit_ticket_base_text "$i")"
+      ;;
+    base_missing)
+      printf "  %s✖ %s%s — sa base %s n'existe plus\n" "$C_RED" "$name" "$C_RESET" "${AUDIT_T_BASE[$i]:-?}"
+      ;;
+    no_init)
+      if [[ -z "${AUDIT_T_DEMOS[$i]}" ]]; then
+        AUDIT_PRINT_NO_INIT="$AUDIT_PRINT_NO_INIT${AUDIT_T_PEOPLE[$i]:-?}"$'\n'
+        return 0
+      fi
+      printf "  %s✖ %s%s — en retard sur %s, sans commit d'init : jgit ne sait pas quels commits sont les siens\n" \
+        "$C_RED" "$name" "$C_RESET" "$(audit_ticket_base_text "$i")"
+      command="à rebaser à la main"
+      ;;
+    to_rebase)
+      if [[ -z "${AUDIT_T_DEMOS[$i]}" ]]; then
+        AUDIT_PRINT_OTHERS="$AUDIT_PRINT_OTHERS${AUDIT_T_PEOPLE[$i]:-?}"$'\n'
+        return 0
+      fi
+      printf "  %s↻ %s%s — en retard de %s commit(s) sur %s, son rebase passe\n" \
+        "$C_YELLOW" "$name" "$C_RESET" "${AUDIT_T_BEHIND[$i]}" "$(audit_ticket_base_text "$i")"
+      ;;
+    up_to_date) AUDIT_PRINT_UP=$((AUDIT_PRINT_UP + 1)); return 0 ;;
+    delivered) AUDIT_PRINT_DELIVERED=$((AUDIT_PRINT_DELIVERED + 1)); return 0 ;;
+    *) return 0 ;;
+  esac
+
+  [[ -n "${AUDIT_T_TITLE[$i]}" ]] && printf "      « %s »\n" "${AUDIT_T_TITLE[$i]}"
+  printf "      à faire par : %s\n" "${AUDIT_T_PEOPLE[$i]:-?}"
+  printf "      → %s%s%s%s\n" "$C_CYAN" "$command" "$C_RESET" "$demos"
 }
 
 ###############################################
@@ -884,10 +1192,10 @@ audit_demo_eval() {
     fi
 
     AUDIT_D_STATUS="conflicts"
-    audit_conflict_report "        "
+    audit_conflict_json
     c_ticket[${#c_ticket[@]}]="$ticket"
     c_step[${#c_step[@]}]="$AUDIT_C_STEP"
-    c_report[${#c_report[@]}]="$AUDIT_C_REPORT"
+    c_report[${#c_report[@]}]="$(audit_conflict_people)"
     c_commit[${#c_commit[@]}]="$AUDIT_C_COMMIT_JSON"
     c_files[${#c_files[@]}]="$AUDIT_C_FILES_JSON"
     conflict_steps=$(demo_list_add "$conflict_steps" "$AUDIT_C_STEP")
@@ -913,7 +1221,7 @@ audit_demo_eval() {
     fi
 
     printf "    %s✖ Conflit : %s%s (%s)\n" "$C_RED" "$label" "$C_RESET" "$(audit_step_label "${c_step[$k]}")"
-    printf '%s' "${c_report[$k]}"
+    printf "        concerne : %s\n" "${c_report[$k]:-?}"
     printf "        → résoudre dans la démo : %s\n" "$resolve"
     printf "        → ou retirer : %s\n" "$drop"
     conflicts_json[${#conflicts_json[@]}]=$(json_object \
@@ -944,9 +1252,9 @@ audit_demo_eval() {
     audit_ticket_index "$ticket"
     t="$AUDIT_I"
     case "${AUDIT_T_STATUS[$t]}" in
-      conflicts) reason="d'abord rebaser le ticket chez lui : son rebase sur ${AUDIT_T_BASE[$t]} coince (voir TICKETS) — propriétaire : ${AUDIT_T_OWNER[$t]:-?}" ;;
-      base_missing) reason="d'abord rebaser le ticket chez lui : sa base ${AUDIT_T_BASE[$t]:-?} n'existe plus — propriétaire : ${AUDIT_T_OWNER[$t]:-?}" ;;
-      *) reason="d'abord rebaser le ticket chez lui : en retard de ${AUDIT_T_BEHIND[$t]} commit(s) sur ${AUDIT_T_BASE[$t]} — propriétaire : ${AUDIT_T_OWNER[$t]:-?}" ;;
+      conflicts) reason="d'abord rebaser le ticket chez lui : son rebase sur $(audit_ticket_base_text "$t") coince — à faire par : ${AUDIT_T_PEOPLE[$t]:-?}" ;;
+      base_missing) reason="d'abord rebaser le ticket chez lui : sa base ${AUDIT_T_BASE[$t]:-?} n'existe plus — à faire par : ${AUDIT_T_PEOPLE[$t]:-?}" ;;
+      *) reason="d'abord rebaser le ticket chez lui : en retard de ${AUDIT_T_BEHIND[$t]} commit(s) sur $(audit_ticket_base_text "$t") — à faire par : ${AUDIT_T_PEOPLE[$t]:-?}" ;;
     esac
     audit_demo_action "${AUDIT_T_COMMAND[$t]}" "$reason" "ticket"
     prereq_json[${#prereq_json[@]}]=$(json_object \
@@ -1010,7 +1318,7 @@ audit_cmd() {
   local target="$2"
   local branches="" branch ticket i n total skipped=0
   local ticket_items=() demo_items=()
-  local t_up=0 t_rebase=0 t_conflicts=0 t_delivered=0 t_missing=0
+  local t_up=0 t_rebase=0 t_conflicts=0 t_delivered=0 t_missing=0 t_no_init=0
   local d_up=0 d_feasible=0 d_conflicts=0 d_blocked=0
 
   jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
@@ -1044,10 +1352,12 @@ audit_cmd() {
   while IFS= read -r branch; do
     [[ -n "$branch" ]] || continue
     demo_load "$branch" || continue
+    audit_known_base_add "$DEMO_BASE"
     for ticket in ${DEMO_TICKETS[@]+"${DEMO_TICKETS[@]}"}; do
       audit_remote_exists "$ticket" && audit_ticket_in_demo "$ticket" "$DEMO_NAME"
     done
   done <<< "$branches"
+  audit_tickets_measure
 
   total=${#AUDIT_T_NAME[@]}
   n=0
@@ -1063,6 +1373,7 @@ audit_cmd() {
       conflicts) t_conflicts=$((t_conflicts + 1)) ;;
       delivered) t_delivered=$((t_delivered + 1)) ;;
       base_missing) t_missing=$((t_missing + 1)) ;;
+      no_init) t_no_init=$((t_no_init + 1)) ;;
     esac
   done
   audit_progress_end
@@ -1093,8 +1404,8 @@ audit_cmd() {
 
   audit_cleanup
 
-  printf "\nBilan : tickets — %s à jour, %s à rebaser, %s en conflit, %s base disparue, %s livré(s)" \
-    "$t_up" "$t_rebase" "$t_conflicts" "$t_missing" "$t_delivered"
+  printf "\nBilan : tickets — %s à jour, %s à rebaser, %s en conflit, %s base disparue, %s sans commit d'init, %s livré(s)" \
+    "$t_up" "$t_rebase" "$t_conflicts" "$t_missing" "$t_no_init" "$t_delivered"
   if [[ "$scope" != "tickets" ]]; then
     printf " ; démos — %s à jour, %s faisable(s), %s en conflit, %s bloquée(s)" \
       "$d_up" "$d_feasible" "$d_conflicts" "$d_blocked"
@@ -1115,6 +1426,7 @@ audit_cmd() {
             "$(json_kv_num to_rebase "$t_rebase")" \
             "$(json_kv_num conflicts "$t_conflicts")" \
             "$(json_kv_num base_missing "$t_missing")" \
+            "$(json_kv_num no_init "$t_no_init")" \
             "$(json_kv_num delivered "$t_delivered")")")" \
         "$(json_kv demos "$(json_object \
             "$(json_kv_num total "${#demo_items[@]}")" \
@@ -1126,7 +1438,7 @@ audit_cmd() {
 
   # Un conflit ou un blocage prévu se lit aussi au code de sortie : un job
   # planifié peut s'arrêter dessus sans lire le rapport.
-  if [[ $((t_conflicts + t_missing + d_conflicts + d_blocked)) -gt 0 ]]; then
+  if [[ $((t_conflicts + t_missing + t_no_init + d_conflicts + d_blocked)) -gt 0 ]]; then
     exit "$JGIT_EXIT_CONFLICT"
   fi
 }

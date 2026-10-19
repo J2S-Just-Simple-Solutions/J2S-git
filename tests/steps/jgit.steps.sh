@@ -185,6 +185,16 @@ step_github_supprime_branche() {
 }
 step_def "la branche {chaine} est supprimée sur GitHub" step_github_supprime_branche
 
+step_github_renomme_pr() {
+    github_rename_pr "$1" "$2"
+}
+step_def "la PR de {chaine} s'intitule {chaine} sur GitHub" step_github_renomme_pr
+
+step_ancien_ticket() {
+    github_create_old_ticket "$1" "$2" "$3" "$4"
+}
+step_def "un ancien ticket {chaine} parti de {chaine}, sans branche d'origine enregistrée, ajoute le fichier {chaine} contenant {texte}" step_ancien_ticket
+
 step_github_en_echec() {
     export JGIT_GH_FAIL="$1"
     info "le client gh echouera pour : $1"

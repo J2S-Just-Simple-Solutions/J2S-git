@@ -9,9 +9,10 @@ import { FakeRunner, KEYS, noPause, summary, tick } from './fixtures.js';
 function ticket(overrides: Partial<AuditTicket>): AuditTicket {
   const name = overrides.ticket ?? 'feature/X';
   return {
-    ticket: name, type: 'feature', id: name.replace('feature/', ''), base: 'develop', base_recorded: true, behind_base: 1,
+    ticket: name, type: 'feature', id: name.replace('feature/', ''), pr_title: null, base: 'develop', base_source: 'recorded', behind_base: 1,
     status: 'to_rebase', delivered: false, pr_validated: false, owner: { author: 'Yann', email: 'yann@j2s.example' },
-    last_activity: '2026-10-19T08:00:00+02:00', command: `jgit feature rebase ${name.replace('feature/', '')}`, conflict: null, demos: [],
+    last_activity: '2026-10-19T08:00:00+02:00', concerned: [{ author: 'Yann', email: 'yann@j2s.example' }],
+    command: `jgit feature rebase ${name.replace('feature/', '')}`, conflict: null, demos: [],
     ...overrides,
   };
 }
@@ -23,11 +24,13 @@ const report: AuditDoc = {
   tickets: [
     ticket({ ticket: 'feature/AUTRE-1' }),
     ticket({ ticket: 'feature/AUTRE-2' }),
-    ticket({ ticket: 'feature/AUTRE-3', owner: { author: 'Dominique', email: 'dominique@j2s.example' } }),
-    ticket({ ticket: 'feature/MENU-3', demos: ['client-a'] }),
-    ticket({ ticket: 'feature/FINI-9', status: 'up_to_date', behind_base: 0, command: null }),
+    ticket({ ticket: 'feature/AUTRE-3', concerned: [{ author: 'Dominique', email: 'dominique@j2s.example' }] }),
+    ticket({ ticket: 'feature/AUTRE-4', status: 'no_init', command: null, concerned: [{ author: 'Camille', email: null }] }),
+    ticket({ ticket: 'feature/MENU-3', demos: ['client-a'], base: 'ripolin', base_source: 'inferred', command: 'jgit feature rebase MENU-3 --based-on ripolin' }),
+    ticket({ ticket: 'feature/FINI-9', status: 'up_to_date', behind_base: 0, command: null, concerned: [] }),
     ticket({
-      ticket: 'feature/FACT-2', status: 'conflicts', demos: ['client-a'], command: 'jgit feature rebase FACT-2 --on-conflict pause',
+      ticket: 'feature/FACT-2', pr_title: 'Affiche la remise fidélité', status: 'conflicts', demos: ['client-a'],
+      command: 'jgit feature rebase FACT-2 --on-conflict pause',
       conflict: {
         commit: { sha: 'fefe23f0000', subject: 'Affiche la remise fidélité', author: 'Yann', email: 'yann@j2s.example', date: '2026-10-12' },
         files: [{ path: 'src/accueil.txt', kind: 'both_modified', other: { sha: '2a926dd', subject: "Nouveau message d'accueil", author: 'Camille', email: 'camille@j2s.example', origin: 'develop' } }],
@@ -64,7 +67,7 @@ const report: AuditDoc = {
     },
   ],
   summary: {
-    tickets: { total: 6, up_to_date: 1, to_rebase: 4, conflicts: 1, base_missing: 0, delivered: 0 },
+    tickets: { total: 7, up_to_date: 1, to_rebase: 4, conflicts: 1, base_missing: 0, no_init: 1, delivered: 0 },
     demos: { total: 2, up_to_date: 1, feasible: 0, conflicts: 1, blocked: 0, skipped_legacy: 0 },
   },
 };
@@ -75,33 +78,34 @@ const listDoc: AnyDoc = {
   archived_count: 0,
 };
 
-test("l'état des lieux dit qui est concerné : le commit en cause, et en face", () => {
+test("l'état des lieux dit qui doit intervenir, pas le détail des fichiers", () => {
   const text = reportLines(report).map((line) => line.text).join('\n');
-  assert.match(text, /^TICKETS \(6\)\n  ✖ feature\/FACT-2 — en retard de 1 commit\(s\) sur develop, son rebase coince/);
-  assert.match(text, /« Affiche la remise fidélité » par Yann <yann@j2s\.example>, le 2026-10-12/);
-  assert.match(text, /en face : « Nouveau message d'accueil » par Camille <camille@j2s\.example> \(develop\)/);
-  assert.match(text, /→ jgit feature rebase FACT-2 --on-conflict pause   \(propriétaire : Yann · démos : client-a\)/);
-  assert.match(text, /↻ feature\/MENU-3 — en retard de 1 commit\(s\) sur develop, son rebase passe/);
+  assert.match(text, /^TICKETS \(7\)\n  ✖ feature\/FACT-2 — en retard de 1 commit\(s\) sur develop : son rebase coince/);
+  assert.match(text, /son rebase coince\n      « Affiche la remise fidélité »\n      à faire par : Yann\n      → jgit feature rebase FACT-2 --on-conflict pause   \(démos : client-a\)/);
+  assert.doesNotMatch(text, /src\/accueil\.txt/);
+  assert.doesNotMatch(text, /Affiche la remise fidélité » par/);
+  assert.match(text, /↻ feature\/MENU-3 — en retard de 1 commit\(s\) sur ripolin \(base supposée\), son rebase passe/);
+  assert.match(text, /→ jgit feature rebase MENU-3 --based-on ripolin/);
   assert.match(text, /✔ 1 à jour sur leur base, 0 déjà livré\(s\)/);
 });
 
-test('les tickets hors démo à rebaser sont comptés par propriétaire', () => {
+test('les tickets hors démo sont comptés par personne', () => {
   const text = reportLines(report).map((line) => line.text).join('\n');
   assert.doesNotMatch(text, /AUTRE-1/);
-  assert.match(text, /↻ 3 autre\(s\) ticket\(s\) en retard sur leur base, rebase sans conflit — par propriétaire : Yann \(2\), Dominique \(1\)/);
+  assert.match(text, /✖ 1 autre\(s\) ticket\(s\) en retard, sans commit d'init : à rebaser à la main\n      à faire par : Camille \(1\)/);
+  assert.match(text, /↻ 3 autre\(s\) ticket\(s\) en retard sur leur base, rebase sans conflit\n      à faire par : Yann \(2\), Dominique \(1\)/);
 });
 
-test("pour chaque démo : les conflits à résoudre dans la démo, puis les commandes dans l'ordre", () => {
+test("pour chaque démo : qui est concerné par un conflit, puis les commandes dans l'ordre", () => {
   const text = reportLines(report).map((line) => line.text).join('\n');
   assert.match(text, /DÉMOS \(2\)/);
   assert.match(text, /demo\/client-a  \(base develop\)/);
-  assert.match(text, /✖ Conflit : feature\/MENU-3 \(à l'ajout de ses nouveaux commits\)/);
-  assert.match(text, /en face : « Menu du client » par Dominique <dominique@j2s\.example> \(feature\/CLIENT-4\)/);
+  assert.match(text, /✖ Conflit : feature\/MENU-3 \(à l'ajout de ses nouveaux commits\)\n        concerne : Yann \(feature\/MENU-3\), Dominique \(feature\/CLIENT-4\)/);
   assert.match(text, /→ résoudre dans la démo : jgit demo add client-a --from feature\/MENU-3 --on-conflict pause/);
   assert.match(text, /Dans l'ordre :\n      jgit feature rebase MENU-3\n.*\n      jgit feature rebase FACT-2 --on-conflict pause\n.*\n      jgit demo rebase client-a --from feature\/FACT-2/);
   assert.match(text, /⚠ feature\/FACT-2 : à simuler de nouveau une fois rebasé\(s\) chez eux\./);
   assert.match(text, /demo\/recette  \(base main\)\n    ✔ À jour/);
-  assert.match(text, /Bilan : tickets — 1 à jour, 4 à rebaser, 1 en conflit, 0 base disparue, 0 livré\(s\)/);
+  assert.match(text, /Bilan : tickets — 1 à jour, 4 à rebaser, 1 en conflit, 0 base disparue, 1 sans commit d'init, 0 livré\(s\)/);
   assert.match(text, /démos — 1 à jour, 0 faisable\(s\), 1 en conflit, 0 bloquée\(s\)/);
 });
 
@@ -120,7 +124,7 @@ test("v depuis la liste lance l'état des lieux complet", async () => {
   const frame = lastFrame() ?? '';
   assert.match(frame, /État des lieux/);
   assert.match(frame, /Simulation : rien n'a été modifié/);
-  assert.match(frame, /Camille/);
+  assert.match(frame, /à faire par : Yann/);
   stdin.write(KEYS.escape);
   await tick();
   assert.match(lastFrame() ?? '', /Démos du projet/);

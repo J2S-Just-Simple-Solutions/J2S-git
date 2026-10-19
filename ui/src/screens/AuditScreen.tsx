@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { AuditCommit, AuditDemo, AuditDoc, AuditFile, AuditTicket } from '../types.js';
+import type { AuditDemo, AuditDemoConflict, AuditDoc, AuditTicket } from '../types.js';
 import { KeyHints, Title } from '../components.js';
 import { listHeight, useTerminalRows } from '../viewport.js';
 
@@ -18,99 +18,139 @@ const STEPS: Record<string, string> = {
   add: "à l'ajout de ses nouveaux commits",
 };
 
-const KINDS: Record<string, string> = {
-  both_modified: 'modifié des deux côtés',
-  both_added: 'ajouté des deux côtés',
-  both_deleted: 'supprimé des deux côtés',
-  added_by_us: "ajouté d'un seul côté",
-  added_by_them: "ajouté d'un seul côté",
-  deleted_by_us: "supprimé d'un côté, modifié de l'autre",
-  deleted_by_them: "modifié d'un côté, supprimé de l'autre",
-};
-
 const RANK: Record<AuditTicket['status'], number> = {
   conflicts: 0,
   base_missing: 1,
+  no_init: 1,
   to_rebase: 2,
   up_to_date: 3,
   delivered: 3,
 };
 
-// Le commit en cause et, pour chaque fichier, ce qui l'a touché en face.
-function conflictLines(lines: Line[], indent: string, commit: AuditCommit, files: AuditFile[]) {
-  lines.push({
-    text: `${indent}commit ${commit.sha.slice(0, 7)} « ${commit.subject} » par ${commit.author} <${commit.email}>, le ${commit.date}`,
-  });
-  for (const file of files) {
-    lines.push({ text: `${indent}${file.path} (${KINDS[file.kind] ?? file.kind})` });
-    if (file.other) {
-      lines.push({
-        text: `${indent}  en face : « ${file.other.subject} » par ${file.other.author} <${file.other.email}> (${file.other.origin})`,
-        dim: true,
-      });
+function baseText(ticket: AuditTicket): string {
+  const base = ticket.base ?? '?';
+  return ticket.base_source === 'inferred' ? `${base} (base supposée)` : base;
+}
+
+// Qui doit intervenir : c'est ce que le rapport doit dire, le détail des
+// fichiers et des commits reste dans le JSON.
+function people(ticket: AuditTicket): string {
+  const names = ticket.concerned.map((person) => person.author);
+  return names.length > 0 ? names.join(', ') : '?';
+}
+
+function demosText(ticket: AuditTicket): string {
+  return ticket.demos.length > 0 ? `   (démos : ${ticket.demos.join(', ')})` : '';
+}
+
+// « Yann (12), Camille (3) », sans tenir compte de la casse des noms.
+function countByPerson(tickets: AuditTicket[]): string {
+  const counts = new Map<string, { name: string; count: number }>();
+  for (const ticket of tickets) {
+    const names = ticket.concerned.length > 0 ? ticket.concerned.map((person) => person.author) : ['?'];
+    for (const name of names) {
+      const key = name.toLowerCase();
+      const entry = counts.get(key) ?? { name, count: 0 };
+      entry.count += 1;
+      counts.set(key, entry);
     }
   }
+  return [...counts.values()]
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .map((entry) => `${entry.name} (${entry.count})`)
+    .join(', ');
 }
 
-function ownerText(ticket: AuditTicket): string {
-  const demos = ticket.demos.length > 0 ? ` · démos : ${ticket.demos.join(', ')}` : '';
-  return `(propriétaire : ${ticket.owner.author ?? '?'}${demos})`;
+// Ce qui se passe, puis sur leurs propres lignes (elles ne seront pas
+// tronquées) le titre de la PR, qui doit intervenir et quoi lancer.
+function ticketBlock(lines: Line[], ticket: AuditTicket, header: Line, command: string) {
+  lines.push(header);
+  if (ticket.pr_title) lines.push({ text: `      « ${ticket.pr_title} »`, dim: true });
+  lines.push({ text: `      à faire par : ${people(ticket)}` });
+  lines.push({ text: `      → ${command}${demosText(ticket)}`, color: 'cyan' });
 }
 
-// Les tickets : le détail de ce qui coince, et des tickets des démos ; les
-// autres tickets à rebaser sont comptés par propriétaire (il peut y en avoir
-// des centaines).
+function groupLines(lines: Line[], header: Line, tickets: AuditTicket[]) {
+  if (tickets.length === 0) return;
+  lines.push(header);
+  lines.push({ text: `      à faire par : ${countByPerson(tickets)}` });
+}
+
+// Les tickets : pour ce qui demande une action, qui doit intervenir et quoi
+// lancer ; les tickets hors démo simplement à rebaser (ou sans commit d'init)
+// sont comptés par personne — il peut y en avoir des centaines.
 function ticketLines(lines: Line[], tickets: AuditTicket[]) {
   lines.push({ text: `TICKETS (${tickets.length})`, bold: true });
   const sorted = [...tickets].sort((a, b) => RANK[a.status] - RANK[b.status]);
-  const owners = new Map<string, number>();
-  let others = 0;
+  const noInit = sorted.filter((ticket) => ticket.status === 'no_init' && ticket.demos.length === 0);
+  const others = sorted.filter((ticket) => ticket.status === 'to_rebase' && ticket.demos.length === 0);
+  let noInitShown = false;
+  const showNoInit = () => {
+    if (noInitShown) return;
+    noInitShown = true;
+    groupLines(
+      lines,
+      { text: `  ✖ ${noInit.length} autre(s) ticket(s) en retard, sans commit d'init : à rebaser à la main`, color: 'red' },
+      noInit,
+    );
+  };
 
   for (const ticket of sorted) {
+    if (RANK[ticket.status] >= 2) showNoInit();
     switch (ticket.status) {
       case 'conflicts':
-        lines.push({
-          text: `  ✖ ${ticket.ticket} — en retard de ${ticket.behind_base} commit(s) sur ${ticket.base}, son rebase coince`,
+        ticketBlock(lines, ticket, {
+          text: `  ✖ ${ticket.ticket} — en retard de ${ticket.behind_base} commit(s) sur ${baseText(ticket)} : son rebase coince`,
           color: 'red',
-        });
-        if (ticket.conflict) conflictLines(lines, '      ', ticket.conflict.commit, ticket.conflict.files);
-        lines.push({ text: `      → ${ticket.command}   ${ownerText(ticket)}`, color: 'cyan' });
+        }, ticket.command ?? '');
         break;
       case 'base_missing':
-        lines.push({ text: `  ✖ ${ticket.ticket} — sa base ${ticket.base ?? '?'} n'existe plus`, color: 'red' });
-        lines.push({ text: `      → ${ticket.command}   ${ownerText(ticket)}`, color: 'cyan' });
+        ticketBlock(lines, ticket, { text: `  ✖ ${ticket.ticket} — sa base ${ticket.base ?? '?'} n'existe plus`, color: 'red' }, ticket.command ?? '');
+        break;
+      case 'no_init':
+        if (ticket.demos.length === 0) break;
+        ticketBlock(lines, ticket, {
+          text: `  ✖ ${ticket.ticket} — en retard sur ${baseText(ticket)}, sans commit d'init : jgit ne sait pas quels commits sont les siens`,
+          color: 'red',
+        }, 'à rebaser à la main');
         break;
       case 'to_rebase':
-        if (ticket.demos.length > 0) {
-          lines.push({
-            text: `  ↻ ${ticket.ticket} — en retard de ${ticket.behind_base} commit(s) sur ${ticket.base}, son rebase passe`,
-            color: 'yellow',
-          });
-          lines.push({ text: `      → ${ticket.command}   ${ownerText(ticket)}`, color: 'cyan' });
-        } else {
-          others += 1;
-          const owner = ticket.owner.author ?? '?';
-          owners.set(owner, (owners.get(owner) ?? 0) + 1);
-        }
+        if (ticket.demos.length === 0) break;
+        ticketBlock(lines, ticket, {
+          text: `  ↻ ${ticket.ticket} — en retard de ${ticket.behind_base} commit(s) sur ${baseText(ticket)}, son rebase passe`,
+          color: 'yellow',
+        }, ticket.command ?? '');
         break;
     }
   }
+  showNoInit();
 
-  if (others > 0) {
-    const byOwner = [...owners.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([owner, count]) => `${owner} (${count})`)
-      .join(', ');
-    lines.push({
-      text: `  ↻ ${others} autre(s) ticket(s) en retard sur leur base, rebase sans conflit — par propriétaire : ${byOwner}`,
-      color: 'yellow',
-    });
-  }
+  groupLines(
+    lines,
+    { text: `  ↻ ${others.length} autre(s) ticket(s) en retard sur leur base, rebase sans conflit`, color: 'yellow' },
+    others,
+  );
   const upToDate = tickets.filter((ticket) => ticket.status === 'up_to_date').length;
   const delivered = tickets.filter((ticket) => ticket.status === 'delivered').length;
   if (upToDate + delivered > 0) {
     lines.push({ text: `  ✔ ${upToDate} à jour sur leur base, ${delivered} déjà livré(s)`, color: 'green' });
   }
+}
+
+// Qui est concerné par un conflit dans la démo : l'auteur du commit qui ne
+// passe pas, et en face ceux qui ont touché les mêmes fichiers.
+function conflictPeople(conflict: AuditDemoConflict): string {
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  const add = (who: string, from: string) => {
+    const key = `${who}|${from}`;
+    if (!who || seen.has(key)) return;
+    seen.add(key);
+    parts.push(`${who} (${from})`);
+  };
+  add(conflict.commit.author, conflict.ticket === '-' ? 'commit ajouté à la main' : conflict.ticket);
+  for (const file of conflict.files) if (file.other) add(file.other.author, file.other.origin);
+  return parts.length > 0 ? parts.join(', ') : '?';
 }
 
 function demoLines(lines: Line[], demo: AuditDemo) {
@@ -131,9 +171,9 @@ function demoLines(lines: Line[], demo: AuditDemo) {
   }
 
   for (const conflict of demo.conflicts) {
-    const ticket = conflict.ticket === '-' ? 'commits ajoutés à la main' : conflict.ticket;
-    lines.push({ text: `    ✖ Conflit : ${ticket} (${STEPS[conflict.step] ?? conflict.step})`, color: 'red' });
-    conflictLines(lines, '        ', conflict.commit, conflict.files);
+    const name = conflict.ticket === '-' ? 'commits ajoutés à la main' : conflict.ticket;
+    lines.push({ text: `    ✖ Conflit : ${name} (${STEPS[conflict.step] ?? conflict.step})`, color: 'red' });
+    lines.push({ text: `        concerne : ${conflictPeople(conflict)}` });
     lines.push({ text: `        → résoudre dans la démo : ${conflict.commands.resolve}`, color: 'cyan' });
     lines.push({ text: `        → ou retirer : ${conflict.commands.drop}`, color: 'cyan' });
   }
@@ -170,7 +210,7 @@ export function reportLines(doc: AuditDoc): Line[] {
   const d = doc.summary.demos;
   lines.push({ text: '' });
   lines.push({
-    text: `Bilan : tickets — ${t.up_to_date} à jour, ${t.to_rebase} à rebaser, ${t.conflicts} en conflit, ${t.base_missing} base disparue, ${t.delivered} livré(s)`,
+    text: `Bilan : tickets — ${t.up_to_date} à jour, ${t.to_rebase} à rebaser, ${t.conflicts} en conflit, ${t.base_missing} base disparue, ${t.no_init} sans commit d'init, ${t.delivered} livré(s)`,
     bold: true,
   });
   if (doc.scope !== 'tickets') {

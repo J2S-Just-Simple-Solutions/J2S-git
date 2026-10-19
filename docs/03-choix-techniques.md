@@ -473,17 +473,29 @@ branches.
 
 **Décision.** `jgit audit` simule tout, sans rien modifier.
 
-- **Un ticket** : `git merge-tree --write-tree` (git 2.38) fusionne sa branche
-  avec sa base **sans copie de travail**. Sortie en code 1 : les fichiers en
-  conflit ; le dernier commit du ticket qui les a touchés depuis son départ
-  désigne l'auteur concerné, le dernier commit de la base qui les a touchés,
-  « en face ». À défaut de git 2.38, les commits du ticket sont rejoués un par
-  un dans la copie de travail des démos. Les lectures communes (base enregistrée,
-  propriétaire, PR, tickets livrés) sont faites **une fois pour tous les
-  tickets**, puis jointes par `awk` : un appel à git par ticket et par
-  information, et sous bash 3.2 l'extraction d'une valeur dans une longue chaîne
-  (`${var#*motif}`, de coût quadratique), coûtaient 49 secondes pour 300 tickets
-  — 6 secondes ensuite.
+- **Un ticket** est simulé comme `jgit feature rebase` le rejouerait : seuls ses
+  propres commits, ceux qui suivent son commit d'init. `git merge-tree
+  --write-tree --merge-base=<commit d'init>` (git 2.40) les applique d'un coup
+  sur la base, **sans copie de travail** ; à défaut, ils sont rejoués un par un
+  dans la copie de travail des démos. Sortie en code 1 : les fichiers en
+  conflit ; les auteurs des commits du ticket qui les touchent (hors commits de
+  la base fusionnés dans le ticket) sont **ceux qui doivent intervenir**.
+- **Sa base** est celle enregistrée à sa création. Un ticket créé avant que jgit
+  l'enregistre n'en a pas : sa base est **supposée** — parmi la préprod, la
+  production et toute branche qu'un ticket ou une démo a enregistrée comme base,
+  celle dont il s'écarte le moins. La comparer à la préprod par défaut accusait
+  à tort, sur un vrai projet, des dizaines de tickets partis d'une branche de
+  projet : la simulation y rejouait tout l'historique de cette branche.
+- **Lectures groupées.** Base enregistrée, commit d'init, propriétaire, PR
+  (sujet de la branche `__PR__`, titre sur GitHub par `gh pr list`) sont lus une
+  fois pour tous les tickets et joints par `awk` ; l'avance et le retard de
+  chaque ticket sur chaque base connue, en un appel par base
+  (`for-each-ref --format=%(ahead-behind:…)`, git 2.41 ; à défaut, ticket par
+  ticket). Le détail d'un conflit (fichiers, « en face ») tient en deux appels à
+  git par ticket, et son JSON se construit sans sous-shell. Un appel à git par
+  ticket et par information, et sous bash 3.2 l'extraction d'une valeur dans une
+  longue chaîne (`${var#*motif}`, de coût quadratique), coûtaient 49 secondes
+  pour 300 tickets — 4 secondes ensuite.
 - **Une démo** : ce que feraient `jgit feature rebase` de ses tickets en retard,
   puis `jgit demo rebase` et `add`, rejoué dans une **copie de travail
   temporaire** (`git worktree add --detach`, sous `.git/jgit/audit/`), avec la
@@ -495,6 +507,8 @@ branches.
   le dernier commit qui l'a touché dans la démo donne « en face » : auteur et
   provenance. La copie est supprimée en sortant, quelle que soit la sortie
   (`jgit_on_exit`).
+- **Le rapport humain** ne dit que qui doit intervenir et quoi lancer ; le
+  détail reste dans `--json`.
 
 **Conséquences.** L'audit ne touche ni à l'espace de travail de l'utilisateur
 (même modifié), ni à sa branche courante, ni au serveur ; il peut tourner
@@ -511,7 +525,15 @@ alors sur ce conflit comme d'habitude.
 - Simuler dans l'espace de travail, comme `util verify_rebase` : il faudrait un
   dépôt propre et des bascules de branche, pour une question qui ne modifie rien.
 - Rejouer chaque ticket commit par commit dans la copie de travail : exact, mais
-  des dizaines de secondes sur un projet de centaines de branches.
+  des dizaines de secondes sur un projet de centaines de branches (c'est le
+  repli quand git est trop ancien).
+- Fusionner la branche entière avec sa base (`git merge-tree` sans
+  `--merge-base`) : tout l'historique depuis leur point commun est jugé, y
+  compris des commits que le ticket a seulement hérités — ce n'est pas ce que
+  `jgit feature rebase` rejoue.
+- Lister dans le rapport les fichiers et les commits en conflit : illisible sur
+  un vrai projet (des dizaines de fichiers par ticket) ; seul compte qui doit
+  intervenir.
 - `git merge-tree --merge-base` pour les démos (rejouer chaque commit sans copie
   de travail) : exige git 2.40, absent de Debian bookworm (image Docker, agents
   Jenkins).

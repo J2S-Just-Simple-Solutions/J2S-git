@@ -124,11 +124,13 @@ modifier — c'est la première chose à faire quand l'humain demande « où en 
 les démos », « où en sont les tickets » ou « peut-on les mettre à jour ». Code
 de sortie 3 si quelque chose coince ; le document est émis quand même.
 
-- `tickets[]` : pour chaque ticket du serveur, `status` (`up_to_date`,
-  `to_rebase`, `conflicts`, `base_missing`, `delivered`), `owner.author` (son
-  propriétaire), `command`, et pour `conflicts` : `conflict.commit.author` (qui a
-  écrit le commit qui coincera) et, par fichier, `other.author` (qui a modifié
-  le même fichier dans la base).
+- `tickets[]` : pour chaque ticket du serveur, `pr_title` (le titre de sa PR),
+  `status` (`up_to_date`, `to_rebase`, `conflicts`, `base_missing`, `no_init`,
+  `delivered`), `base` et `base_source` (`inferred` : base supposée, la
+  commande la donne par `--based-on`), `concerned` (**qui doit intervenir** :
+  pour un conflit, les auteurs des commits en cause), `command`, et pour
+  `conflicts` le détail : `conflict.commit` et, par fichier, `other.author` (qui
+  a modifié le même fichier dans la base).
 - `demos[]` : `status`, `actions` — les commandes **dans l'ordre** : d'abord
   `kind: ticket` (rebaser chez eux les tickets en retard sur leur base), puis
   `kind: demo` (`jgit demo rebase` avec ses `--from`, `jgit demo add`) —,
@@ -136,7 +138,8 @@ de sortie 3 si quelque chose coince ; le document est émis quand même.
   résolve), `conflicts` (entre tickets, à résoudre dans la démo :
   `commands.resolve` ou `commands.drop`).
 
-Présenter à l'humain : qui contacter pour quoi, et les commandes dans l'ordre.
+Présenter à l'humain : qui doit intervenir sur quoi (`concerned`), et les
+commandes dans l'ordre — pas le détail des fichiers, sauf s'il le demande.
 Le rebase d'un ticket (`jgit feature rebase`) appartient à son propriétaire : ne
 le lance pas sans demande explicite.
 

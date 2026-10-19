@@ -74,6 +74,7 @@ $SANDBOX/
   github/        clone technique servant à simuler les actions faites sur GitHub
   bin/gh         mock du client GitHub CLI
   gh-calls.log   journal de tous les appels à gh
+  gh-prs.tsv     les PR ouvertes connues du mock (branche, titre)
   home/          HOME isolé
 ```
 
@@ -91,7 +92,8 @@ un tag `1.0.0` (exigé par `jgit release start`), un `.gitignore` et un fichier
 - Le client `gh` est remplacé par [`tests/mocks/bin/gh`](mocks/bin/gh), qui
   journalise chaque appel au lieu de contacter GitHub. Les scénarios vérifient
   donc précisément ce que `jgit` *aurait* demandé à GitHub
-  (`Et GitHub a reçu "release create 1.1.0 --generate-notes"`).
+  (`Et GitHub a reçu "release create 1.1.0 --generate-notes"`). Il retient les
+  PR qu'il ouvre, et `gh pr list --json` les rend avec leur titre.
 - Les actions réalisées *sur* GitHub par un humain (valider et merger une PR,
   supprimer une branche) sont rejouées par des étapes dédiées
   (`Quand la PR de "…" est squash-mergée sur GitHub avec le message "…"`).
@@ -197,6 +199,8 @@ Les valeurs sont toujours entre guillemets.
 | `Quand un autre développeur pousse le fichier "…" contenant "…" sur la branche "…" avec le message "…"` |
 | `Quand "Camille" pousse le fichier "…" contenant "…" sur la branche "…" avec le message "…"` (commit au nom de cette personne, adresse `camille@example.invalid`) |
 | `Quand le client gh échoue pour les commandes "…"` (motif `grep -E`) |
+| `Quand la PR de "…" s'intitule "…" sur GitHub` (renommée sur GitHub, ou ouverte à la main avec ce titre) |
+| `Étant donné un ancien ticket "…" parti de "…", sans branche d'origine enregistrée, ajoute le fichier "…" contenant "…"` (reproduit un ticket créé par une version de `jgit` d'avant la branche d'origine : commits d'init sans trailer) |
 
 ### Vérifications
 
@@ -402,7 +406,7 @@ test_passed
 | `19_demo_rebase.feature` | `demo rebase` : base qui a avancé, démo à jour non republiée, tickets livrés ou disparus retirés (`--keep-*`), `--based-on`, commits ajoutés à la main, `--dry-run`, base inconnue, `--from` (ticket rebasé par son auteur repris depuis sa branche, ticket absent refusé) |
 | `20_demo_conflits.feature` | conflit de démo en pause, `continue`, résolution rejouée par les reconstructions suivantes, `abort`, abandon sans interaction, lecture pendant la pause, lease, mauvaise démo, `util status` |
 | `21_demo_archive.feature` | `demo archive` (nom libéré, archives à part dans la liste, numérotation du jour, lecture seule, copie locale), `demo unarchive` (par nom, ambiguïté, nom déjà pris), `demo delete` |
-| `22_audit.feature` | `audit` : tout à jour ; base avancée (tickets à rebaser d'abord, puis la démo) ; rebase d'un ticket qui coince (commit, auteurs, en face, démo qui le met de côté et le reprendra par `--from`) ; ticket rebasé par son auteur repris par `--from` ; conflits entre tickets dans la démo, tous signalés ; tickets hors démo comptés par propriétaire ; base disparue ; ticket livré ; rien n'est touché ; démos archivées et à l'ancien format ; arguments |
+| `22_audit.feature` | `audit` : tout à jour ; base avancée (tickets à rebaser d'abord, puis la démo) ; rebase d'un ticket qui coince (qui doit intervenir, détail dans le JSON, démo qui le met de côté et le reprendra par `--from`) ; seuls les auteurs des commits en conflit sont appelés ; titre de la PR ; ancien ticket sans base enregistrée (base supposée, commande avec `--based-on` qui passe) ; ticket sans commit d'init ; ticket rebasé par son auteur repris par `--from` ; conflits entre tickets dans la démo, tous signalés ; tickets hors démo comptés par personne ; base disparue ; ticket livré ; rien n'est touché ; démos archivées et à l'ancien format ; arguments |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

@@ -324,10 +324,10 @@ Les anciennes démos `demo_<nom>` restent lisibles par `list` et `show`, en lect
 L'état des lieux de tous les tickets et de toutes les démos, en simulation : rien n'est modifié. Le guide complet est dans [`docs/guide/08-audit.md`](docs/guide/08-audit.md).
 
 - `jgit audit` : tous les tickets du serveur, puis toutes les démos.
-- `jgit audit tickets` : chaque ticket est-il à jour sur sa base (celle enregistrée à sa création) ? Sinon, son rebase passerait-il ? S'il coince : le commit en cause et son auteur, les fichiers, et en face le commit de la base qui les a touchés et son auteur ; le propriétaire du ticket et la commande à lancer.
+- `jgit audit tickets` : chaque ticket est-il à jour sur sa base ? Sinon, son rebase passerait-il ? Comme `jgit feature rebase`, seuls ses propres commits comptent. Sa base est celle enregistrée à sa création ; pour un ticket plus ancien, elle est supposée (la base connue dont il s'écarte le moins) et donnée à la commande par `--based-on`. Pour chaque ticket qui demande une action : le titre de sa PR sur GitHub, **qui doit intervenir** (pour un rebase qui coince, les auteurs des commits en conflit) et la commande à lancer.
 - `jgit audit demos [<nom>]` : pour chaque démo, les commandes dans l'ordre — d'abord rebaser chez eux les tickets en retard sur leur base (leurs conflits avec la base se résolvent là, par leur auteur), puis `jgit demo rebase` avec un `--from` pour chaque ticket à reprendre depuis sa branche, puis `jgit demo add` — et, pour chaque conflit qui resterait dans la démo, qui est concerné et les deux issues (résoudre, retirer).
 
-Sur un projet de centaines de branches, le rapport détaille ce qui coince et les tickets des démos, et compte les autres par propriétaire ; `--json` donne tout, ticket par ticket. Code de sortie 3 dès que quelque chose coince.
+Le rapport ne dit que qui et quoi ; le détail (commits, fichiers, et en face le commit de la base et son auteur) est dans `--json`. Sur un projet de centaines de branches, les tickets hors démo simplement à rebaser sont comptés par personne. Code de sortie 3 dès que quelque chose coince.
 
 ### Espace de travail et stash automatique
 

@@ -225,15 +225,18 @@ temporaires de jgit n'y figurent pas.
 ### `jgit.audit/1` — `jgit audit`, `jgit audit tickets`, `jgit audit demos [<nom>]`
 
 L'état des lieux : chaque ticket du serveur par rapport à sa base, puis chaque
-démo, avec les commandes à lancer dans l'ordre. Tout est simulé, rien n'est
-modifié.
+démo, avec les commandes à lancer dans l'ordre et qui doit intervenir. Tout est
+simulé, rien n'est modifié. Le rapport humain ne dit que qui et quoi ; le
+document donne aussi le détail (commits, fichiers, en face).
 
 ```json
 {"schema":"jgit.audit/1","ok":true,"command":"audit","scope":"all",
  "tickets":[{"ticket":"feature/FACT-1","type":"feature","id":"FACT-1",
-   "base":"develop","base_recorded":true,"behind_base":1,"status":"conflicts",
+   "pr_title":"Affiche le total TTC",
+   "base":"develop","base_source":"recorded","behind_base":1,"status":"conflicts",
    "delivered":false,"pr_validated":false,
    "owner":{"author":"Yann","email":"yann@j2s.net"},"last_activity":"2026-10-19T07:54:16+02:00",
+   "concerned":[{"author":"Yann","email":"yann@j2s.net"}],
    "command":"jgit feature rebase FACT-1 --on-conflict pause",
    "conflict":{"commit":{"sha":"…","subject":"Affiche le total TTC","author":"Yann","email":"yann@j2s.net","date":"2026-10-19"},
      "files":[{"path":"src/accueil.txt","kind":"both_modified",
@@ -243,10 +246,10 @@ modifié.
    "status":"conflicts","message":null,
    "prerequisites":[{"ticket":"feature/FACT-1","status":"conflicts","command":"jgit feature rebase FACT-1 --on-conflict pause"}],
    "held":["feature/FACT-1"],
-   "actions":[{"kind":"ticket","command":"jgit feature rebase FACT-1 --on-conflict pause","reason":"d'abord rebaser le ticket chez lui : …"},
+   "actions":[{"kind":"ticket","command":"jgit feature rebase FACT-1 --on-conflict pause","reason":"d'abord rebaser le ticket chez lui : … — à faire par : Yann"},
               {"kind":"demo","command":"jgit demo rebase client-a --from feature/FACT-1","reason":"base develop en retard de 1 commit(s) ; reprend feature/FACT-1 depuis leur branche"}],
    "dropped":[],"conflicts":[]}],
- "summary":{"tickets":{"total":1,"up_to_date":0,"to_rebase":0,"conflicts":1,"base_missing":0,"delivered":0},
+ "summary":{"tickets":{"total":1,"up_to_date":0,"to_rebase":0,"conflicts":1,"base_missing":0,"no_init":0,"delivered":0},
             "demos":{"total":1,"up_to_date":0,"feasible":0,"conflicts":1,"blocked":0,"skipped_legacy":0}}}
 ```
 
@@ -258,14 +261,20 @@ modifié au plus ancien.
 
 | Champ | Sens |
 | --- | --- |
-| `base` | sa base : celle enregistrée à sa création (`base_recorded: true`), à défaut la référence du projet pour son type |
+| `pr_title` | le titre de sa PR ouverte sur GitHub, sans la clé du ticket qu'il répète en tête ; `null` sans PR, sans `gh`, ou avec `--no-fetch` |
+| `base` | sa base |
+| `base_source` | `recorded` : enregistrée à sa création ; `inferred` : supposée — parmi la préprod, la production et les bases enregistrées par des tickets ou des démos, celle dont il s'écarte le moins |
 | `behind_base` | nombre de commits de la base absents du ticket |
-| `status` | `up_to_date`, `to_rebase` (son rebase passera), `conflicts` (il coincera), `base_missing` (sa base n'existe plus), `delivered` (déjà dans sa base) |
-| `pr_validated` | `false` : sa PR n'a que son commit d'init ; `true` : elle a avancé ; `null` : pas de branche de PR |
+| `status` | `up_to_date`, `to_rebase` (son rebase passera), `conflicts` (il coincera), `base_missing` (sa base n'existe plus), `no_init` (pas de commit d'init : jgit ne sait pas quels commits sont les siens), `delivered` (déjà dans sa base) |
+| `pr_validated` | `false` : sa branche de PR n'a que son commit d'init ; `true` : elle a avancé ; `null` : pas de branche de PR |
 | `owner` | l'auteur du dernier commit de la branche |
-| `command` | ce qu'il faut lancer, `null` s'il n'y a rien à faire |
-| `conflict` | pour `conflicts` : `commit`, le commit du ticket qui coincera, et son auteur ; `files[].other`, le dernier commit de la base qui a touché le fichier depuis le départ du ticket, son auteur, et `origin` (le nom de la base) |
+| `concerned` | qui doit intervenir : pour `conflicts`, les auteurs des commits du ticket qui touchent les fichiers en conflit ; sinon le propriétaire ; vide quand il n'y a rien à faire |
+| `command` | ce qu'il faut lancer (avec `--based-on` quand la base est supposée), `null` s'il n'y a rien à faire ou que jgit ne sait pas le faire (`no_init`) |
+| `conflict` | pour `conflicts` : `commit`, le dernier commit du ticket qui touche les fichiers en conflit ; `files[].other`, le dernier commit de la base qui a touché le fichier depuis le départ du ticket, son auteur, et `origin` (le nom de la base) |
 | `demos` | les démos qui contiennent le ticket |
+
+Comme `jgit feature rebase`, la simulation ne rejoue que les commits du ticket
+qui suivent son commit d'init.
 
 **Les démos**
 
@@ -286,9 +295,9 @@ modifié au plus ancien.
 `jgit audit demos <archive>` est refusé (`read_only`, code 2) ; les démos à
 l'ancien format sont ignorées (`summary.demos.skipped_legacy`). Une action
 inconnue, ou un nom de démo ailleurs qu'après `audit demos`, donne `usage`.
-**Code de sortie 3** dès qu'un ticket coincera, qu'une base a disparu, ou
-qu'une démo est en conflit ou bloquée ; 0 sinon — le document est émis dans
-les deux cas.
+**Code de sortie 3** dès qu'un ticket coincera, qu'une base a disparu, qu'un
+ticket n'a pas de commit d'init, ou qu'une démo est en conflit ou bloquée ; 0
+sinon — le document est émis dans les deux cas.
 
 ### `jgit.demo.result/1` — `create`, `add`, `drop`, `refresh`, `rebase`, `continue`
 

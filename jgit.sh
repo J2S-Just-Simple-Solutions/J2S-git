@@ -154,7 +154,7 @@ help() {
     printf "  jgit audit                     État des lieux de tous les tickets du serveur et de toutes les démos.\n"
     printf "  jgit audit tickets             Chaque ticket est-il à jour sur sa base ? Son rebase passerait-il ?\n"
     printf "  jgit audit demos [<nom>]       Les démos : tickets à rebaser d'abord, puis remise à jour de la démo.\n"
-    printf "                                 Pour chaque conflit : commit, auteurs, fichiers, commandes à lancer.\n\n"
+    printf "                                 Pour chaque action : qui doit intervenir, et la commande à lancer.\n\n"
 
     printf "${C_BLUE}Interface:${C_RESET}\n"
     printf "  jgit ui                        Les démos dans une interface en terminal (Docker ; JGIT_UI=native sans Docker).\n\n"

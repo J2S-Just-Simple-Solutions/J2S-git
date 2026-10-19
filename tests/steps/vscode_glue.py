@@ -103,6 +103,14 @@ def step_pr_livree(context):
 def step_github_supprime_branche(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("la PR de {string} s'intitule {string} sur GitHub")
+def step_github_renomme_pr(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("un ancien ticket {string} parti de {string}, sans branche d'origine enregistrée, ajoute le fichier {string} contenant {string}")
+def step_ancien_ticket(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("le client gh échoue pour les commandes {string}")
 def step_github_en_echec(context):
     """Définie dans tests/steps/jgit.steps.sh."""

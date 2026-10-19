@@ -111,18 +111,25 @@ export interface AuditFile {
   other: AuditOther | null;
 }
 
+export interface AuditPerson {
+  author: string;
+  email: string | null;
+}
+
 export interface AuditTicket {
   ticket: string;
   type: string;
   id: string;
+  pr_title: string | null;
   base: string | null;
-  base_recorded: boolean;
+  base_source: 'recorded' | 'inferred';
   behind_base: number;
-  status: 'up_to_date' | 'to_rebase' | 'conflicts' | 'delivered' | 'base_missing';
+  status: 'up_to_date' | 'to_rebase' | 'conflicts' | 'delivered' | 'base_missing' | 'no_init';
   delivered: boolean;
   pr_validated: boolean | null;
   owner: { author: string | null; email: string | null };
   last_activity: string | null;
+  concerned: AuditPerson[];
   command: string | null;
   conflict: { commit: AuditCommit; files: AuditFile[] } | null;
   demos: string[];
@@ -157,7 +164,7 @@ export interface AuditDoc {
   tickets: AuditTicket[];
   demos: AuditDemo[];
   summary: {
-    tickets: { total: number; up_to_date: number; to_rebase: number; conflicts: number; base_missing: number; delivered: number };
+    tickets: { total: number; up_to_date: number; to_rebase: number; conflicts: number; base_missing: number; no_init: number; delivered: number };
     demos: { total: number; up_to_date: number; feasible: number; conflicts: number; blocked: number; skipped_legacy: number };
   };
 }

@@ -12,6 +12,7 @@
 #     github/        clone technique pour simuler les actions faites sur GitHub
 #     bin/gh         mock du client GitHub CLI
 #     gh-calls.log   journal des appels au mock
+#     gh-prs.tsv     les PR ouvertes connues du mock (branche, titre)
 
 SANDBOX=""
 JGIT_OUTPUT=""
@@ -35,6 +36,8 @@ sandbox_create() {
     export TERM="${TERM:-xterm}"
     export JGIT_GH_LOG="$SANDBOX/gh-calls.log"
     : > "$JGIT_GH_LOG"
+    export JGIT_GH_PRS="$SANDBOX/gh-prs.tsv"
+    : > "$JGIT_GH_PRS"
     # Les scenarios d'un meme fichier partagent le processus : une panne gh
     # simulee, un lien d'appel ou un terminal retire ne doivent pas deborder sur
     # le scenario suivant.
@@ -247,6 +250,43 @@ remote_demo_tickets() {
     origin_git log --first-parent --reverse --format=%s "refs/heads/$branch" 2>/dev/null \
         | sed -n 's/^\[jgit\] DEMO ticket \([^ ]*\) \[empty_commit\]$/\1/p' \
         | awk '!seen[$0]++'
+}
+
+# Simule le titre d'une PR sur GitHub, que gh pr list rendra : la PR est
+# renommée, ou ouverte à la main avec ce titre si jgit ne l'a pas ouverte
+# (--no-open).
+github_rename_pr() {
+    local branch="$1"
+    local title="$2"
+
+    awk -F '\t' -v b="$branch" 'BEGIN { OFS = "\t" } $1 != b { print }' \
+        "$JGIT_GH_PRS" > "$JGIT_GH_PRS.tmp" && mv "$JGIT_GH_PRS.tmp" "$JGIT_GH_PRS"
+    printf '%s\t%s\n' "$branch" "$title" >> "$JGIT_GH_PRS"
+    info "GitHub : la PR de $branch s'intitule « $title »"
+}
+
+# Simule un ticket créé par une version de jgit d'avant la branche d'origine :
+# même structure (branche de PR et son commit d'init, branche de travail et son
+# commit de démarrage), mais aucun trailer ne dit de quelle branche il part.
+github_create_old_ticket() {
+    local ticket="$1"
+    local base="$2"
+    local path="$3"
+    local content="$4"
+    local pr_branch="${JGIT_PREFIX_PR:-__PR__}$ticket"
+
+    github_git fetch --quiet origin
+    github_git checkout --quiet -B "$pr_branch" "origin/$base"
+    github_git commit --quiet --allow-empty -m "[jgit] INIT $ticket [empty_commit]"
+    github_git checkout --quiet -B "$ticket"
+    github_git commit --quiet --allow-empty \
+        -m "[jgit] commit for automatic PR creation - this commit will be deleted by squash and merge - START $ticket [empty_commit]"
+    mkdir -p "$(dirname "$SANDBOX/github/$path")"
+    printf '%s\n' "$content" > "$SANDBOX/github/$path"
+    github_git add "$path"
+    github_git commit --quiet -m "Ajoute $path"
+    github_git push --quiet origin "$pr_branch" "$ticket"
+    info "GitHub : ancien ticket $ticket parti de $base, sans branche d'origine enregistree"
 }
 
 github_delete_branch() {

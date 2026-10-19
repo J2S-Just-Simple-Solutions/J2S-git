@@ -5,8 +5,9 @@ Fonctionnalité: L'état des lieux des tickets et des démos
   concerné.
 
   Pour chaque ticket : est-il à jour sur sa base ? Sinon, son rebase passe-t-il ?
-  S'il coince : le commit en cause et son auteur, les fichiers, et en face le
-  commit de la base qui les a touchés et son auteur.
+  Comme jgit feature rebase, seuls ses propres commits comptent. Le rapport dit
+  qui doit intervenir et quoi lancer ; le détail (commits, fichiers, et en face
+  le commit de la base) est dans --json.
 
   Pour chaque démo : d'abord rebaser ses tickets en retard, chez eux (c'est là
   que leurs conflits avec la base se résolvent, par leur auteur), puis remettre
@@ -35,9 +36,11 @@ Fonctionnalité: L'état des lieux des tickets et des démos
     Et la liste JSON "tickets" contient 2 éléments
     Et le JSON a "tickets[ticket=feature/TEST-1].status" égal à "up_to_date"
     Et le JSON a "tickets[ticket=feature/TEST-1].base" égal à "develop"
-    Et le JSON a "tickets[ticket=feature/TEST-1].base_recorded" vrai
+    Et le JSON a "tickets[ticket=feature/TEST-1].base_source" égal à "recorded"
     Et le JSON a "tickets[ticket=feature/TEST-1].owner.author" égal à "jgit tests"
     Et le JSON a "tickets[ticket=feature/TEST-1].pr_validated" faux
+    Et le JSON a "tickets[ticket=feature/TEST-1].pr_title" nul
+    Et la liste JSON "tickets[ticket=feature/TEST-1].concerned" contient 0 éléments
     Et le JSON a "tickets[ticket=feature/TEST-1].command" nul
     Et le JSON a "tickets[ticket=feature/TEST-1].demos[0]" égal à "sprint12"
     Et le JSON a "demos[0].name" égal à "sprint12"
@@ -56,6 +59,7 @@ Fonctionnalité: L'état des lieux des tickets et des démos
     Et le JSON a "tickets[ticket=feature/TEST-1].status" égal à "to_rebase"
     Et le JSON a "tickets[ticket=feature/TEST-1].behind_base" égal au nombre 1
     Et le JSON a "tickets[ticket=feature/TEST-1].command" égal à "jgit feature rebase TEST-1"
+    Et le JSON a "tickets[ticket=feature/TEST-1].concerned[0].author" égal à "jgit tests"
     Et le JSON a "demos[0].status" égal à "feasible"
     Et le JSON a "demos[0].behind_base" égal au nombre 1
     Et la liste JSON "demos[0].prerequisites" contient 2 éléments
@@ -70,9 +74,10 @@ Fonctionnalité: L'état des lieux des tickets et des démos
     Et la sortie contient "d'abord rebaser le ticket chez lui"
     Et la branche distante "demo/sprint12" est inchangée
 
-  # Le cœur de la demande : qui est concerné. En face du commit qui ne passe
-  # plus, le dernier commit de la base qui a touché le fichier, et son auteur.
-  Scénario: Le rebase d'un ticket sur sa base coince : le commit, son auteur, et en face
+  # Le cœur de la demande : qui doit intervenir. Le rapport le dit ; le JSON
+  # garde le détail : le commit qui ne passe plus et, en face, le dernier
+  # commit de la base qui a touché le fichier, et son auteur.
+  Scénario: Le rebase d'un ticket sur sa base coince : qui doit intervenir, et le détail
     Étant donné "Camille" pousse le fichier "src/app.txt" contenant "version de develop" sur la branche "develop" avec le message "Modifie app.txt dans develop"
     Quand je lance "jgit audit --json" en lisant le JSON
     Alors jgit se termine avec le code 3
@@ -86,6 +91,7 @@ Fonctionnalité: L'état des lieux des tickets et des démos
     Et le JSON a "tickets[ticket=feature/TEST-1].conflict.files[0].other.email" égal à "camille@example.invalid"
     Et le JSON a "tickets[ticket=feature/TEST-1].conflict.files[0].other.subject" égal à "Modifie app.txt dans develop"
     Et le JSON a "tickets[ticket=feature/TEST-1].conflict.files[0].other.origin" égal à "develop"
+    Et le JSON a "tickets[ticket=feature/TEST-1].concerned[0].author" égal à "jgit tests"
     Et le JSON a "tickets[ticket=feature/TEST-2].status" égal à "to_rebase"
     Et le JSON a "summary.tickets.conflicts" égal au nombre 1
     Et le JSON a "demos[0].status" égal à "conflicts"
@@ -93,10 +99,87 @@ Fonctionnalité: L'état des lieux des tickets et des démos
     Et le JSON a "demos[0].prerequisites[0].command" égal à "jgit feature rebase TEST-1 --on-conflict pause"
     Et le JSON a "demos[0].actions[2].command" égal à "jgit demo rebase sprint12 --from feature/TEST-1"
     Et la liste JSON "demos[0].conflicts" contient 0 éléments
-    Et la sortie contient "son rebase coince"
-    Et la sortie contient "par Camille <camille@example.invalid> (develop)"
+    Et la sortie contient "feature/TEST-1 — en retard de 1 commit(s) sur develop : son rebase coince"
+    Et la sortie contient "à faire par : jgit tests"
+    Et la sortie contient "→ jgit feature rebase TEST-1 --on-conflict pause   (démos : sprint12)"
     Et la branche distante "demo/sprint12" est inchangée
     Et aucune copie de travail temporaire ne reste
+
+  # Seuls ceux dont les commits touchent les fichiers en conflit sont appelés,
+  # pas tous ceux qui ont travaillé sur la branche.
+  Scénario: Ne doivent intervenir que les auteurs des commits en conflit
+    Étant donné "Dominique" pousse le fichier "src/notes.txt" contenant "notes" sur la branche "feature/TEST-1" avec le message "Ajoute des notes"
+    Et "Camille" pousse le fichier "src/app.txt" contenant "version de develop" sur la branche "develop" avec le message "Modifie app.txt dans develop"
+    Quand je lance "jgit audit tickets --json" en lisant le JSON
+    Alors jgit se termine avec le code 3
+    Et le JSON a "tickets[ticket=feature/TEST-1].status" égal à "conflicts"
+    Et le JSON a "tickets[ticket=feature/TEST-1].owner.author" égal à "Dominique"
+    Et la liste JSON "tickets[ticket=feature/TEST-1].concerned" contient 1 éléments
+    Et le JSON a "tickets[ticket=feature/TEST-1].concerned[0].author" égal à "jgit tests"
+    Et le JSON a "tickets[ticket=feature/TEST-1].conflict.files[0].path" égal à "src/app.txt"
+    # Le rapport dit qui, pas le détail des fichiers et des commits.
+    Quand je lance "jgit audit tickets"
+    Alors jgit se termine avec le code 3
+    Et la sortie contient "à faire par : jgit tests"
+    Et la sortie ne contient pas "Dominique"
+    Et la sortie ne contient pas "src/app.txt"
+    Et la sortie ne contient pas "Camille"
+
+  Scénario: Le titre de la PR accompagne le ticket
+    Étant donné la PR de "feature/TEST-1" s'intitule "TEST-1 - Affiche le total TTC" sur GitHub
+    Et "Camille" pousse le fichier "src/app.txt" contenant "version de develop" sur la branche "develop" avec le message "Modifie app.txt dans develop"
+    Quand je lance "jgit audit tickets --json" en lisant le JSON
+    Alors jgit se termine avec le code 3
+    Et le JSON a "tickets[ticket=feature/TEST-1].pr_title" égal à "Affiche le total TTC"
+    Et le JSON a "tickets[ticket=feature/TEST-2].pr_title" nul
+    Et la sortie contient "✖ feature/TEST-1 — en retard de 1 commit(s) sur develop : son rebase coince"
+    Et la sortie contient "« Affiche le total TTC »"
+    Et GitHub a reçu "pr list --state open --limit 1000 --json headRefName,title"
+
+  # Un ticket créé avant que jgit enregistre la branche d'origine : rebaser
+  # sur la préprod un ticket parti d'une branche de projet n'aurait pas de sens.
+  # Sa base est supposée — la base connue dont il s'écarte le moins — et donnée
+  # explicitement à la commande, que jgit feature rebase prendrait sinon sur
+  # la préprod.
+  Scénario: Un ancien ticket sans base enregistrée : sa base est supposée
+    Étant donné je crée la branche locale "ripolin" depuis "develop"
+    Et je me place sur la branche "ripolin"
+    Et je commite le fichier "src/ripolin.txt" contenant "socle ripolin" avec le message "Socle ripolin"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Et je lance "jgit demo create vitrine --based-on ripolin --no-interaction"
+    Et un ancien ticket "feature/ANC-1" parti de "ripolin", sans branche d'origine enregistrée, ajoute le fichier "src/ancien.txt" contenant "ancien"
+    Et "Camille" pousse le fichier "src/ripolin.txt" contenant "autre version" sur la branche "develop" avec le message "Crée ripolin.txt dans develop"
+    Et "Dominique" pousse le fichier "src/ripolin2.txt" contenant "suite" sur la branche "ripolin" avec le message "Suite de ripolin"
+    Quand je lance "jgit audit tickets --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "tickets[ticket=feature/ANC-1].base" égal à "ripolin"
+    Et le JSON a "tickets[ticket=feature/ANC-1].base_source" égal à "inferred"
+    Et le JSON a "tickets[ticket=feature/ANC-1].status" égal à "to_rebase"
+    Et le JSON a "tickets[ticket=feature/ANC-1].behind_base" égal au nombre 1
+    Et le JSON a "tickets[ticket=feature/ANC-1].command" égal à "jgit feature rebase ANC-1 --based-on ripolin"
+    Et la sortie contient "3 autre(s) ticket(s) en retard sur leur base"
+    Quand je lance "jgit feature rebase ANC-1 --based-on ripolin --no-interaction"
+    Alors jgit se termine sans erreur
+    Et le fichier "src/ripolin2.txt" existe sur la branche distante "feature/ANC-1"
+    Et le fichier "src/ripolin.txt" de la branche distante "feature/ANC-1" contient "socle ripolin"
+
+  # Une branche que jgit n'a pas créée n'a pas de commit d'init : rien ne dit
+  # quels commits sont les siens, jgit feature rebase ne saurait pas la rebaser.
+  Scénario: Un ticket sans commit d'init est signalé, à rebaser à la main
+    Étant donné je crée la branche locale "feature/fait-main" depuis "develop"
+    Et je me place sur la branche "feature/fait-main"
+    Et je commite le fichier "src/main.txt" contenant "à la main" avec le message "Travail fait à la main"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Et un autre développeur pousse le fichier "src/preprod.txt" contenant "préprod" sur la branche "develop" avec le message "Livraison en préprod"
+    Quand je lance "jgit audit tickets --json" en lisant le JSON
+    Alors jgit se termine avec le code 3
+    Et le JSON a "tickets[ticket=feature/fait-main].status" égal à "no_init"
+    Et le JSON a "tickets[ticket=feature/fait-main].command" nul
+    Et le JSON a "summary.tickets.no_init" égal au nombre 1
+    Et la sortie contient "1 autre(s) ticket(s) en retard, sans commit d'init : à rebaser à la main"
+    Et la sortie contient "à faire par : jgit tests (1)"
 
   # « D'abord on rebase la branche elle-même » : son auteur y résout le
   # conflit, puis la démo reprend cette version résolue depuis la branche.
@@ -130,6 +213,8 @@ Fonctionnalité: L'état des lieux des tickets et des démos
     Et le JSON a "demos[0].conflicts[0].commands.resolve" égal à "jgit demo add sprint12 --from feature/TEST-2 --on-conflict pause"
     Et le JSON a "demos[0].conflicts[0].commands.drop" égal à "jgit demo drop sprint12 --from feature/TEST-2"
     Et le JSON a "demos[0].actions[0].command" égal à "jgit demo add sprint12 --from feature/TEST-2 --on-conflict pause"
+    Et la sortie contient "✖ Conflit : feature/TEST-2 (à l'ajout de ses nouveaux commits)"
+    Et la sortie contient "concerne : Camille (feature/TEST-2), jgit tests (feature/TEST-1)"
 
   # Un ticket en conflit est écarté et la simulation reprend : tous les tickets
   # fautifs sont signalés, pas seulement le premier.
@@ -172,7 +257,8 @@ Fonctionnalité: L'état des lieux des tickets et des démos
     Et la sortie contient "TICKETS (4)"
     Et la sortie contient "✖ feature/TEST-4"
     Et la sortie contient "↻ feature/TEST-1"
-    Et la sortie contient "1 autre(s) ticket(s) en retard sur leur base, rebase sans conflit — par propriétaire : jgit tests (1)"
+    Et la sortie contient "1 autre(s) ticket(s) en retard sur leur base, rebase sans conflit"
+    Et la sortie contient "à faire par : jgit tests (1)"
 
   Scénario: Un ticket dont la base a disparu est signalé
     Étant donné je crée la branche locale "release/9.9" depuis "develop"
