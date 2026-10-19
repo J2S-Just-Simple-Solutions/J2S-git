@@ -55,7 +55,7 @@ run_jgit_interactive() {
             --steps "$EXPECT_STEPS_FILE" \
             --timeout "$EXPECT_TIMEOUT" \
             --output "$output_file" \
-            -- $JGIT_LAUNCHER "$JGIT_BIN" "$@"
+            -- $JGIT_LAUNCHER "$(jgit_invoked_path)" "$@"
     ) || status=$?
 
     if [[ -f "$output_file" ]]; then

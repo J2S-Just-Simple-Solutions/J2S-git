@@ -266,6 +266,10 @@ gherkin_execute_step() {
 
     STEP_TABLE="$table"
 
+    # AUJOURDHUI vaut la date du jour (AAAA-MM-JJ) : certains noms en dépendent
+    # (archives de démo).
+    text="${text//AUJOURDHUI/$(date +%Y-%m-%d)}"
+
     while [[ $index -lt $STEP_DEF_COUNT ]]; do
         if [[ "$text" =~ ${STEP_PATTERNS[$index]} ]]; then
             "${STEP_HANDLERS[$index]}" "${BASH_REMATCH[@]:1}"

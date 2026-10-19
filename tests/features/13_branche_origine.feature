@@ -37,9 +37,9 @@ Fonctionnalité: Branche d'origine et fraîcheur
     Et la branche distante "feature/TEST-3" est partie de "main"
 
   Scénario: Une démo enregistre sa base
-    Quand je lance "jgit demo start salon --based-on main --no-interaction"
+    Quand je lance "jgit demo create salon --based-on main --no-interaction"
     Alors jgit se termine sans erreur
-    Et la branche distante "demo_salon" est partie de "main"
+    Et la branche distante "demo/salon" est partie de "main"
 
   Scénario: Une release enregistre la production
     Quand je lance "jgit release start"
@@ -229,18 +229,17 @@ Fonctionnalité: Branche d'origine et fraîcheur
   # une fois la démo passée. Se rabattre en silence sur develop déplacerait la
   # branche — et le résultat partirait en push --force.
   Scénario: Le rebase refuse quand la base enregistrée n'existe plus
-    Étant donné je lance "jgit demo start sprint12 --no-interaction"
-    Et je lance "jgit feature start TEST-18 --based-on demo_sprint12 --no-interaction --no-open"
+    Étant donné je lance "jgit demo create sprint12 --no-interaction"
+    Et je lance "jgit feature start TEST-18 --based-on demo/sprint12 --no-interaction --no-open"
     Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"
     Et je pousse la branche courante
-    Et je me place sur la branche "demo_sprint12"
-    Et je lance "jgit demo remove --no-interaction"
+    Et je lance "jgit demo delete sprint12 --no-interaction"
     Et un autre développeur pousse le fichier "src/preprod.txt" contenant "préprod" sur la branche "develop" avec le message "Livraison en préprod"
     Et je note l'état de la branche distante "feature/TEST-18"
     Et je note l'état de la branche distante "__PR__feature/TEST-18"
     Quand je lance "jgit feature rebase TEST-18 --no-interaction"
     Alors jgit se termine en erreur
-    Et la sortie contient "La branche de base demo_sprint12 n'existe pas (ni en local ni sur origin)."
+    Et la sortie contient "La branche de base demo/sprint12 n'existe pas (ni en local ni sur origin)."
     Et la sortie contient "C'est la branche d'origine de feature/TEST-18, enregistrée à sa création"
     Et la sortie contient "Rien n'a été modifié : ni vos branches, ni le serveur."
     Et la sortie contient "jgit feature rebase TEST-18 --based-on <branche>"
@@ -249,12 +248,11 @@ Fonctionnalité: Branche d'origine et fraîcheur
 
   # Le refus doit être un refus : rien n'a bougé, ni sur le serveur, ni chez moi.
   Scénario: Le refus ne touche ni le serveur ni la branche de travail
-    Étant donné je lance "jgit demo start sprint13 --no-interaction"
-    Et je lance "jgit feature start TEST-19 --based-on demo_sprint13 --no-interaction --no-open"
+    Étant donné je lance "jgit demo create sprint13 --no-interaction"
+    Et je lance "jgit feature start TEST-19 --based-on demo/sprint13 --no-interaction --no-open"
     Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"
     Et je pousse la branche courante
-    Et je me place sur la branche "demo_sprint13"
-    Et je lance "jgit demo remove --no-interaction"
+    Et je lance "jgit demo delete sprint13 --no-interaction"
     Et un autre développeur pousse le fichier "src/preprod.txt" contenant "préprod" sur la branche "develop" avec le message "Livraison en préprod"
     Et je note l'état de la branche distante "feature/TEST-19"
     Et je note l'état de la branche distante "__PR__feature/TEST-19"
@@ -265,16 +263,15 @@ Fonctionnalité: Branche d'origine et fraîcheur
     Et le fichier "src/preprod.txt" n'existe pas sur la branche distante "feature/TEST-19"
     Et l'historique local de "feature/TEST-19" ne contient pas "Livraison en préprod"
     Et la branche locale "jgit_rebase_feature/TEST-19" n'existe pas
-    Et la branche distante "feature/TEST-19" est partie de "demo_sprint13"
+    Et la branche distante "feature/TEST-19" est partie de "demo/sprint13"
 
   # Le remède donné par le message doit fonctionner du premier coup.
   Scénario: Relancer avec --based-on débloque la situation
-    Étant donné je lance "jgit demo start sprint14 --no-interaction"
-    Et je lance "jgit feature start TEST-20 --based-on demo_sprint14 --no-interaction --no-open"
+    Étant donné je lance "jgit demo create sprint14 --no-interaction"
+    Et je lance "jgit feature start TEST-20 --based-on demo/sprint14 --no-interaction --no-open"
     Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"
     Et je pousse la branche courante
-    Et je me place sur la branche "demo_sprint14"
-    Et je lance "jgit demo remove --no-interaction"
+    Et je lance "jgit demo delete sprint14 --no-interaction"
     Et un autre développeur pousse le fichier "src/preprod.txt" contenant "préprod" sur la branche "develop" avec le message "Livraison en préprod"
     Quand je lance "jgit feature rebase TEST-20 --based-on develop --no-interaction"
     Alors jgit se termine sans erreur
@@ -288,8 +285,8 @@ Fonctionnalité: Branche d'origine et fraîcheur
   # une release supprimée se diagnostiqueraient différemment, pour un problème
   # rigoureusement identique.
   Scénario: Saisie erronée et base enregistrée disparue donnent le même refus
-    Étant donné je lance "jgit demo start sprint20 --no-interaction"
-    Et je lance "jgit feature start TEST-22 --based-on demo_sprint20 --no-interaction --no-open"
+    Étant donné je lance "jgit demo create sprint20 --no-interaction"
+    Et je lance "jgit feature start TEST-22 --based-on demo/sprint20 --no-interaction --no-open"
     Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"
     Et je pousse la branche courante
     # 1. la saisie est mauvaise
@@ -301,53 +298,50 @@ Fonctionnalité: Branche d'origine et fraîcheur
     Et la sortie contient "jgit ne devine pas sur quelle branche vous vouliez partir"
     Et la sortie contient "jgit feature rebase TEST-22 --based-on <branche>"
     # 2. la valeur par défaut est mauvaise : mêmes phrases, seule la provenance change
-    Étant donné je me place sur la branche "demo_sprint20"
-    Et je lance "jgit demo remove --no-interaction"
+    Étant donné je lance "jgit demo delete sprint20 --no-interaction"
     Quand je lance "jgit feature rebase TEST-22 --no-interaction"
     Alors jgit se termine en erreur
-    Et la sortie contient "La branche de base demo_sprint20 n'existe pas (ni en local ni sur origin)."
+    Et la sortie contient "La branche de base demo/sprint20 n'existe pas (ni en local ni sur origin)."
     Et la sortie contient "C'est la branche d'origine de feature/TEST-22, enregistrée à sa création"
     Et la sortie contient "Rien n'a été modifié : ni vos branches, ni le serveur."
     Et la sortie contient "jgit ne devine pas sur quelle branche vous vouliez partir"
     Et la sortie contient "jgit feature rebase TEST-22 --based-on <branche>"
 
-  Scénario: feature start et demo start refusent dans les mêmes termes
+  Scénario: feature start et demo create refusent dans les mêmes termes
     Quand je lance "jgit feature start TEST-23 --based-on inexistante --no-interaction --no-open"
     Alors jgit se termine en erreur
     Et la sortie contient "La branche de base inexistante n'existe pas (ni en local ni sur origin)."
     Et la sortie contient "Elle a été demandée par --based-on : vérifiez son orthographe."
     Et la sortie contient "jgit feature start TEST-23 --based-on <branche>"
     Et la branche distante "feature/TEST-23" n'existe pas
-    Quand je lance "jgit demo start vitrine --based-on inexistante --no-interaction"
+    Quand je lance "jgit demo create vitrine --based-on inexistante --no-interaction"
     Alors jgit se termine en erreur
     Et la sortie contient "La branche de base inexistante n'existe pas (ni en local ni sur origin)."
     Et la sortie contient "Elle a été demandée par --based-on : vérifiez son orthographe."
-    Et la sortie contient "jgit demo start vitrine --based-on <branche>"
-    Et la branche distante "demo_vitrine" n'existe pas
+    Et la sortie contient "jgit demo create vitrine --based-on <branche>"
+    Et la branche distante "demo/vitrine" n'existe pas
 
   Scénario: Un hotfix refuse lui aussi, en nommant son propre scope
-    Étant donné je lance "jgit demo start sprint15 --no-interaction"
-    Et je lance "jgit hotfix start URGENT-9 --based-on demo_sprint15 --no-interaction --no-open"
+    Étant donné je lance "jgit demo create sprint15 --no-interaction"
+    Et je lance "jgit hotfix start URGENT-9 --based-on demo/sprint15 --no-interaction --no-open"
     Et je commite le fichier "src/correctif.txt" contenant "correctif" avec le message "Applique le correctif"
     Et je pousse la branche courante
-    Et je me place sur la branche "demo_sprint15"
-    Et je lance "jgit demo remove --no-interaction"
+    Et je lance "jgit demo delete sprint15 --no-interaction"
     Quand je lance "jgit hotfix rebase URGENT-9 --no-interaction"
     Alors jgit se termine en erreur
-    Et la sortie contient "La branche de base demo_sprint15 n'existe pas (ni en local ni sur origin)."
+    Et la sortie contient "La branche de base demo/sprint15 n'existe pas (ni en local ni sur origin)."
     Et la sortie contient "jgit hotfix rebase URGENT-9 --based-on <branche>"
     Et la sortie contient "La référence du projet est main."
 
   Scénario: check_rebase refuse aussi, et renvoie vers le même remède
-    Étant donné je lance "jgit demo start sprint16 --no-interaction"
-    Et je lance "jgit feature start TEST-21 --based-on demo_sprint16 --no-interaction --no-open"
+    Étant donné je lance "jgit demo create sprint16 --no-interaction"
+    Et je lance "jgit feature start TEST-21 --based-on demo/sprint16 --no-interaction --no-open"
     Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"
     Et je pousse la branche courante
-    Et je me place sur la branche "demo_sprint16"
-    Et je lance "jgit demo remove --no-interaction"
+    Et je lance "jgit demo delete sprint16 --no-interaction"
     Quand je lance "jgit util check_rebase --from feature/TEST-21"
     Alors jgit se termine avec le code 1
-    Et la sortie contient "La branche d'origine demo_sprint16 n'existe plus (ni en local ni sur origin)."
+    Et la sortie contient "La branche d'origine demo/sprint16 n'existe plus (ni en local ni sur origin)."
     Et la sortie contient "jgit feature rebase TEST-21 --based-on <branche>"
 
   # Un rebase est aussi l'occasion de donner sa trace à une branche qui n'en a

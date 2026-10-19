@@ -79,15 +79,15 @@ Fonctionnalité: Parcours complets de bout en bout
     Et je pousse la branche courante
 
     # --- On les montre sur une branche de démo ----------------------------
-    Quand je lance "jgit demo start sprint12 --no-interaction"
+    Quand je lance "jgit demo create sprint12 --from feature/TEST-2 --no-interaction"
     Alors jgit se termine sans erreur
-    Quand je lance "jgit demo merge --from feature/TEST-2 --from feature/TEST-3 --no-interaction"
+    Quand je lance "jgit demo add sprint12 --from feature/TEST-3"
     Alors jgit se termine sans erreur
-    Et le fichier "src/feature2.txt" existe sur la branche distante "demo_sprint12"
-    Et le fichier "src/feature3.txt" existe sur la branche distante "demo_sprint12"
-    Quand je lance "jgit demo list"
+    Et le fichier "src/feature2.txt" existe sur la branche distante "demo/sprint12"
+    Et le fichier "src/feature3.txt" existe sur la branche distante "demo/sprint12"
+    Quand je lance "jgit demo show sprint12"
     Alors jgit se termine sans erreur
-    Et la sortie contient "Branches mergées dans demo_sprint12 :"
+    Et la sortie contient "jgit release merge --from feature/TEST-2 --from feature/TEST-3"
 
     # --- La démo validée, on livre pour de vrai ---------------------------
     Quand la PR de "feature/TEST-2" est squash-mergée sur GitHub avec le message "TEST-2 (#22)"
@@ -99,12 +99,11 @@ Fonctionnalité: Parcours complets de bout en bout
     Et le fichier "src/feature2.txt" existe dans le tag "1.1.0"
     Et le fichier "src/feature3.txt" existe dans le tag "1.1.0"
 
-    # --- La démo est démontée ---------------------------------------------
-    Quand je me place sur la branche "demo_sprint12"
-    Et je lance "jgit demo remove --no-interaction"
+    # --- La démo est archivée ---------------------------------------------
+    Quand je lance "jgit demo archive sprint12"
     Alors jgit se termine sans erreur
-    Et la branche distante "demo_sprint12" n'existe pas
-    Et la branche locale "demo_sprint12" n'existe pas
+    Et la branche distante "demo/sprint12" n'existe pas
+    Et la branche distante "demo-archive/AUJOURDHUI_sprint12" existe
 
   Scénario: Deux releases successives s'enchaînent
     Étant donné je lance "jgit feature start TEST-4 --no-interaction --no-open"

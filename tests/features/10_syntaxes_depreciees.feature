@@ -1,6 +1,6 @@
 # language: fr
 Fonctionnalité: Compatibilité avec les anciennes syntaxes
-  Deux commandes ont changé de forme. Les anciennes restent acceptées le temps
+  Plusieurs commandes ont changé de forme. Les anciennes restent acceptées le temps
   que les habitudes et les scripts de chacun rattrapent : elles fonctionnent à
   l'identique et affichent un avertissement de dépréciation.
 
@@ -123,3 +123,62 @@ Fonctionnalité: Compatibilité avec les anciennes syntaxes
     Et la sortie contient "Syntaxes dépréciées"
     Et la sortie contient "jgit release merge <branche>   → jgit release merge --from <branche>"
     Et la sortie contient "jgit clean                     → jgit util clean"
+
+  # --- Démos : start, merge, remove ----------------------------------------
+  # Les commandes de la première version des démos restent acceptées : elles
+  # fabriquent désormais des démos au format actuel (demo/<nom>).
+
+  Scénario: demo start crée une démo au format actuel, et le signale
+    Quand je lance "jgit demo start sprint12 --no-interaction"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "[déprécié] « jgit demo start sprint12 » : utilisez désormais « jgit demo create sprint12 »."
+    Et la branche distante "demo/sprint12" existe
+    Et la branche distante "demo_sprint12" n'existe pas
+
+  Scénario: Sans nom, demo start nomme la démo d'après sa base
+    Quand je lance "jgit demo start --no-interaction"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "utilisez désormais « jgit demo create develop »"
+    Et la branche distante "demo/develop" existe
+
+  Scénario: demo merge --into ajoute les tickets à la démo nommée
+    Étant donné je lance "jgit feature start TEST-1 --no-interaction --no-open"
+    Et je commite le fichier "src/feature1.txt" contenant "feature 1" avec le message "Ajoute la feature 1"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Et je lance "jgit demo create sprint12 --no-interaction"
+    Quand je lance "jgit demo merge --from feature/TEST-1 --into sprint12 --no-interaction"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "utilisez désormais « jgit demo add sprint12 --from … »"
+    Et la démo distante "demo/sprint12" contient dans l'ordre les tickets :
+      | feature/TEST-1 |
+
+  Scénario: Sans --into, demo merge vise la démo de la branche courante
+    Étant donné je lance "jgit feature start TEST-1 --no-interaction --no-open"
+    Et je commite le fichier "src/feature1.txt" contenant "feature 1" avec le message "Ajoute la feature 1"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Et je lance "jgit demo create sprint12 --no-interaction"
+    Et je récupère la branche distante "demo/sprint12" en local
+    Et je me place sur la branche "demo/sprint12"
+    Quand je lance "jgit demo merge --from feature/TEST-1 --no-interaction"
+    Alors jgit se termine sans erreur
+    Et la démo distante "demo/sprint12" contient dans l'ordre les tickets :
+      | feature/TEST-1 |
+
+  Scénario: demo remove supprime la démo de la branche courante
+    Étant donné je lance "jgit demo create sprint12 --no-interaction"
+    Et je récupère la branche distante "demo/sprint12" en local
+    Et je me place sur la branche "demo/sprint12"
+    Quand je lance "jgit demo remove --no-interaction"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "[déprécié] « jgit demo remove » : utilisez désormais « jgit demo delete <nom> »."
+    Et la branche distante "demo/sprint12" n'existe pas
+    Et la branche locale "demo/sprint12" n'existe pas
+    Et je suis sur la branche "develop"
+
+  Scénario: demo remove hors d'une démo est refusé
+    Étant donné je me place sur la branche "develop"
+    Quand je lance "jgit demo remove --no-interaction"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Cette commande doit être exécutée depuis une branche de démo (branche actuelle : develop)."

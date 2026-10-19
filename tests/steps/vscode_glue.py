@@ -27,6 +27,10 @@ def step_projet_git(context):
 def step_lance_commande(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("je lance {string} en lisant le JSON")
+def step_lance_commande_json(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("je lance {string} et que je réponds aux questions :")
 def step_lance_commande_interactive(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -43,6 +47,14 @@ def step_pousse_branche_courante(context):
 def step_checkout(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("je résous le conflit du fichier {string} avec {string}")
+def step_resout_conflit(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("je marque le fichier {string} résolu sans retirer les marqueurs")
+def step_marque_resolu(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("la PR de {string} est squash-mergée sur GitHub avec le message {string}")
 def step_squash_merge_pr(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -51,12 +63,52 @@ def step_squash_merge_pr(context):
 def step_branches_non_standard(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
-@given("le système est {string} et non macOS")
+@given("le système détecté est {string}")
 def step_systeme_non_macos(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le dépôt de travail est un clone superficiel")
+def step_clone_superficiel(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le dépôt de travail est un clone de la seule branche {string}")
+def step_clone_une_branche(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("aucune identité git n'est configurée")
+def step_sans_identite(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("jgit est installé par un lien symbolique")
+def step_appel_par_lien(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le terminal n'est pas défini")
+def step_terminal_non_defini(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("une démo à l'ancien format {string} basée sur {string} contient les tickets {string}")
+def step_demo_ancien_format(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("une démo à l'ancien format {string} sans base enregistrée contient les tickets {string}")
+def step_demo_ancien_format_sans_base(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la PR de {string} est livrée dans {string}")
+def step_pr_livree(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("la branche {string} est supprimée sur GitHub")
 def step_github_supprime_branche(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la PR de {string} s'intitule {string} sur GitHub")
+def step_github_renomme_pr(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("un ancien ticket {string} parti de {string}, sans branche d'origine enregistrée, ajoute le fichier {string} contenant {string}")
+def step_ancien_ticket(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("le client gh échoue pour les commandes {string}")
@@ -81,6 +133,66 @@ def step_sortie_contient(context):
 
 @given("la sortie ne contient pas {string}")
 def step_sortie_ne_contient_pas(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la sortie ne contient aucune séquence de couleur")
+def step_sortie_sans_couleur(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la sortie standard est un unique document JSON")
+def step_json_unique(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} égal à {string}")
+def step_json_egal(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} qui contient {string}")
+def step_json_contient(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} égal au nombre {int}")
+def step_json_nombre(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} vrai")
+def step_json_vrai(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} faux")
+def step_json_faux(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON a {string} nul")
+def step_json_nul(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la liste JSON {string} contient {int} éléments")
+def step_json_longueur(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("le JSON n'a pas de {string}")
+def step_json_absent(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la démo distante {string} contient dans l'ordre les tickets :")
+def step_demo_tickets(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la démo distante {string} ne contient aucun ticket")
+def step_demo_sans_ticket(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("une opération jgit est en pause")
+def step_operation_en_pause(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("aucune copie de travail temporaire ne reste")
+def step_aucune_copie_temporaire(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("aucune opération jgit n'est en pause")
+def step_aucune_operation_en_pause(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("la branche locale {string} existe")
@@ -191,12 +303,20 @@ def step_supprime_tag(context):
 def step_autre_dev_pousse(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("{string} pousse le fichier {string} contenant {string} sur la branche {string} avec le message {string}")
+def step_personne_pousse(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("je note l'état de la branche distante {string}")
 def step_note_etat_branche_distante(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("la branche distante {string} est inchangée")
 def step_branche_distante_inchangee(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la branche distante {string} a avancé sans réécriture")
+def step_branche_distante_avance_rapide(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("la branche distante {string} a changé")

@@ -1,0 +1,8 @@
+.git
+.claude
+.vscode
+docs
+tests
+ui/node_modules
+ui/dist
+**/.DS_Store

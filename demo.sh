@@ -1,285 +1,521 @@
 #!/bin/bash
-source "$(dirname "$0")/functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/functions.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/demo_model.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/demo_engine.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/demo_lifecycle.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/audit.sh"
 
-DemoBranchPrefix="demo_"
+###############################################
+###############################################
+#      Démos : les commandes
+###############################################
+###############################################
+#
+# Le modèle (ce qu'est une démo, comment on la lit) est dans demo_model.sh.
+# Ici : ce que voit l'utilisateur, et le document --json correspondant.
 
-get_demo_branch_name() {
-    local suffix="$1"
-    echo "${DemoBranchPrefix}${suffix}"
+###############################################
+#            Fragments communs
+###############################################
+
+# Libellé humain et icône d'un état de ticket.
+demo_status_label() {
+  local status="$1"
+  local delivered="$2"
+  local missing_count="$3"
+  local base="$4"
+
+  if [[ "$delivered" == true ]]; then
+    printf '%s✔ livré dans %s%s' "$C_GREEN" "$base" "$C_RESET"
+    return
+  fi
+
+  case "$status" in
+    up_to_date) printf '%s✔ à jour%s' "$C_GREEN" "$C_RESET" ;;
+    ahead)
+      if [[ "$missing_count" == "1" ]]; then
+        printf '%s↻ 1 commit pas encore dans la démo%s' "$C_YELLOW" "$C_RESET"
+      else
+        printf '%s↻ %s commits pas encore dans la démo%s' "$C_YELLOW" "$missing_count" "$C_RESET"
+      fi
+      ;;
+    diverged) printf '%s≠ le ticket a été réécrit depuis (squash, commit modifié)%s' "$C_YELLOW" "$C_RESET" ;;
+    missing)  printf '%s✖ branche supprimée du serveur%s' "$C_RED" "$C_RESET" ;;
+    *)        printf '? état inconnu (ancien format)' ;;
+  esac
 }
 
-is_demo_branch() {
-    local branch="$1"
-    [[ "$branch" == ${DemoBranchPrefix}* ]]
+# Commande suggérée pour un ticket, ou phrase quand aucune commande n'est utile.
+demo_action_hint() {
+  local action="$1"
+  local name="$2"
+  local ticket="$3"
+
+  case "$action" in
+    add)     printf 'jgit demo add %s --from %s' "$name" "$ticket" ;;
+    refresh) printf 'jgit demo refresh %s --from %s' "$name" "$ticket" ;;
+    drop)    printf 'retiré au prochain « jgit demo rebase %s »' "$name" ;;
+  esac
 }
 
-demo_start() {
-    local requested_name="$1"
-    local based_on="$2"
-    # Le nom demandé est repris plus bas à partir de la base quand il est omis :
-    # on garde celui que l'utilisateur a réellement tapé pour le lui réafficher.
-    local requested_name_arg="$1"
-    local _unused_into="$3"
-    local current_local_branch=$(git rev-parse --abbrev-ref HEAD)
+# Date et auteur de la dernière modification de la démo.
+demo_tip_info() {
+  DEMO_UPDATED_AT=""
+  DEMO_UPDATED_HUMAN=""
+  DEMO_UPDATED_BY=""
+  [[ -n "$DEMO_TIP" ]] || return 0
 
-    jgit_fetch_once || exit_safe 1
-
-    local base_branch
-    local base_provenance="reference"
-    if [[ -n "$based_on" ]]; then
-        base_branch="$based_on"
-        base_provenance="option"
-    elif ! base_branch=$(get_reference_branch); then
-        exit_safe 1
-    fi
-
-    if [[ -z "$base_branch" ]]; then
-        echo "Impossible de déterminer la branche de référence pour la démo."
-        exit_safe 1
-    fi
-
-    if [[ -z "$requested_name" ]]; then
-        requested_name="$base_branch"
-    fi
-
-    local demo_branch
-    demo_branch=$(get_demo_branch_name "$requested_name")
-
-    local remote_exists
-    remote_exists=$(git ls-remote --heads "$j2s_remote" "$demo_branch")
-
-    if [[ -n "$remote_exists" ]]; then
-        switch_branch "$demo_branch"
-        current_branch="$demo_branch"
-        printf "Branche %s prête pour la démo.\n" "$demo_branch"
-        exit_safe 0
-    fi
-
-    if git show-ref --verify --quiet "refs/heads/$demo_branch"; then
-        printf "\033[1;31mLa branche %s existe en local mais pas sur %s.\033[0m\n" "$demo_branch" "$j2s_remote"
-        printf "Veuillez la publier manuellement ou la supprimer avant de relancer la commande.\n"
-        exit_safe 1
-    fi
-
-    # Même contrôle, même message que pour une feature : une base introuvable se
-    # lit de la même façon quelle que soit la commande qui l'a demandée.
-    if ! ensure_base_branch "$base_branch" "$base_provenance" "feature" \
-         "jgit demo start${requested_name_arg:+ $requested_name_arg}"; then
-        exit_safe 1
-    fi
-
-    # Une démo se fabrique à partir de la version serveur de sa base : le contrôle
-    # a lieu avant la confirmation, pour ne pas demander puis refuser.
-    refuse_if_branch_ahead "$base_branch" "Une démo" || exit_safe 1
-
-    printf "%sJGit va créer la branche de démo %s%s%s%s qui se basera sur la branche %s%s%s\n" \
-    "$(tput setaf 2)" "$(tput setaf 1)" "$demo_branch" "$(tput sgr0)"  "$(tput setaf 2)" "$(tput setaf 1)" "$base_branch" "$(tput sgr0)"
-    # Demander confirmation à l'utilisateur
-    if ! confirm_action "Souhaitez-vous continuer ?" "y"; then
-        echo "Opération annulée."
-        exit_safe 1
-    fi
-
-    switch_branch "$base_branch"
-    switch_branch "$demo_branch" create
-    commit_init_with_based_on "$prefix_init_commit demo $demo_branch $suffix_init_commit" "$demo_branch" "$base_branch" --quiet
-    git push --set-upstream "$j2s_remote" "$demo_branch" --quiet
-
-    current_branch="$demo_branch"
-    printf "Branche %s créée depuis %s et publiée avec succès.\n" "$demo_branch" "$base_branch"
-    exit_safe 0
+  IFS=$'\037' read -r DEMO_UPDATED_AT DEMO_UPDATED_HUMAN DEMO_UPDATED_BY < <(
+    git log -n 1 --date='format:%Y-%m-%d %H:%M' --format='%cI%x1f%cd%x1f%cn' "$DEMO_TIP" 2>/dev/null)
 }
 
-resolve_demo_source_branch() {
-    local source="$1"
-    if [[ "$source" == feature/* || "$source" == hotfix/* ]]; then
-        echo "$source"
-    else
-        # Appelée en substitution de commande : message sur stderr et code de
-        # retour, sinon le message serait capturé comme un nom de branche.
-        printf "\033[1;31mLe format attendu est feature/<ticket> ou hotfix/<ticket>.\033[0m\n" >&2
-        return 1
-    fi
+# Résumé d'une démo lue (demo_load), au format JSON.
+demo_summary_json() {
+  local read_only=false
+  local paused=false
+
+  [[ "$DEMO_KIND" != "active" ]] && read_only=true
+  demo_operation_paused_on "$DEMO_BRANCH" && paused=true
+  demo_tip_info
+
+  json_object \
+    "$(json_kv_str name "$DEMO_NAME")" \
+    "$(json_kv_str branch "$DEMO_BRANCH")" \
+    "$(json_kv_str format "$DEMO_FORMAT")" \
+    "$(json_kv_bool archived "$([[ "$DEMO_KIND" == "archived" ]] && echo true)")" \
+    "$(json_kv_str_or_null archived_on "$DEMO_ARCHIVED_ON")" \
+    "$(json_kv_bool read_only "$read_only")" \
+    "$(json_kv_str_or_null base "$DEMO_BASE")" \
+    "$(json_kv_bool base_exists "$DEMO_BASE_EXISTS")" \
+    "$(json_kv_num behind_base "$DEMO_BEHIND")" \
+    "$(json_kv_str_or_null tip_sha "$DEMO_TIP")" \
+    "$(json_kv_str_or_null updated_at "$DEMO_UPDATED_AT")" \
+    "$(json_kv_str_or_null updated_by "$DEMO_UPDATED_BY")" \
+    "$(json_kv_num ticket_count "${#DEMO_TICKETS[@]}")" \
+    "$(json_kv_num tickets_needing_attention "$DEMO_ATTENTION")" \
+    "$(json_kv_num foreign_commit_count "$DEMO_FOREIGN_COUNT")" \
+    "$(json_kv_bool needs_rebase "$DEMO_NEEDS_REBASE")" \
+    "$(json_kv_bool operation_in_progress "$paused")"
 }
 
-demo_merge_branch() {
-    local source_branch
-    if ! source_branch=$(resolve_demo_source_branch "$1"); then
-        exit_safe 1
-    fi
-    local demo_branch="$2"
+# Ticket i de la démo lue, au format JSON.
+demo_ticket_json() {
+  local i="$1"
+  local ticket="${DEMO_TICKETS[$i]}"
+  local remote_exists=false
 
-    local source_remote="$j2s_remote/$source_branch"
+  demo_remote_exists "$ticket" && remote_exists=true
 
-    if ! is_demo_branch "$demo_branch"; then
-        printf "\033[1;31mCette commande doit être exécutée sur une branche demo_* (branche actuelle : %s).\033[0m\n" "$demo_branch"
-        exit_safe 1
-    fi
-
-    jgit_fetch_once || exit_safe 1
-
-    if ! git ls-remote --exit-code --heads "$j2s_remote" "$source_branch" >/dev/null 2>&1; then
-        printf "\033[1;31mLa branche %s n'existe pas sur %s.\033[0m\n" "$source_branch" "$j2s_remote"
-        exit_safe 1
-    fi
-
-    switch_branch "$demo_branch"
-
-    if git merge-base --is-ancestor "$source_remote" HEAD; then
-        printf "La branche %s est déjà présente dans %s.\n" "$source_branch" "$demo_branch"
-        return 0
-    fi
-
-    local branch_type="${source_branch%%/*}"
-    local marker_message="$prefix_commit DEMO merge $branch_type $source_branch $suffix_init_commit"
-
-    if git log --pretty=format:"%s" | grep -Fq "$marker_message"; then
-        printf "Un marqueur pour %s existe déjà.\n" "$source_branch"
-    else
-        git commit --allow-empty -m "$marker_message" --quiet
-    fi
-
-    if ! git rebase "$source_remote"; then
-        printf "\033[1;31mRebase interrompu pour %s. Résolvez les conflits puis terminez le rebase manuellement.\033[0m\n" "$source_branch"
-        printf "Utilisez 'git rebase --continue' après résolution ou 'git rebase --abort' pour annuler.\n"
-        exit_safe 1
-    fi
-
-    git push --force-with-lease "$j2s_remote" "$demo_branch"
-    printf "Branche %s rebasée avec succès dans %s.\n" "$source_branch" "$demo_branch"
+  json_object \
+    "$(json_kv_str ticket "$ticket")" \
+    "$(json_kv_str type "${ticket%%/*}")" \
+    "$(json_kv_str id "${ticket#*/}")" \
+    "$(json_kv_num position "$((i + 1))")" \
+    "$(json_kv_str status "${DEMO_T_STATUS[$i]}")" \
+    "$(json_kv_bool delivered "${DEMO_T_DELIVERED[$i]}")" \
+    "$(json_kv_bool delivered_with_pending_work "${DEMO_T_PENDING[$i]}")" \
+    "$(json_kv_bool remote_exists "$remote_exists")" \
+    "$(json_kv_num commits_in_demo "${DEMO_T_IN[$i]}")" \
+    "$(json_kv_num commits_not_in_demo "${DEMO_T_MISSING[$i]}")" \
+    "$(json_kv_num commits_only_in_demo "${DEMO_T_ONLY[$i]}")" \
+    "$(json_kv_num segments "${DEMO_T_SEGMENTS[$i]}")" \
+    "$(json_kv_str suggested_action "${DEMO_T_ACTION[$i]}")"
 }
 
-demo_merge() {
-    local target_branch="$1"
-    shift || true
-    local sources=("$@")
+# Tickets à reprendre dans une release : ni livrés, ni disparus.
+demo_release_tickets() {
+  local i
 
-    if [[ -z "$target_branch" ]]; then
-        target_branch=$(git rev-parse --abbrev-ref HEAD)
-    else
-        if [[ "$target_branch" != ${DemoBranchPrefix}* ]]; then
-            target_branch=$(get_demo_branch_name "$target_branch")
-        fi
-        switch_branch "$target_branch"
-    fi
-
-    if [[ ${#sources[@]} -eq 0 ]]; then
-        echo "Veuillez préciser au moins une source avec --from." >&2
-        exit_safe 1
-    fi
-
-    for source in "${sources[@]}"; do
-        demo_merge_branch "$source" "$target_branch"
-    done
+  for i in ${DEMO_TICKETS[@]+"${!DEMO_TICKETS[@]}"}; do
+    [[ "${DEMO_T_DELIVERED[$i]}" == true || "${DEMO_T_STATUS[$i]}" == "missing" ]] && continue
+    printf '%s\n' "${DEMO_TICKETS[$i]}"
+  done
 }
 
-demo_list() {
-    local demo_branch=$(git rev-parse --abbrev-ref HEAD)
+demo_release_command() {
+  local tickets ticket command="jgit release merge"
 
-    if ! is_demo_branch "$demo_branch"; then
-        printf "\033[1;31mCette commande doit être exécutée depuis une branche demo_*.\033[0m\n"
-        exit_safe 1
+  tickets=$(demo_release_tickets)
+  [[ -n "$tickets" ]] || return 0
+  while IFS= read -r ticket; do
+    command="$command --from $ticket"
+  done <<< "$tickets"
+  printf '%s' "$command"
+}
+
+# Phrase d'état d'une démo, pour la liste.
+demo_state_phrase() {
+  local parts=()
+
+  if [[ "$DEMO_KIND" == "legacy" ]]; then
+    printf '%s⚠ ancien format : jgit demo migrate %s%s' "$C_YELLOW" "$DEMO_NAME" "$C_RESET"
+    return
+  fi
+  if [[ "$DEMO_BASE_EXISTS" != true ]]; then
+    printf "%s✖ sa base %s n'existe plus%s" "$C_RED" "${DEMO_BASE:-?}" "$C_RESET"
+    return
+  fi
+  if [[ "$DEMO_NEEDS_REBASE" == true ]]; then
+    parts[${#parts[@]}]="en retard de $DEMO_BEHIND commit(s) sur $DEMO_BASE"
+  fi
+  if [[ "$DEMO_ATTENTION" -gt 0 ]]; then
+    parts[${#parts[@]}]="$DEMO_ATTENTION ticket(s) à reprendre"
+  fi
+  if [[ "$DEMO_FOREIGN_COUNT" -gt 0 ]]; then
+    parts[${#parts[@]}]="$DEMO_FOREIGN_COUNT commit(s) ajouté(s) à la main"
+  fi
+
+  if [[ ${#parts[@]} -eq 0 ]]; then
+    printf '%s✔ à jour%s' "$C_GREEN" "$C_RESET"
+  else
+    local IFS='|'
+    printf '%s⚠ %s%s' "$C_YELLOW" "$(printf '%s' "${parts[*]}" | sed 's/|/ · /g')" "$C_RESET"
+  fi
+}
+
+###############################################
+#            jgit demo list
+###############################################
+
+demo_list_cmd() {
+  local scope="${1:-active}"
+  local branches branch
+  local items=()
+  local lines=()
+  local archived_count=0
+
+  jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
+
+  branches=$(demo_enumerate "$scope")
+
+  while IFS= read -r branch; do
+    [[ -n "$branch" ]] || continue
+    demo_load "$branch" || continue
+    items[${#items[@]}]=$(demo_summary_json)
+    lines[${#lines[@]}]=$(printf '  %-24s %-12s %-11s %s' \
+      "$DEMO_NAME" "${DEMO_BASE:--}" "$(demo_ticket_count_label)" "$(demo_list_state_label)")
+  done <<< "$branches"
+
+  if [[ "$scope" == "active" ]]; then
+    archived_count=$(demo_count_lines "$(demo_enumerate archived)")
+  fi
+
+  case "$scope" in
+    archived) printf "%sDémos archivées sur %s%s\n\n" "$C_BLUE" "$j2s_remote" "$C_RESET" ;;
+    all)      printf "%sToutes les démos sur %s%s\n\n" "$C_BLUE" "$j2s_remote" "$C_RESET" ;;
+    *)        printf "%sDémos sur %s%s\n\n" "$C_BLUE" "$j2s_remote" "$C_RESET" ;;
+  esac
+
+  if [[ ${#lines[@]} -eq 0 ]]; then
+    printf "  Aucune démo.\n"
+    printf "\nCréer une démo : jgit demo create <nom> [--from <ticket>]...\n"
+  else
+    printf "  %s%-24s %-12s %-11s %s%s\n" "$C_DIM" "NOM" "BASE" "TICKETS" "ETAT" "$C_RESET"
+    printf "%s\n" "${lines[@]}"
+    printf "\nDétail d'une démo : jgit demo show <nom>\n"
+  fi
+
+  if [[ $archived_count -gt 0 ]]; then
+    printf "%s démo(s) archivée(s) : jgit demo list --archived\n" "$archived_count"
+  fi
+
+  json_emit "$(json_object \
+    "$(json_kv_str schema "jgit.demo.list/1")" \
+    "$(json_kv_bool ok true)" \
+    "$(json_kv_str command "demo list")" \
+    "$(json_kv_str remote "$j2s_remote")" \
+    "$(json_kv_str scope "$scope")" \
+    "$(json_kv demos "$(json_array ${items[@]+"${items[@]}"})")" \
+    "$(json_kv_num archived_count "$archived_count")")"
+}
+
+demo_ticket_count_label() {
+  if [[ ${#DEMO_TICKETS[@]} -eq 1 ]]; then
+    printf '1 ticket'
+  else
+    printf '%s tickets' "${#DEMO_TICKETS[@]}"
+  fi
+}
+
+demo_list_state_label() {
+  if [[ "$DEMO_KIND" == "archived" ]]; then
+    printf '%sarchivée le %s%s' "$C_DIM" "$DEMO_ARCHIVED_ON" "$C_RESET"
+  else
+    demo_state_phrase
+  fi
+}
+
+###############################################
+#            jgit demo show
+###############################################
+
+demo_show_cmd() {
+  local target="$1"
+  local i ticket hint items=() foreign_items=() sha subject author release_command
+
+  jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
+  demo_require_target "$target" "demo show"
+
+  if ! demo_load "$DEMO_BRANCH"; then
+    jgit_fail not_a_demo "$JGIT_EXIT_REFUSED" \
+      "La branche $DEMO_BRANCH n'a pas de commit d'initialisation de démo : jgit ne sait pas la lire."
+  fi
+  demo_tip_info
+
+  # --- en-tête -------------------------------------------------------------
+  printf "%sDémo %s%s (%s)" "$C_BLUE" "$DEMO_NAME" "$C_RESET" "$DEMO_BRANCH"
+  case "$DEMO_KIND" in
+    archived) printf " — %sarchivée le %s, lecture seule%s" "$C_DIM" "$DEMO_ARCHIVED_ON" "$C_RESET" ;;
+    legacy)   printf " — %sancien format, lecture seule%s" "$C_YELLOW" "$C_RESET" ;;
+  esac
+  printf "\n"
+
+  if [[ "$DEMO_BASE_EXISTS" != true ]]; then
+    printf "  Base         %s%s — n'existe plus sur %s%s\n" "$C_RED" "${DEMO_BASE:-inconnue}" "$j2s_remote" "$C_RESET"
+  elif [[ "$DEMO_NEEDS_REBASE" == true ]]; then
+    printf "  Base         %s — %sen retard de %s commit(s)%s\n" "$DEMO_BASE" "$C_YELLOW" "$DEMO_BEHIND" "$C_RESET"
+  else
+    printf "  Base         %s — %sà jour%s\n" "$DEMO_BASE" "$C_GREEN" "$C_RESET"
+  fi
+  if [[ -n "$DEMO_UPDATED_HUMAN" ]]; then
+    printf "  Mise à jour  %s par %s\n" "$DEMO_UPDATED_HUMAN" "$DEMO_UPDATED_BY"
+  fi
+
+  # --- tickets ---------------------------------------------------------------
+  printf "\n%sTickets%s\n" "$C_BLUE" "$C_RESET"
+  if [[ ${#DEMO_TICKETS[@]} -eq 0 ]]; then
+    printf "  Aucun ticket.\n"
+  fi
+  for i in ${DEMO_TICKETS[@]+"${!DEMO_TICKETS[@]}"}; do
+    ticket="${DEMO_TICKETS[$i]}"
+    printf "  %2s. %-28s %s" "$((i + 1))" "$ticket" \
+      "$(demo_status_label "${DEMO_T_STATUS[$i]}" "${DEMO_T_DELIVERED[$i]}" "${DEMO_T_MISSING[$i]}" "$DEMO_BASE")"
+    if [[ "$DEMO_KIND" == "active" ]]; then
+      hint=$(demo_action_hint "${DEMO_T_ACTION[$i]}" "$DEMO_NAME" "$ticket")
+      [[ -n "$hint" ]] && printf "\n      %s→ %s%s" "$C_DIM" "$hint" "$C_RESET"
     fi
-
-    switch_branch "$demo_branch"
-
-    local init_commit
-    init_commit=$(get_last_commit_with_pattern "$prefix_init_commit demo $demo_branch")
-
-    if [[ -z "$init_commit" ]]; then
-        printf "\033[1;31mImpossible de trouver le commit d'initialisation de la démo.\033[0m\n"
-        exit_safe 1
+    if [[ "${DEMO_T_PENDING[$i]}" == true ]]; then
+      printf "\n      %s⚠ du code de %s n'est pas encore livré (travail après la validation de la PR)%s" \
+        "$C_YELLOW" "$ticket" "$C_RESET"
     fi
-
-    local entries=()
-    local log_output
-    log_output=$(git log --reverse --pretty=format:"%s" "$init_commit^..HEAD")
-
-    # Un marqueur de démo s'écrit exactement :
-    #   [jgit] DEMO merge <type> <type>/<ticket> [empty_commit]
-    local prefix keyword action branch_type branch_name
-    while IFS= read -r commit_subject; do
-        read -r prefix keyword action branch_type branch_name _ <<< "$commit_subject"
-        if [[ "$prefix" == "$prefix_commit" && "$keyword" == "DEMO" && "$action" == "merge" \
-              && -n "$branch_type" && -n "$branch_name" ]]; then
-            entries+=("$branch_type:$branch_name")
-        fi
-    done <<< "$log_output"
-
-    if [[ ${#entries[@]} -eq 0 ]]; then
-        printf "Aucune branche mergée détectée pour %s.\n" "$demo_branch"
-        exit_safe 0
-    fi
-
-    local color_title=$(tput bold; tput setaf 6)
-    local color_feature=$(tput setaf 2)
-    local color_marker=$(tput setaf 4)
-    local color_reset=$(tput sgr0)
-
-    printf "%sBranches mergées dans %s :%s\n" "$color_title" "$demo_branch" "$color_reset"
-    for entry in "${entries[@]}"; do
-        local branch_type=${entry%%:*}
-        local branch_name=${entry#*:}
-        local short_name=${branch_name#${branch_type}/}
-        printf "  %s-%s %s (%s%s%s)\n" "$color_feature" "$color_reset" "$short_name" "$color_marker" "$branch_name" "$color_reset"
-    done
-    printf "\n%sCommandes release suggérées :%s\n" "$color_title" "$color_reset"
-    for entry in "${entries[@]}"; do
-        local branch_name=${entry#*:}
-        printf "jgit release merge --from %s\n" "$branch_name"
-    done
     printf "\n"
+    items[${#items[@]}]=$(demo_ticket_json "$i")
+  done
 
-    exit_safe 0
+  # --- commits ajoutés à la main ------------------------------------------
+  if [[ "$DEMO_FOREIGN_COUNT" -gt 0 ]]; then
+    printf "\n%sCommits ajoutés à la main sur la démo%s (ils n'appartiennent à aucun ticket)\n" "$C_YELLOW" "$C_RESET"
+  fi
+  while IFS= read -r sha; do
+    [[ -n "$sha" ]] || continue
+    IFS=$'\037' read -r subject author < <(git log -n 1 --format='%s%x1f%an' "$sha")
+    printf "  %s %s (%s)\n" "$(git rev-parse --short "$sha")" "$subject" "$author"
+    foreign_items[${#foreign_items[@]}]=$(json_object \
+      "$(json_kv_str sha "$sha")" \
+      "$(json_kv_str subject "$subject")" \
+      "$(json_kv_str author "$author")")
+  done <<< "$DEMO_FOREIGN_SHAS"
+
+  # --- à faire -----------------------------------------------------------------
+  if [[ "$DEMO_KIND" == "active" && ( "$DEMO_NEEDS_REBASE" == true || "$DEMO_FOREIGN_COUNT" -gt 0 ) ]]; then
+    printf "\n%sÀ faire%s\n" "$C_BLUE" "$C_RESET"
+    if [[ "$DEMO_FOREIGN_COUNT" -gt 0 ]]; then
+      printf "  Les commits ajoutés à la main bloquent la reconstruction : reportez-les dans un ticket,\n"
+      printf "  puis jgit demo rebase %s --drop-foreign\n" "$DEMO_NAME"
+    else
+      printf "  jgit demo rebase %s\n" "$DEMO_NAME"
+    fi
+  elif [[ "$DEMO_KIND" == "legacy" ]]; then
+    printf "\n%sÀ faire%s\n  jgit demo migrate %s\n" "$C_BLUE" "$C_RESET" "$DEMO_NAME"
+  fi
+
+  release_command=$(demo_release_command)
+  if [[ -n "$release_command" ]]; then
+    printf "\n%sPour livrer ces tickets%s (une fois leurs PR validées)\n  %s\n" "$C_BLUE" "$C_RESET" "$release_command"
+  fi
+
+  json_emit "$(json_object \
+    "$(json_kv_str schema "jgit.demo.show/1")" \
+    "$(json_kv_bool ok true)" \
+    "$(json_kv_str command "demo show")" \
+    "$(json_kv demo "$(demo_summary_json)")" \
+    "$(json_kv tickets "$(json_array ${items[@]+"${items[@]}"})")" \
+    "$(json_kv foreign_commits "$(json_array ${foreign_items[@]+"${foreign_items[@]}"})")" \
+    "$(json_kv_str_or_null release_command "$release_command")")"
 }
 
-demo_remove() {
-    local demo_branch=$(git rev-parse --abbrev-ref HEAD)
+###############################################
+#            jgit demo candidates
+###############################################
 
-    if ! is_demo_branch "$demo_branch"; then
-        printf "\033[1;31mCette commande doit être exécutée depuis une branche demo_*.\033[0m\n"
-        exit_safe 1
+# Les tickets que l'on peut ajouter : branches feature/ et hotfix/ du serveur,
+# des plus récentes aux plus anciennes, moins celles déjà dans la démo.
+demo_candidates_cmd() {
+  local target="$1"
+  local based_on="${2:-}"
+  local base demo_name="" ticket date subject author known line
+  local j_ticket j_type j_id j_date j_subject j_author
+  local items=() fresh_lines=() delivered_lines=()
+
+  jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
+
+  if [[ -n "$target" && -n "$based_on" ]]; then
+    jgit_fail usage "$JGIT_EXIT_ERROR" \
+      "--based-on ne s'utilise pas avec une démo : ses tickets se comparent à sa propre base." \
+      "jgit demo candidates $target"
+  fi
+
+  # Une démo nommée, ou la démo de la branche courante — sauf si --based-on
+  # demande les candidats d'une démo encore à créer, sur cette base.
+  if [[ -n "$target" ]] || { [[ -z "$based_on" ]] && demo_parse_branch "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" 2>/dev/null; }; then
+    demo_require_target "$target" "demo candidates"
+    demo_load "$DEMO_BRANCH" || DEMO_TICKETS=()
+    demo_name="$DEMO_NAME"
+    base="$DEMO_BASE"
+  elif [[ -n "$based_on" ]]; then
+    if ! demo_remote_exists "$based_on"; then
+      jgit_fail base_not_found "$JGIT_EXIT_REFUSED" \
+        "La branche $based_on n'existe pas sur $j2s_remote." \
+        "Les bases possibles : jgit demo bases"
     fi
+    DEMO_TICKETS=()
+    base="$based_on"
+  else
+    DEMO_TICKETS=()
+    base=$(get_reference_branch feature 2>/dev/null)
+  fi
 
-    jgit_fetch_once || exit_safe 1
+  demo_delivered_cache_load "$base"
 
-    local reference_branch
-    if ! reference_branch=$(get_reference_branch "feature"); then
-        exit_safe 1
-    fi
+  while IFS=$'\037' read -r ticket date subject author; do
+    [[ -n "$ticket" ]] || continue
+    for known in ${DEMO_TICKETS[@]+"${DEMO_TICKETS[@]}"}; do
+      [[ "$known" == "$ticket" ]] && continue 2
+    done
 
-    local color_title=$(tput bold; tput setaf 6)
-    local color_branch=$(tput bold; tput setaf 1)
-    local color_text=$(tput setaf 2)
-    local color_reset=$(tput sgr0)
+    local delivered=false
+    demo_ticket_is_delivered "$ticket" && delivered=true
 
-    printf "%sSuppression de la branche de démo %s%s%s%s\n" \
-        "$color_title" "$color_branch" "$demo_branch" "$color_title" "$color_reset"
-    printf "%sElle sera retirée du remote %s%s%s et supprimée en local.%s\n" \
-        "$color_text" "$color_branch" "$j2s_remote" "$color_text" "$color_reset"
+    # Des centaines de tickets possibles : aucun sous-shell dans la boucle.
+    json_str_into j_ticket "$ticket"
+    json_str_into j_type "${ticket%%/*}"
+    json_str_into j_id "${ticket#*/}"
+    json_str_into j_date "$date"
+    json_str_into j_subject "$subject"
+    json_str_into j_author "$author"
+    items[${#items[@]}]="{\"ticket\":$j_ticket,\"type\":$j_type,\"id\":$j_id,\"updated_at\":$j_date,\"last_subject\":$j_subject,\"author\":$j_author,\"delivered\":$delivered}"
 
-    if ! confirm_action "Confirmez-vous la suppression ?" "y"; then
-        echo "Opération annulée."
-        exit_safe 1
-    fi
-
-    switch_branch "$reference_branch"
-
-    if git ls-remote --exit-code --heads "$j2s_remote" "$demo_branch" >/dev/null 2>&1; then
-        if ! git push "$j2s_remote" --delete "$demo_branch"; then
-            printf "\033[1;31mImpossible de supprimer %s sur %s.\033[0m\n" "$demo_branch" "$j2s_remote"
-            exit_safe 1
-        fi
+    if [[ $delivered == true ]]; then
+      printf -v line '  %-28s %s' "$ticket" "$subject"
+      delivered_lines[${#delivered_lines[@]}]="$line"
     else
-        printf "%sAucune branche distante %s%s%s trouvée.%s\n" \
-            "$color_text" "$color_branch" "$demo_branch" "$color_text" "$color_reset"
+      printf -v line '  %-28s %s  %s' "$ticket" "${date%%T*}" "$subject"
+      fresh_lines[${#fresh_lines[@]}]="$line"
+    fi
+  done < <(git for-each-ref --sort=-committerdate \
+             --format="%(refname:strip=3)%1f%(committerdate:iso-strict)%1f%(subject)%1f%(authorname)" \
+             "refs/remotes/$j2s_remote/feature" "refs/remotes/$j2s_remote/hotfix" 2>/dev/null)
+
+  if [[ -n "$demo_name" ]]; then
+    printf "%sTickets disponibles pour la démo %s%s (base %s)\n" "$C_BLUE" "$demo_name" "$C_RESET" "${base:-?}"
+  else
+    printf "%sTickets disponibles%s (base %s)\n" "$C_BLUE" "$C_RESET" "${base:-?}"
+  fi
+  if [[ ${#fresh_lines[@]} -eq 0 ]]; then
+    printf "  Aucun.\n"
+  else
+    printf "%s\n" "${fresh_lines[@]}"
+  fi
+  if [[ ${#delivered_lines[@]} -gt 0 ]]; then
+    printf "\n%sDéjà livrés dans %s%s (inutile de les ajouter)\n" "$C_DIM" "$base" "$C_RESET"
+    printf "%s\n" "${delivered_lines[@]}"
+  fi
+  if [[ -n "$demo_name" && ${#fresh_lines[@]} -gt 0 ]]; then
+    printf "\nAjouter : jgit demo add %s --from <ticket>\n" "$demo_name"
+  fi
+
+  json_emit "$(json_object \
+    "$(json_kv_str schema "jgit.demo.candidates/1")" \
+    "$(json_kv_bool ok true)" \
+    "$(json_kv_str command "demo candidates")" \
+    "$(json_kv_str_or_null demo "$demo_name")" \
+    "$(json_kv_str_or_null base "$base")" \
+    "$(json_kv candidates "$(json_array ${items[@]+"${items[@]}"})")")"
+}
+
+###############################################
+#            jgit demo bases
+###############################################
+
+# Les branches dont une démo peut partir : la préprod et la production d'abord,
+# puis les releases, puis les autres branches du serveur, des plus récentes aux
+# plus anciennes. Les branches de tickets, de PR, de démos et les branches
+# temporaires de jgit n'en sont pas.
+demo_bases_cmd() {
+  local default branch date subject role label item line
+  local j_branch j_role j_date j_subject
+  local preprod_item="" prod_item="" preprod_line="" prod_line=""
+  local releases=() others=() release_lines=() other_lines=() items=() lines=()
+
+  jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
+  default=$(get_reference_branch feature 2>/dev/null)
+
+  while IFS=$'\037' read -r branch date subject; do
+    case "$branch" in
+      ""|HEAD|feature/*|hotfix/*|"$prefix_PR"*|"$DEMO_PREFIX"*|"$DEMO_ARCHIVE_PREFIX"*|"$DEMO_LEGACY_PREFIX"*|jgit_*) continue ;;
+    esac
+
+    if [[ "$branch" == "$branch_preprod" ]]; then
+      role="preprod"
+      label="préprod"
+    elif [[ "$branch" == "$branch_prod" ]]; then
+      role="prod"
+      label="production"
+    elif [[ "$branch" == release/* ]]; then
+      role="release"
+      label="release"
+    else
+      role="other"
+      label=""
     fi
 
-    if git show-ref --verify --quiet "refs/heads/$demo_branch"; then
-        git branch -D "$demo_branch"
-    fi
+    # Des dizaines de branches possibles : aucun sous-shell dans la boucle.
+    json_str_into j_branch "$branch"
+    json_str_into j_role "$role"
+    json_str_into j_date "$date"
+    json_str_into j_subject "$subject"
+    item="{\"branch\":$j_branch,\"role\":$j_role,\"updated_at\":$j_date,\"last_subject\":$j_subject}"
+    # Le rôle en fin de ligne : « préprod » compte un octet de plus qu'il n'a
+    # de caractères, et bash 3.2 aligne les colonnes à l'octet.
+    printf -v line '  %-28s %s  %s%s' "$branch" "${date%%T*}" "$subject" "${label:+  ($label)}"
 
-    current_branch="$reference_branch"
-    printf "%sBranche de démo supprimée avec succès.%s\n" "$color_text" "$color_reset"
-    exit_safe 0
+    case "$role" in
+      preprod) preprod_item="$item"; preprod_line="$line" ;;
+      prod) prod_item="$item"; prod_line="$line" ;;
+      release) releases[${#releases[@]}]="$item"; release_lines[${#release_lines[@]}]="$line" ;;
+      *) others[${#others[@]}]="$item"; other_lines[${#other_lines[@]}]="$line" ;;
+    esac
+  done < <(git for-each-ref --sort=-committerdate \
+             --format="%(refname:strip=3)%1f%(committerdate:iso-strict)%1f%(subject)" \
+             "refs/remotes/$j2s_remote" 2>/dev/null)
+
+  [[ -n "$preprod_item" ]] && items[${#items[@]}]="$preprod_item" && lines[${#lines[@]}]="$preprod_line"
+  [[ -n "$prod_item" ]] && items[${#items[@]}]="$prod_item" && lines[${#lines[@]}]="$prod_line"
+  items=(${items[@]+"${items[@]}"} ${releases[@]+"${releases[@]}"} ${others[@]+"${others[@]}"})
+  lines=(${lines[@]+"${lines[@]}"} ${release_lines[@]+"${release_lines[@]}"} ${other_lines[@]+"${other_lines[@]}"})
+
+  printf "%sBases possibles pour une démo%s (par défaut : %s)\n" "$C_BLUE" "$C_RESET" "${default:-?}"
+  if [[ ${#lines[@]} -eq 0 ]]; then
+    printf "  Aucune.\n"
+  else
+    printf "%s\n" "${lines[@]}"
+  fi
+  printf "\nCréer une démo sur l'une d'elles : jgit demo create <nom> --based-on <branche>\n"
+
+  json_emit "$(json_object \
+    "$(json_kv_str schema "jgit.demo.bases/1")" \
+    "$(json_kv_bool ok true)" \
+    "$(json_kv_str command "demo bases")" \
+    "$(json_kv_str_or_null default "$default")" \
+    "$(json_kv bases "$(json_array ${items[@]+"${items[@]}"})")")"
 }

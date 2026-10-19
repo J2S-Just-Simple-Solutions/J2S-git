@@ -116,7 +116,7 @@ faute de frappe ne doit jamais se traduire par une action partielle sur le dép�
 | `jgit` sans argument | affiche l'aide, sans erreur |
 | `jgit -h`, `--help`, `help` | affichent la même aide complète |
 | Scope inconnu (`jgit bidule`) | refus explicite nommant le scope |
-| Action inconnue (`jgit feature bidule`) | refus explicite, pour chacun des cinq scopes |
+| Action inconnue (`jgit feature bidule`) | refus explicite, pour chacun des six scopes qui ont des actions |
 | Scope sans action (`jgit feature`) | affiche l'aide **et** sort en erreur |
 | `feature`/`hotfix` sans identifiant | refus explicite nommant le type attendu |
 | Option privée de sa valeur (`--based-on` en fin de ligne, ou suivie d'une autre option) | refus explicite nommant l'option |
@@ -260,9 +260,9 @@ intact.** Plusieurs scénarios le vérifient explicitement.
 | Refus de la confirmation finale | rien n'est poussé, et l'historique local est rendu à son état d'origine |
 | Conflit en `--no-interaction` | arrêt explicite, cherry-pick abandonné, branches temporaires supprimées, remote intact |
 | Conflit après un squash | l'historique initial de la branche de travail est **restauré** |
-| PR déjà mergée (plus un fast-forward) | refus explicite, avec la raison |
+| PR squash-mergée, puis branche finale qui a bougé | seule `__PR__` est reconstruite : voir le [parcours 23](#parcours-23--rebaser-une-pr-validée-avant-son-merge) |
 | Commit de fusion dans l'historique | refus explicite : un merge ne se rejoue pas en cherry-pick |
-| Feature inconnue, ou paire de branches supprimée du serveur | refus, sans rien créer |
+| Feature inconnue, ou branche `__PR__` supprimée du serveur | refus, sans rien créer |
 
 ### Ce que ce parcours protège
 
@@ -290,7 +290,7 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 
 | Situation | Comportement attendu |
 | --- | --- |
-| Sans argument | la version suivante est déduite du dernier tag (`1.0.0` → `release/1.1.0`) |
+| Sans argument | la version suivante est déduite du dernier tag (`1.0.0` → `release/1.1.0`) ; son dernier chiffre repart de zéro (`1.2.3` → `release/1.3.0`) |
 | La release part de `main` | ce qui n'est qu'en préprod n'y entre pas |
 | Version explicite, avec ou sans préfixe `release/` | respectée telle quelle, sans double préfixe |
 | Aucun tag dans le dépôt | refus explicite |
@@ -321,6 +321,7 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 | `--into` | désigne explicitement la release à terminer, depuis n'importe quelle branche |
 | Release vide | refus explicite |
 | Release plus ancienne que le dernier tag | remplacée par la version calculée |
+| Version majeure (`2.0.0` après `1.0.0`) | terminée sous son numéro : le numéro entier est comparé au dernier tag |
 | `main` porte des commits non poussés | **refus** avant la fusion : sans cela le merge les publierait en production |
 | **Conflit à la fusion dans `main`** | arrêt : **aucun tag**, **aucun push**, **aucune release GitHub**, et la branche de release reste disponible |
 | Échec de `gh release create` | erreur explicite précisant que seul l'appel GitHub reste à rejouer |
@@ -340,52 +341,25 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 
 ---
 
-## Parcours 07 — Les branches de démonstration
+## Parcours 07 — Les démos à l'ancien format
 
 Fichier : [`tests/features/07_demo.feature`](../tests/features/07_demo.feature)
 
-Une branche `demo_*` sert à **montrer** plusieurs features ensemble avant de les
-livrer. Elle est jetable : contrairement à une release, son historique est
-réécrit à chaque ajout.
-
-> `demo merge` porte le nom de « merge » mais procède par **rebase de la branche
-> de démo sur la source**, suivi d'un `push --force-with-lease`. C'est ce qui
-> garde l'historique linéaire ; c'est aussi pourquoi une démo ne doit jamais
-> servir de base à autre chose qu'une démonstration.
-
-### Ce que le parcours vérifie
+La première version des démos fabriquait des branches `demo_<nom>`, rejouées
+par-dessus chaque ticket. Il en reste sur les dépôts : le scénario les reproduit
+avec les mêmes commandes git que l'ancien `jgit`.
 
 | Situation | Comportement attendu |
 | --- | --- |
-| Espace de travail sale | refus explicite : une démo se fabrique, elle ne se travaille pas |
-| Branche de base porteuse de commits non poussés | refus, **avant** la demande de confirmation |
-| `demo start` sans nom | la démo prend le nom de la branche de référence (`demo_develop`) |
-| `demo start <nom>` / `--based-on` | nom et base imposés, ce qui n'est pas dans la base n'y entre pas |
-| Relancer `start` sur une démo publiée | elle est simplement remise à jour |
-| Démo présente en local mais supprimée du serveur | refus, avec la marche à suivre |
-| Confirmation refusée | aucune branche, ni locale ni distante |
-| `demo merge` | la feature arrive dans la démo, avec son commit marqueur `[jgit] DEMO merge …` |
-| Plusieurs `--from`, `feature` et `hotfix` mélangés | intégrées en série |
-| `--into` | désigne la démo à alimenter depuis n'importe quelle branche |
-| Intégrer deux fois la même feature | détecté, la branche distante ne bouge pas |
-| Source au mauvais format, ou absente du serveur | refus, la démo ne bouge pas |
-| `merge`, `list`, `remove` hors d'une branche `demo_*` | refus explicite |
-| **Conflit pendant l'intégration** | la main est rendue au développeur : le rebase reste en cours, rien n'est poussé |
-| `demo list` | affiche le **nom complet** des branches intégrées et les commandes `release merge` correspondantes |
-| Démo vide | signalée comme telle |
-| `demo remove` | supprimée du remote puis du local, retour sur la branche de référence |
-| Refus de la suppression / démo déjà supprimée sur GitHub | respectivement conservée, et nettoyée en local |
-
-### Ce que ce parcours protège
-
-Le point historiquement fragile est `demo list` : le nom des branches était
-tronqué (issue #37), rendant inutilisables les commandes `release merge`
-suggérées — c'est-à-dire la seule raison d'être de la commande. Le scénario
-vérifie désormais le nom complet.
-
-Le second est le **traitement des conflits** : contrairement aux commandes de
-release, `demo merge` laisse délibérément le rebase en cours. Le scénario fige ce
-choix pour qu'il reste un choix, et non un oubli.
+| `demo list` | l'ancienne démo figure, au format `legacy`, en lecture seule, avec sa base |
+| `demo show` | ses tickets, la commande de release, la suggestion `migrate` |
+| Une commande qui modifie | refus `legacy_format`, avec la commande `migrate` |
+| `demo migrate` | une démo `demo/<nom>` est recréée avec les mêmes tickets, à jour, sur la même base ; l'ancienne est conservée |
+| Ticket disparu depuis | non repris, signalé |
+| Pas de base enregistrée | refus, puis succès avec `--based-on` |
+| Démo déjà au format actuel | refus `not_legacy` |
+| `demo delete demo_<nom>` | supprimée |
+| `demo list` depuis l'ancienne démo | la montre, avec l'avertissement de dépréciation |
 
 ---
 
@@ -462,13 +436,16 @@ du mauvais tag, un hotfix qui remonterait de la préprod en production.
 
 Fichier : [`tests/features/10_syntaxes_depreciees.feature`](../tests/features/10_syntaxes_depreciees.feature)
 
-Deux commandes ont changé de forme. Les anciennes restent acceptées le temps que
-les habitudes et les scripts de chacun rattrapent.
+Plusieurs commandes ont changé de forme. Les anciennes restent acceptées le temps
+que les habitudes et les scripts de chacun rattrapent.
 
 | Ancienne forme | Forme actuelle |
 | --- | --- |
 | `jgit release merge <branche>` | `jgit release merge --from <branche>` |
 | `jgit clean` | `jgit util clean` |
+| `jgit demo start [<nom>]` | `jgit demo create <nom>` |
+| `jgit demo merge --from <ticket> [--into <nom>]` | `jgit demo add <nom> --from <ticket>` |
+| `jgit demo remove` | `jgit demo delete <nom>` |
 
 ### Ce que le parcours vérifie
 
@@ -480,7 +457,10 @@ les habitudes et les scripts de chacun rattrapent.
 | `release merge 4.2.0` ou `release/5.1.0` | reste une **version cible**, pas une source |
 | Sans source ni version | l'erreur est celle de la nouvelle syntaxe, sans avertissement parasite |
 | Mélanger les deux formes | refus explicite, qui nomme la bonne option à utiliser |
-| L'aide | documente les deux formes dépréciées |
+| L'aide | documente les formes dépréciées |
+| `demo start` | crée une démo au format actuel (`demo/<nom>`) ; sans nom, celui de la base |
+| `demo merge` | ajoute à la démo nommée par `--into`, ou à celle de la branche courante |
+| `demo remove` | supprime la démo de la branche courante et revient sur la référence ; hors d'une démo, refus |
 
 ### Ce que ce parcours protège
 
@@ -542,34 +522,35 @@ que rien n'est poussé au passage.
 
 ---
 
-## Parcours 12 — Le refus de tourner ailleurs que sur macOS
+## Parcours 12 — macOS, Linux, et rien d'autre
 
 Fichier : [`tests/features/12_portabilite.feature`](../tests/features/12_portabilite.feature)
 
-`jgit` s'appuie sur des outils BSD dont l'équivalent GNU se comporte
-différemment. Le cas le plus grave : `feature rebase` construit sa liste de
-commits avec `tail -r`, qui n'existe pas dans GNU coreutils. Ailleurs que sur
-macOS, la liste ressort **vide**, le rebase ne rejoue rien, et la branche de
-travail est **force-pushée vidée de tout le travail** — en affichant « Rebase
-terminé avec succès ».
-
-Plutôt que de risquer cela, `jgit` refuse de démarrer. Le détail et l'inventaire
-de ce qu'il reste à lever sont dans [`05-portabilite.md`](05-portabilite.md).
+`jgit` tourne sur macOS (postes des développeurs) et sous Linux (Docker,
+Jenkins). Tout autre système est refusé : un écart de comportement d'un outil
+système — `tail -r`, absent de GNU — a déjà vidé une branche de travail en
+silence. Le détail est dans [`05-portabilite.md`](05-portabilite.md).
 
 ### Ce que le parcours vérifie
 
 | Situation | Comportement attendu |
 | --- | --- |
-| N'importe quelle commande sur un système non supporté | refus explicite, nommant le système détecté et renvoyant à la doc |
+| Une commande sous Linux | fonctionne normalement |
+| N'importe quelle commande sur un autre système | refus explicite, nommant le système détecté et renvoyant à la doc |
 | `feature rebase` en particulier | refus **avant** toute réécriture : la branche distante est inchangée, le travail est toujours là |
-| Les commandes de release | refusées au même titre |
 | `jgit --help` | reste accessible : on doit pouvoir comprendre le refus |
+| `jgit` appelé par un lien symbolique | retrouve ses modules à côté du vrai `jgit.sh` |
+| Sortie hors terminal, ou sans `TERM` | aucune séquence ANSI, aucune erreur de `tput` |
+| Clone superficiel (`--depth`) | refus avant toute action, avec la commande `git fetch --unshallow` |
+| Clone réduit à une branche | fonctionne : toutes les branches du serveur sont rapatriées |
+| Aucune identité git | refus avant de créer quoi que ce soit |
 
-### Comment c'est testé sans machine Linux
+### Comment c'est testé
 
 Le bac à sable place `$SANDBOX/bin` en tête du `PATH`. L'étape
-`Étant donné le système est "…" et non macOS` y dépose un faux `uname` : `jgit`
-croit tourner ailleurs, sans conteneur ni runner distant.
+`Étant donné le système détecté est "…"` y dépose un faux `uname` : `jgit`
+croit tourner ailleurs. Et toute la suite est jouée pour de vrai sous Linux par
+`./tests/run-in-docker.sh`.
 
 ---
 
@@ -656,3 +637,262 @@ qu'un cas particulier se remette à parler sa propre langue.
 | Une ancienne branche à qui l'on attribue la trace d'un ancêtre au lieu de la reconnaître comme ancienne |
 | Un rebase qui laisse la trace d'avant : la branche prétendrait partir d'une base qui n'est plus la sienne |
 | `feature rebase` qui renvoie silencieusement sur `develop` une branche partie d'ailleurs |
+
+---
+
+## Parcours 14 — Les réponses aux questions
+
+Fichier : [`tests/features/14_confirmation.feature`](../tests/features/14_confirmation.feature)
+
+Le suffixe `(Y/n)` met la réponse par défaut en majuscule : un développeur qui
+tape cette majuscule doit être compris. Les réponses sont donc lues sans tenir
+compte de la casse, et « oui » / « o » valent « y ».
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `Y`, `YES`, `Yes` | acceptent |
+| `oui`, `O` | acceptent |
+| `N` | refuse : les branches distantes sont inchangées |
+| Une réponse inconnue (« peut-être ») | refuse |
+
+---
+
+## Parcours 15 — Le contrat de sortie `--json`
+
+Fichier : [`tests/features/15_contrat_json.feature`](../tests/features/15_contrat_json.feature)
+
+Une IA, l'interface en terminal ou Jenkins lisent un document, pas des phrases.
+Avec `--json`, la sortie standard porte un seul document JSON ; les messages
+partent sur la sortie d'erreur. Le contrat est dans
+[`06-contrat-cli.md`](06-contrat-cli.md).
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Commande réussie | un unique document `jgit.result/1`, `ok: true`, la commande nommée |
+| `--json` | implique `--no-interaction` : la réponse par défaut est appliquée et annoncée sur la sortie d'erreur |
+| Erreur d'usage | un unique document `jgit.error/1`, `error.code` = `usage`, code de sortie 1 |
+| Option inconnue placée **avant** `--json` | un document d'erreur tout de même : `--json` est repéré en premier |
+| Refus (espace de travail sale) | `error.code` précis (`worktree_dirty`) et `error.hint` portant le remède |
+| Guillemets, antislash, accents dans un message | document toujours valide |
+| `--help --json` | l'aide part sur la sortie d'erreur, un document de résultat reste |
+| Couleurs | aucune séquence ANSI |
+| `--no-fetch` | les références déjà rapatriées font foi : une livraison récente sur le serveur est ignorée |
+
+| Régression qui serait attrapée |
+| --- |
+| Un `echo` ajouté sur la sortie standard, qui casserait la lecture du document |
+| Deux documents émis par la même commande |
+| Une sortie sans document sur un `exit` imprévu |
+| Un message dont un caractère spécial rend le JSON invalide |
+
+---
+
+## Parcours 16 — Un conflit de rebase en pause, puis repris
+
+Fichier : [`tests/features/16_rebase_pause_reprise.feature`](../tests/features/16_rebase_pause_reprise.feature)
+
+Avec `--on-conflict pause`, le rebase s'arrête sur un conflit en le laissant à
+résoudre, puis `jgit feature continue` reprend là où il s'était arrêté. C'est
+ainsi qu'une IA résout un conflit. Le serveur n'est publié qu'à la toute fin,
+d'un seul geste, et seulement s'il n'a pas bougé.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Conflit en pause | code 3, document `jgit.conflict/1` (fichier, type de conflit, commit, progression, commandes), branche temporaire en cours, serveur inchangé |
+| Conflit résolu puis `continue` | le rebase se termine et publie, avec la résolution ; plus d'opération en pause |
+| Deux conflits successifs | `continue` se remet en pause sur le second, garde la conduite `pause` même lancé avec `--json` |
+| `continue` sans avoir résolu | reste en pause, `unresolved_files` |
+| Marqueurs de conflit marqués résolus | reste en pause, `conflict_markers_left` |
+| `abort` | tout revient comme avant, rien n'a été poussé, espace de travail propre |
+| Une autre commande pendant la pause (`feature start`, `util clean`) | refus, code 5, les deux issues rappelées ; les branches temporaires sont préservées |
+| `continue` sans rien en pause, ou pour un autre ticket | refus, code 2 |
+| Un collègue pousse pendant la pause | `continue` refuse de publier (code 4, `lease_rejected`) : son travail est intact, les branches locales sont revenues à leur état d'avant |
+| Sans interaction | le conflit est abandonné et décrit (`paused: false`), rien n'est laissé en cours |
+| `--on-conflict` inconnu | refus d'usage |
+
+| Régression qui serait attrapée |
+| --- |
+| Un `push --force` qui écraserait le travail d'un collègue |
+| Une publication en deux temps qui laisserait une branche rebasée et l'autre non |
+| Une reprise qui publierait une résolution inachevée |
+| Une commande qui changerait de branche au milieu d'un conflit en pause |
+| `--json` qui laisserait un dépôt au milieu d'une opération sans qu'on l'ait demandé |
+
+---
+
+## Parcours 17 — Créer une démo, puis la lire
+
+Fichier : [`tests/features/17_demo_creation_et_lecture.feature`](../tests/features/17_demo_creation_et_lecture.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `demo create` | branche `demo/<nom>` sur la version serveur de la base, commit d'init avec sa base ; on reste sur sa branche |
+| `demo create --from …` | les tickets dans l'ordre demandé, leurs commits de travail sans leurs commits d'init |
+| `--based-on`, confirmation refusée, `--dry-run` | base choisie ; rien créé ; rien créé mais le plan est annoncé |
+| Démo existante, nom invalide, nom manquant, base inconnue, ticket mal formé ou absent, espace de travail sale | refus identifiés, rien créé |
+| `demo list` | chaque démo, sa base, ses tickets, son état ; « Aucune démo » ; aucune identité git nécessaire |
+| `demo show` | ticket à jour, qui a avancé, **rebasé par jgit (toujours à jour)**, squashé (réécrit), supprimé, livré ; démo en retard sur sa base ; commit poussé à la main ; démo de la branche courante ; refus d'une démo inconnue |
+| `demo candidates` | tickets absents de la démo, livrés mis à part ; sans démo, tous les tickets ; `--based-on` compare à une base envisagée (livrés compris), refuse une base inconnue ou combinée à une démo |
+| `demo bases` | préprod et production en tête, puis releases ; ni tickets, ni PR, ni démos |
+
+---
+
+## Parcours 18 — Ajouter, retirer, reprendre des tickets
+
+Fichier : [`tests/features/18_demo_tickets.feature`](../tests/features/18_demo_tickets.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `demo add` d'un ou plusieurs tickets | ajoutés à la suite, dans l'ordre, **sans réécriture** |
+| `demo add` d'un ticket qui a avancé | seuls ses nouveaux commits, à la suite ; le ticket garde sa place |
+| `demo add` d'un ticket à jour | rien n'est publié |
+| `demo add` d'un ticket réécrit ou déjà livré | refus, avec la commande à lancer |
+| `demo drop` | reconstruction sans le ticket, ordre conservé ; premier ticket compris ; confirmation ; `--dry-run` ; ticket absent refusé |
+| Commit poussé à la main | survit au retrait ; `--drop-foreign` l'écarte |
+| `demo refresh` | un ticket squashé est repris en entier, à sa place ; à jour : rien n'est publié |
+
+---
+
+## Parcours 19 — Rebaser une démo
+
+Fichier : [`tests/features/19_demo_rebase.feature`](../tests/features/19_demo_rebase.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Base qui a avancé | la démo est reconstruite dessus, tickets à jour |
+| Démo déjà à jour | **rien n'est publié** — un déploiement planifié ne se relance pas pour rien |
+| Ticket livré dans la base | retiré (`--keep-delivered` le garde) |
+| Branche de ticket supprimée | retiré (`--keep-missing` le garde, ses commits sont dans la démo) |
+| `--based-on` | la démo change de base |
+| Commits poussés à la main | rejoués à la fin et signalés ; `--drop-foreign` les écarte |
+| `--dry-run` | le plan est annoncé, rien n'est publié |
+| Base inconnue | même refus que partout ailleurs |
+| `--from` après le rebase d'un ticket par son auteur | le ticket est repris depuis sa branche : la démo contient sa version résolue, sans nouveau conflit |
+| `--from` d'un ticket absent de la démo | refusé (`ticket_not_in_demo`), avec la commande `add` |
+
+---
+
+## Parcours 20 — Les conflits d'une démo
+
+Fichier : [`tests/features/20_demo_conflits.feature`](../tests/features/20_demo_conflits.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Conflit en pause | `jgit.conflict/1` avec la démo et le ticket en cause ; serveur inchangé |
+| Résolution puis `demo continue` | la démo est publiée avec la résolution ; le ticket est reconnu à jour |
+| Reconstruction ultérieure (`drop` d'un autre ticket, `rebase`) | **la résolution est rejouée, sans nouveau conflit** |
+| `demo abort` | rien n'est publié, on revient sur sa branche, espace de travail propre |
+| `continue` sans résolution | reste en pause |
+| Sans interaction | abandon décrit, rien laissé en cours |
+| Pendant la pause | `list` et `show` fonctionnent, `rebase` refuse (code 5) |
+| Un collègue modifie la démo pendant la pause | `continue` ne publie rien (code 4), son commit est intact |
+| `continue` d'une autre démo | refus |
+| `util status` | décrit l'opération en pause (démo, ticket, commit, fichiers, commandes) ; sans pause, le dit |
+
+| Régression qui serait attrapée |
+| --- |
+| Une démo qui dériverait vers la base de son dernier ticket |
+| Un ticket rebasé par `jgit` vu comme différent |
+| Une reconstruction qui redemanderait un conflit déjà résolu |
+| Une démo republiée sans changement, déclenchant un déploiement inutile |
+| Un collègue écrasé par un `push --force` |
+| Un commit poussé à la main perdu en silence |
+
+---
+
+## Parcours 21 — Archiver, restaurer, supprimer une démo
+
+Fichier : [`tests/features/21_demo_archive.feature`](../tests/features/21_demo_archive.feature)
+
+| Situation | Comportement attendu |
+| --- | --- |
+| `demo archive` | la démo devient `demo-archive/<date>_<nom>`, son contenu est intact, le nom est libéré |
+| Liste | les archives sont à part (`--archived`), comptées dans la liste des actives, consultables par `show` |
+| Nouvelle démo du même nom | possible ; la seconde archive du jour est numérotée |
+| Archive | en lecture seule, avec la commande `unarchive` |
+| Démo absente mais archivée | le refus liste ses archives |
+| `demo unarchive` | restaure sous le nom d'origine ; plusieurs archives : il faut préciser ; nom déjà pris : refus |
+| `--dry-run` | rien ne change |
+| Copie locale | supprimée si identique, conservée (et signalée) si elle porte des commits non publiés |
+| `demo delete` | après confirmation ; refus : la démo reste ; une archive se supprime aussi ; démo inconnue refusée |
+
+---
+
+## Parcours 22 — L'état des lieux des tickets et des démos
+
+Fichier : [`tests/features/22_audit.feature`](../tests/features/22_audit.feature)
+
+`jgit audit` fait l'état des lieux de tous les tickets du serveur, puis de
+toutes les démos, et dit quoi lancer, dans l'ordre, et qui doit intervenir —
+sans rien modifier.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Tout à jour | tickets `up_to_date` (base enregistrée, propriétaire, PR non validée, personne à appeler, démos qui les contiennent) ; démo `up_to_date`, aucune action |
+| Base qui a avancé, sans conflit | tickets `to_rebase` avec `jgit feature rebase <id>` ; démo `feasible` : d'abord les tickets (chez eux), puis `jgit demo rebase <nom>` et sa raison |
+| Le rebase d'un ticket sur sa base coince | ticket `conflicts` : le rapport dit qui doit intervenir et la commande (avec `--on-conflict pause`), sans fichiers ni commits ; le JSON garde le commit et son auteur, le fichier et **en face** le commit de la base et son auteur ; la démo le met de côté (`held`) et le reprendra depuis sa branche (`--from`) ; code de sortie 3 |
+| Plusieurs personnes sur la branche | seuls les auteurs des commits qui touchent les fichiers en conflit sont appelés |
+| Titre de la PR | lu sur GitHub, sans la clé du ticket, affiché sous le ticket |
+| Ancien ticket sans base enregistrée | base supposée (la base connue dont il s'écarte le moins) ; commande avec `--based-on`, qui passe |
+| Ticket sans commit d'init | `no_init`, à rebaser à la main ; code de sortie 3 |
+| Le ticket rebasé et résolu par son auteur | la démo est faisable avec `--from` ; la commande proposée passe, et la démo contient la version résolue |
+| Conflit entre deux tickets | dans la démo, à l'ajout : qui est concerné (l'auteur du nouveau commit, et en face celui du ticket déjà dans la démo) ; le détail dans le JSON |
+| Plusieurs conflits dans une démo | **tous** sont signalés, chacun avec son vis-à-vis |
+| Tickets hors démo | audités aussi ; rapport humain : le détail de ce qui coince, les autres comptés par personne |
+| Base d'un ticket disparue | `base_missing`, commande avec `--based-on <branche>` ; `audit tickets` n'audite pas les démos |
+| Ticket livré | `delivered` ; annoncé comme retiré par le rebase de la démo |
+| Espace de travail modifié | l'audit fonctionne ; rien n'a bougé : fichier, branche, serveur ; aucune copie temporaire ne reste |
+| Démo archivée, démo à l'ancien format | refusée ; ignorée et comptée |
+| Arguments | action inconnue ou nom de démo hors `audit demos` : `usage` ; démo inconnue : `demo_not_found` |
+
+---
+
+## Parcours 23 — Appliquer ce qui passe sans conflit
+
+Fichier : [`tests/features/23_audit_apply.feature`](../tests/features/23_audit_apply.feature)
+
+`jgit audit --apply` fait l'état des lieux, montre le plan, puis lance ce qui
+passe sans conflit : le rebase de mes tickets, puis la mise à jour des démos.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| Mes tickets en retard, démo en retard | les tickets sont rebasés, puis la démo ; retour sur la branche de départ ; les branches locales créées en route sont retirées |
+| Ticket d'un collègue | laissé de côté (`not_mine`), sa branche n'est pas touchée ; le rapport dit qui doit le faire |
+| Un ticket coince | laissé de côté, les autres sont appliqués ; la démo en conflit n'est pas touchée ; code de sortie 3 |
+| `--dry-run` | le plan, rien n'est appliqué |
+| Confirmation refusée | rien n'est appliqué |
+| Ticket à base supposée | laissé de côté (`inferred_base`) avec sa commande ; la démo partie de cette base est, elle, remise à jour |
+| Tout à jour | « Rien à appliquer sans conflit. » |
+| Espace de travail modifié | refusé (`worktree_dirty`), rien ne bouge |
+| `--apply` hors de `jgit audit` | refusé (`usage`) |
+
+---
+
+## Parcours 24 — Rebaser une PR validée avant son merge
+
+Fichier : [`tests/features/24_rebase_pr_validee.feature`](../tests/features/24_rebase_pr_validee.feature)
+
+Une PR squash-mergée attend parfois longtemps son merge dans sa branche finale
+— celle dont le ticket est parti. Si cette branche bouge entre-temps, le merge
+coince, et c'est celui qui merge qui hérite du conflit. Le même
+`jgit feature rebase` reconstruit alors la seule branche `__PR__` : le
+développeur résout le conflit avant, et le merge peut passer sans intervention.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| PR squash-mergée, branche finale qui a avancé | `__PR__` reconstruite seule (son commit d'init et le commit validé), base enregistrée à jour ; la branche de travail, au même code, est supprimée en local et sur le serveur dans le même push |
+| La branche de travail a déjà disparu | `__PR__` reconstruite seule, rien d'autre n'est demandé |
+| Conflit avec la branche finale | pause, résolution, `continue` : `__PR__` publiée avec la résolution, branche de travail supprimée ; rien ne bouge tant que la pause dure |
+| Second lot après ce rebase | `restart` recrée la branche de travail depuis `__PR__` reconstruite |
+| PR rouverte, livrée, puis revalidée | seul le nouveau lot est rejoué : le premier est déjà dans la branche finale |
+| `hotfix` | reconstruit sur `main` |
+| Du code ajouté après la validation, poussé ou non | refus `pr_validated_new_work` (code 2) : rien n'est modifié, ni en local ni sur le serveur |
+| PR jamais validée, branche de travail disparue | refus `pr_not_validated` (code 2), avec la commande qui supprime `__PR__` |
+| `__PR__` déjà mergée dans sa branche finale | rien à rebaser ; ses deux branches sont supprimées sur confirmation (oui par défaut) ; un refus ne touche à rien |
+
+| Régression qui serait attrapée |
+| --- |
+| Une branche de travail supprimée alors qu'elle portait du travail non relu |
+| Une branche de travail supprimée sans que `__PR__` ait été publiée, ou l'inverse |
+| Un commit validé et déjà livré rejoué une seconde fois |
+| Un ticket qui ne pourrait plus repartir (`restart`) après ce rebase |

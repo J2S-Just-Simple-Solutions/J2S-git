@@ -40,6 +40,27 @@ Un fichier seul peut aussi être joué directement :
 Prérequis : `git`, `bash` et `python3` (livré avec macOS). Le vrai client `gh`
 n'est **pas** nécessaire, il est remplacé par un mock.
 
+### Sous Linux, dans Docker
+
+`jgit` tourne aussi sous Linux (conteneurs, agents Jenkins). La même suite s'y
+joue, dans une image Debian (bash 5.2, outils GNU) construite à la volée :
+
+```bash
+./tests/run-in-docker.sh            # toute la suite
+./tests/run-in-docker.sh demo -v    # mêmes arguments que run.sh
+```
+
+Le dépôt est monté en lecture seule ; seul Docker est requis.
+
+### L'interface (`ui/`)
+
+L'interface en terminal a ses propres tests, en TypeScript (`node:test` et
+`ink-testing-library`, avec un `jgit` simulé) :
+
+```bash
+(cd ui && npm ci && npm test)
+```
+
 ## Ce que voit un scénario
 
 L'étape `Étant donné un projet git initialisé pour jgit` construit un
@@ -53,6 +74,7 @@ $SANDBOX/
   github/        clone technique servant à simuler les actions faites sur GitHub
   bin/gh         mock du client GitHub CLI
   gh-calls.log   journal de tous les appels à gh
+  gh-prs.tsv     les PR ouvertes connues du mock (branche, titre)
   home/          HOME isolé
 ```
 
@@ -70,7 +92,8 @@ un tag `1.0.0` (exigé par `jgit release start`), un `.gitignore` et un fichier
 - Le client `gh` est remplacé par [`tests/mocks/bin/gh`](mocks/bin/gh), qui
   journalise chaque appel au lieu de contacter GitHub. Les scénarios vérifient
   donc précisément ce que `jgit` *aurait* demandé à GitHub
-  (`Et GitHub a reçu "release create 1.1.0 --generate-notes"`).
+  (`Et GitHub a reçu "release create 1.1.0 --generate-notes"`). Il retient les
+  PR qu'il ouvre, et `gh pr list --json` les rend avec leur titre.
 - Les actions réalisées *sur* GitHub par un humain (valider et merger une PR,
   supprimer une branche) sont rejouées par des étapes dédiées
   (`Quand la PR de "…" est squash-mergée sur GitHub avec le message "…"`).
@@ -89,6 +112,12 @@ Quand je lance "jgit feature start TEST-123" et que je réponds aux questions :
 
 Si `jgit` oublie de poser une question, le scénario échoue ; s'il en pose une qui
 n'était pas prévue, le scénario échoue sur un timeout au lieu de rester bloqué.
+
+Face au pseudo-terminal, `jgit` colore ses messages. La sortie enregistrée pour
+les vérifications (`la sortie contient …`) est donc **nettoyée** de ses
+séquences de couleur, comme le tampon des questions : sans quoi une couleur au
+milieu d'une phrase la rendrait introuvable, et le résultat dépendrait du
+terminal depuis lequel on lance la suite.
 
 ## Écrire un scénario
 
@@ -130,9 +159,12 @@ Les valeurs sont toujours entre guillemets.
 | --- |
 | `Quand je lance "jgit …"` |
 | `Quand je lance "jgit …" et que je réponds aux questions :` + tableau `\| question \| réponse \|` |
+| `Quand je lance "jgit …" en lisant le JSON` (sortie standard capturée à part, dans `$SANDBOX/stdout.json`) |
 | `Quand je commite le fichier "…" contenant "…" avec le message "…"` |
 | `Quand je modifie le fichier "…" avec "…"` (sans commit : espace de travail sale) |
 | `Quand je pousse la branche courante` |
+| `Quand je résous le conflit du fichier "…" avec "…"` (écrit la version retenue puis `git add`) |
+| `Quand je marque le fichier "…" résolu sans retirer les marqueurs` |
 | `Quand je me place sur la branche "…"` |
 | `Quand je récupère les nouveautés du remote` |
 | `Quand je merge la branche "…" dans la branche courante` (crée un commit de fusion) |
@@ -148,7 +180,12 @@ Les valeurs sont toujours entre guillemets.
 | `Étant donné je note l'état de la branche distante "…"` (pour `est inchangée`) |
 | `Étant donné je récupère la branche distante "…" en local` |
 | `Étant donné le projet utilise "…" au lieu de develop, master ou main` |
-| `Étant donné le système est "…" et non macOS` (dépose un faux `uname`) |
+| `Étant donné le système détecté est "…"` (dépose un faux `uname`) |
+| `Étant donné le dépôt de travail est un clone superficiel` (`--depth 1`) |
+| `Étant donné le dépôt de travail est un clone de la seule branche "…"` (`--single-branch`) |
+| `Étant donné aucune identité git n'est configurée` |
+| `Étant donné jgit est installé par un lien symbolique` (les appels suivants passent par un lien hors du dépôt jgit) |
+| `Étant donné le terminal n'est pas défini` (retire `TERM`) |
 
 ### Actions sur GitHub (simulé)
 
@@ -156,8 +193,14 @@ Les valeurs sont toujours entre guillemets.
 | --- |
 | `Quand la PR de "…" est squash-mergée sur GitHub avec le message "…"` |
 | `Quand la branche "…" est supprimée sur GitHub` |
+| `Quand la PR de "…" est livrée dans "…"` (la branche de PR est fusionnée dans la base avec le message d'une release jgit) |
+| `Étant donné une démo à l'ancien format "…" basée sur "…" contient les tickets "…"` (tickets séparés par des espaces ; reproduit ce que faisait la première version de `jgit`) |
+| `Étant donné une démo à l'ancien format "…" sans base enregistrée contient les tickets "…"` |
 | `Quand un autre développeur pousse le fichier "…" contenant "…" sur la branche "…" avec le message "…"` |
+| `Quand "Camille" pousse le fichier "…" contenant "…" sur la branche "…" avec le message "…"` (commit au nom de cette personne, adresse `camille@example.invalid`) |
 | `Quand le client gh échoue pour les commandes "…"` (motif `grep -E`) |
+| `Quand la PR de "…" s'intitule "…" sur GitHub` (renommée sur GitHub, ou ouverte à la main avec ce titre) |
+| `Étant donné un ancien ticket "…" parti de "…", sans branche d'origine enregistrée, ajoute le fichier "…" contenant "…"` (reproduit un ticket créé par une version de `jgit` d'avant la branche d'origine : commits d'init sans trailer) |
 
 ### Vérifications
 
@@ -166,6 +209,22 @@ Les valeurs sont toujours entre guillemets.
 | `Alors jgit se termine sans erreur` / `en erreur` |
 | `Alors jgit se termine avec le code N` (pour `util check_rebase`, qui répond par son code) |
 | `Et la sortie contient "…"` / `ne contient pas "…"` |
+| `Et la sortie ne contient aucune séquence de couleur` (ni séquence ANSI, ni erreur de `tput`) |
+| `Et une opération jgit est en pause` / `Et aucune opération jgit n'est en pause` |
+| `Et la démo distante "…" contient dans l'ordre les tickets :` + tableau d'une colonne |
+| `Et la démo distante "…" ne contient aucun ticket` |
+| `Et la branche distante "…" a avancé sans réécriture` (l'état noté en est un ancêtre) |
+| `Et aucune copie de travail temporaire ne reste` (`git worktree list`) |
+| `Et la sortie standard est un unique document JSON` |
+| `Et le JSON a "chemin" égal à "…"` / `égal au nombre N` / `vrai` / `faux` / `nul` / `qui contient "…"` |
+| `Et le JSON n'a pas de "chemin"` |
+| `Et la liste JSON "chemin" contient N éléments` |
+
+Dans le texte d'une étape, `AUJOURDHUI` est remplacé par la date du jour
+(`AAAA-MM-JJ`) : les noms d'archive de démo en dépendent.
+
+Un chemin JSON s'écrit `error.code`, `demos[0].name`, ou
+`tickets[ticket=feature/A].status` (premier élément dont le champ vaut la valeur).
 | `Et la branche locale "…" existe` / `n'existe pas` |
 | `Et la branche distante "…" existe` / `n'existe pas` |
 | `Et la branche distante "…" est inchangée` / `a changé` |
@@ -253,6 +312,21 @@ Les fonctions utilisables dans une définition d'étape :
 | `remote_snapshot_save <branche>` | mémorise l'état du remote pour `assert_remote_branch_unchanged` |
 | `gh_calls` | journal des appels à `gh` |
 | `assert_jgit_success` / `assert_jgit_failure` / `assert_jgit_output_contains` | |
+| `assert_jgit_output_plain` | ni séquence ANSI ni erreur de `tput` dans la sortie |
+| `run_jgit_json <args…>` | lance `jgit` en gardant la sortie standard à part (`$JGIT_STDOUT`, `$SANDBOX/stdout.json`) |
+| `json_query check\|get\|len\|type <chemin>` | lit le document (`lib/json_query.py`) |
+| `assert_json_document`, `assert_json_equals`, `assert_json_type`, `assert_json_length`, `assert_json_missing` | vérifications sur le document |
+| `repo_resolve_file <chemin> <contenu>`, `repo_mark_resolved <chemin>` | résolution d'un conflit dans le dépôt de travail |
+| `assert_operation_paused` / `assert_no_operation_paused` | état `.git/jgit/operation.state` |
+| `github_create_legacy_demo <nom> <base> <true\|false> <ticket>…` | fabrique une démo `demo_<nom>` comme la première version de `jgit` |
+| `github_commit_file_as <personne> <branche> <chemin> <contenu> <message>` | commit d'une personne nommée |
+| `assert_no_extra_worktree` | aucune copie de travail temporaire ne reste |
+| `github_deliver_pr <branche> <base>` | simule la livraison d'un ticket dans une base |
+| `remote_demo_tickets <branche>`, `assert_remote_demo_tickets` | tickets d'une démo lus sur le remote, à partir des repères |
+| `assert_remote_branch_fast_forwarded <branche>` | la branche a avancé sans réécriture depuis l'état noté |
+| `jgit_use_symlink` | appelle `jgit` par un lien symbolique jusqu'à la fin du scénario |
+| `repo_reclone <options git clone…>` | remplace le dépôt de travail par un nouveau clone (`--depth`, `--single-branch`…) |
+| `repo_remove_git_identity` | retire toute identité git et interdit à git d'en deviner une |
 | `assert_jgit_exit_code` | code de sortie exact |
 | `assert_local_based_on` / `assert_remote_based_on` / `assert_remote_without_based_on` | branche d'origine enregistrée |
 | `assert_remote_subject_without_based_on` | vérifie que la trace reste hors des sujets de commit |
@@ -293,19 +367,21 @@ test_passed
 | Fichier | Rôle |
 | --- | --- |
 | `run.sh` | lanceur : découverte, filtrage, rapport |
+| `run-in-docker.sh` + `docker/Dockerfile` | même lanceur, sous Linux (Debian, bash 5.2) |
 | `features/*.feature` | les scénarios |
 | `steps/*.steps.sh` | les définitions d'étapes |
 | `lib/gherkin.sh` | moteur Gherkin (analyse + exécution) |
 | `lib/sandbox.sh` | dépôt jetable, remote local, simulation de GitHub |
 | `lib/interactive.sh` + `lib/expect.py` | pilotage de `jgit` dans un pseudo-terminal |
 | `lib/assert.sh`, `lib/git_assert.sh` | assertions |
+| `lib/json_query.py` | lecture du document JSON produit par `--json` |
 | `lib/bootstrap.sh` | chargement de l'ensemble |
 | `mocks/bin/gh` | mock du client GitHub CLI |
 | `steps/vscode_glue.py` | fichier généré, uniquement pour l'extension Cucumber de VS Code |
 
 ## Scénarios existants
 
-188 scénarios répartis par domaine fonctionnel.
+306 scénarios répartis par domaine fonctionnel.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -314,14 +390,25 @@ test_passed
 | `03_feature_start.feature` | référence `develop`/`main` selon le scope, `--based-on`, `--no-open`, refus de confirmation, les 4 combinaisons local/distant, repli de branche de référence, réponses par défaut |
 | `04_feature_restart.feature` | restart après squash-merge, refus si le code diffère, refus d'une feature inconnue, `--no-open`, hotfix |
 | `05_feature_rebase.feature` | rebase nominal, hotfix, `--based-on`, `--squash`, seuil de squash, refus des deux confirmations, conflits, PR déjà mergée, commit de fusion, branches non publiées |
-| `06_release.feature` | `release start` (calcul de version, version explicite, sans tag, reprise, **refus** d'un dépôt sale ou de commits non poussés sur `main`), `release merge` (`--from`, `--into`, sources multiples, PR non mergée, **conflit**), `release finish` (tag, merge, release vide, bascule de branche, **conflit**, **refus** de commits non poussés) |
-| `07_demo.feature` | `demo start` (nom par défaut, `--based-on`, reprise, refus d'un dépôt sale ou d'une base non publiée), `demo merge` (sources multiples, doublon, formats invalides, `--into`, **conflit**), `demo list`, `demo remove` |
+| `06_release.feature` | `release start` (calcul de version, dernier chiffre remis à zéro, version explicite, sans tag, reprise, **refus** d'un dépôt sale ou de commits non poussés sur `main`), `release merge` (`--from`, `--into`, sources multiples, PR non mergée, **conflit**), `release finish` (tag, merge, version majeure, release vide, bascule de branche, **conflit**, **refus** de commits non poussés) |
+| `07_demo.feature` | démos à l'ancien format `demo_<nom>` : liste, lecture, refus de modification, `demo migrate` (tickets, ticket disparu, base manquante), suppression, `demo list` depuis l'ancienne démo |
 | `08_util_et_stash.feature` | `util clean`, `util verify_rebase` (tous les refus, true/false, absence de trace, branches n'existant que sur le serveur), stash automatique accepté et refusé sur `feature`, et son remplacement par un refus sur `release` et `demo` |
 | `09_parcours_complets.feature` | hotfix de bout en bout, feature rebasée puis redémarrée puis livrée, démo servant de répétition, deux releases successives |
-| `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>` et `jgit clean` : fonctionnement identique, avertissement, refus des syntaxes mélangées |
+| `10_syntaxes_depreciees.feature` | anciennes formes `jgit release merge <branche>`, `jgit clean`, `jgit demo start`, `demo merge`, `demo remove` : fonctionnement, avertissement, refus des syntaxes mélangées |
 | `11_synchronisation.feature` | fraîcheur des branches : mise à jour d'une branche en retard, acceptation sans push d'une branche en avance, arrêt sur divergence, départ d'une feature/hotfix/démo sur la version serveur de la branche de référence |
-| `12_portabilite.feature` | refus de démarrer hors macOS, y compris — et surtout — avant un `feature rebase`, l'aide restant accessible |
+| `12_portabilite.feature` | Linux accepté, tout autre système refusé — y compris, et surtout, avant un `feature rebase` —, l'aide restant accessible ; appel par un lien symbolique ; sortie sans couleur hors terminal et sans `TERM` ; clone superficiel refusé, clone à une branche accepté, absence d'identité git refusée |
 | `13_branche_origine.feature` | enregistrement de la branche d'origine (`feature`/`hotfix`/`demo`/`release`, `--based-on`, `restart`), `util check_rebase` (à jour, en retard, conflit, refus, codes de sortie), refus sur les anciennes branches — y compris quand un ancêtre porte la trace d'une autre branche —, le rebase qui propose la base enregistrée, et le refus commun quand la base n'existe pas, qu'elle vienne d'une saisie ou d'une valeur par défaut |
+| `14_confirmation.feature` | réponses aux confirmations sans tenir compte de la casse : `Y`, `YES`, `oui`, `O` acceptent ; `N` et une réponse inconnue refusent |
+| `15_contrat_json.feature` | `--json` : document unique de résultat ou d'erreur, `--no-interaction` implicite, erreurs d'usage et refus identifiés, échappement des caractères spéciaux, aide, absence de couleur, `--no-fetch` |
+| `16_rebase_pause_reprise.feature` | `--on-conflict pause` : conflit décrit, résolution puis `continue`, conflits successifs, résolution inachevée ou marqueurs restants, `abort`, refus des autres commandes pendant la pause, lease au moment de publier, abandon sans interaction, valeur inconnue |
+| `17_demo_creation_et_lecture.feature` | `demo create` (base, tickets, `--based-on`, confirmation, `--dry-run`, refus), `demo list`, `demo show` (chaque état de ticket, retard sur la base, commit ajouté à la main), `demo candidates` (et `--based-on`), `demo bases` |
+| `18_demo_tickets.feature` | `demo add` (à la suite, sans réécriture ; nouveaux commits d'un ticket ; à jour ; réécrit ; livré), `demo drop` (ordre conservé, premier ticket, confirmation, `--dry-run`, commits ajoutés à la main, `--drop-foreign`), `demo refresh` |
+| `19_demo_rebase.feature` | `demo rebase` : base qui a avancé, démo à jour non republiée, tickets livrés ou disparus retirés (`--keep-*`), `--based-on`, commits ajoutés à la main, `--dry-run`, base inconnue, `--from` (ticket rebasé par son auteur repris depuis sa branche, ticket absent refusé) |
+| `20_demo_conflits.feature` | conflit de démo en pause, `continue`, résolution rejouée par les reconstructions suivantes, `abort`, abandon sans interaction, lecture pendant la pause, lease, mauvaise démo, `util status` |
+| `21_demo_archive.feature` | `demo archive` (nom libéré, archives à part dans la liste, numérotation du jour, lecture seule, copie locale), `demo unarchive` (par nom, ambiguïté, nom déjà pris), `demo delete` |
+| `22_audit.feature` | `audit` : tout à jour ; base avancée (tickets à rebaser d'abord, puis la démo) ; rebase d'un ticket qui coince (qui doit intervenir, détail dans le JSON, démo qui le met de côté et le reprendra par `--from`) ; seuls les auteurs des commits en conflit sont appelés ; titre de la PR ; ancien ticket sans base enregistrée (base supposée, commande avec `--based-on` qui passe) ; ticket sans commit d'init ; ticket rebasé par son auteur repris par `--from` ; conflits entre tickets dans la démo, tous signalés ; tickets hors démo comptés par personne ; base disparue ; ticket livré ; rien n'est touché ; démos archivées et à l'ancien format ; arguments |
+| `23_audit_apply.feature` | `audit --apply` : mes tickets rebasés puis la démo (retour sur la branche de départ, branches créées retirées), tickets des collègues laissés de côté, ce qui coince laissé de côté et le reste appliqué, `--dry-run`, confirmation refusée, base supposée laissée de côté, rien à appliquer, espace de travail modifié, `--apply` hors de l'audit |
+| `24_rebase_pr_validee.feature` | `feature rebase` après le squash-merge : `__PR__` seule reconstruite, branche de travail supprimée ou déjà absente, conflit en pause puis `continue`, `restart` ensuite, PR rouverte et revalidée, `hotfix` ; refus (travail ajouté après la validation, poussé ou non ; PR jamais validée) ; `__PR__` déjà mergée : branches supprimées, ou rien si refusé |
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 

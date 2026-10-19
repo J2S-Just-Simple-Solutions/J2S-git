@@ -28,6 +28,20 @@ Fonctionnalité: Cycle de vie d'une release
     Alors jgit se termine sans erreur
     Et le fichier "src/preprod.txt" n'existe pas sur la branche distante "release/1.1.0"
 
+  # Le dernier chiffre (celui des correctifs) était reporté tel quel : après un
+  # tag 1.2.3, la version proposée était 1.3.3.
+  Scénario: La version suivante repart de zéro sur son dernier chiffre
+    Étant donné je lance "jgit feature start TEST-21 --no-interaction --no-open"
+    Et je commite le fichier "src/feature21.txt" contenant "feature 21" avec le message "Ajoute la feature 21"
+    Et je pousse la branche courante
+    Et la PR de "feature/TEST-21" est squash-mergée sur GitHub avec le message "TEST-21 (#21)"
+    Et je lance "jgit release merge 1.2.3 --from feature/TEST-21"
+    Et je lance "jgit release finish"
+    Quand je lance "jgit release start"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "Current tag: 1.2.3"
+    Et je suis sur la branche "release/1.3.0"
+
   Scénario: Une version explicite est respectée
     Quand je lance "jgit release start 2.5.0"
     Alors jgit se termine sans erreur
@@ -316,6 +330,23 @@ Fonctionnalité: Cycle de vie d'une release
     Alors jgit se termine en erreur
     Et la sortie contient "Local release does not have the right tag, switching to new branch"
     Et la sortie contient "Release: release/1.1.0"
+
+  # Seul le chiffre du milieu était comparé au dernier tag : une 2.0.0 passait
+  # pour plus ancienne que la 1.0.0, et finish ouvrait une 1.1.0 vide à la place.
+  Scénario: Une version majeure est terminée sous son numéro
+    Étant donné je lance "jgit feature start TEST-20 --no-interaction --no-open"
+    Et je commite le fichier "src/feature20.txt" contenant "feature 20" avec le message "Ajoute la feature 20"
+    Et je pousse la branche courante
+    Et la PR de "feature/TEST-20" est squash-mergée sur GitHub avec le message "TEST-20 (#20)"
+    Et je lance "jgit release merge 2.0.0 --from feature/TEST-20"
+    Quand je lance "jgit release finish"
+    Alors jgit se termine sans erreur
+    Et la sortie contient "Future tag: 2.0.0"
+    Et la sortie ne contient pas "Local release does not have the right tag"
+    Et le tag "2.0.0" existe sur le remote
+    Et le fichier "src/feature20.txt" existe sur la branche distante "main"
+    Et la branche distante "release/1.1.0" n'existe pas
+    Et GitHub a reçu "release create 2.0.0 --generate-notes"
 
   # Symétrique du précédent, sur l'étape la plus irréversible : si la fusion dans
   # la production conflicte, il ne doit y avoir ni tag, ni push, ni release
