@@ -78,21 +78,21 @@ release_start() {
         echo "Current tag: ${current_tag}"
 
         local major=0
-        local feature=0
         local minor=0
         local regex='([0-9]+)\.([0-9]+)\.([0-9]+)'
 
         if [[ $current_tag =~ $regex ]]; then
             major="${BASH_REMATCH[1]}"
-            feature="${BASH_REMATCH[2]}"
-            minor="${BASH_REMATCH[3]}"
+            minor="${BASH_REMATCH[2]}"
         else
             echo "A tag must already exists (x.x.x format)"
             exit_safe 1
         fi
 
-        feature=$((feature + 1))
-        future_tag="${major}.${feature}.${minor}"
+        # Version suivante : le chiffre du milieu avance, le dernier (celui des
+        # correctifs) repart de zéro — 1.2.3 donne 1.3.0.
+        minor=$((10#$minor + 1))
+        future_tag="${major}.${minor}.0"
     fi
 
     local branch
@@ -201,6 +201,31 @@ release_merge() {
     git push "$j2s_remote" "$release_branch"
 }
 
+# Dit si la version $1 (x.y.z) vient strictement après la version $2 : le
+# premier chiffre d'abord, puis celui du milieu, puis le dernier. Une 1.0.0
+# vient donc après une 0.19.0, même si son chiffre du milieu est plus petit.
+# Une version $2 absente ou illisible compte comme 0.0.0.
+version_is_after() {
+    local regex='^([0-9]+)\.([0-9]+)\.([0-9]+)$'
+    local next_major next_minor next_patch
+    local major=0 minor=0 patch=0
+
+    [[ $1 =~ $regex ]] || return 1
+    next_major=$((10#${BASH_REMATCH[1]}))
+    next_minor=$((10#${BASH_REMATCH[2]}))
+    next_patch=$((10#${BASH_REMATCH[3]}))
+
+    if [[ $2 =~ $regex ]]; then
+        major=$((10#${BASH_REMATCH[1]}))
+        minor=$((10#${BASH_REMATCH[2]}))
+        patch=$((10#${BASH_REMATCH[3]}))
+    fi
+
+    [[ $next_major -ne $major ]] && { [[ $next_major -gt $major ]]; return; }
+    [[ $next_minor -ne $minor ]] && { [[ $next_minor -gt $minor ]]; return; }
+    [[ $next_patch -gt $patch ]]
+}
+
 release_finish() {
     local requested_target="$1"
     local branch="$requested_target"
@@ -229,19 +254,17 @@ release_finish() {
 
     if [[ $branch =~ $regex_branch ]]; then
         echo "Already in release branch"
-        local future_feature="${BASH_REMATCH[2]}"
+        local future_version="${branch#release/}"
 
         local current_tag
         # Le tag le plus récent ; à date égale (deux tags dans la même seconde,
         # ce qu'un script ou une CI produit sans peine), le plus haut numéro.
         # git applique la dernière clé --sort en premier.
         current_tag=$(git tag -l --sort=-v:refname --sort=-creatordate | head -n 1)
-        local current_feature=0
-        if [[ $current_tag =~ $regex_tag ]]; then
-            current_feature="${BASH_REMATCH[2]}"
-        fi
 
-        if [[ $future_feature -le $current_feature ]]; then
+        # La version entière est comparée, pas seulement son chiffre du
+        # milieu : sinon une 1.0.0 passerait pour plus ancienne qu'une 0.19.0.
+        if ! version_is_after "$future_version" "$current_tag"; then
             echo "/!\\ Local release does not have the right tag, switching to new branch"
             release_start
             branch=$(git rev-parse --abbrev-ref HEAD)
@@ -266,9 +289,9 @@ release_finish() {
 
     if [[ $branch =~ $regex_branch ]]; then
         local major="${BASH_REMATCH[1]}"
-        local feature="${BASH_REMATCH[2]}"
-        local minor="${BASH_REMATCH[3]}"
-        local future_tag="${major}.${feature}.${minor}"
+        local minor="${BASH_REMATCH[2]}"
+        local patch="${BASH_REMATCH[3]}"
+        local future_tag="${major}.${minor}.${patch}"
         echo "Future tag: ${future_tag}"
         switch_branch "$prod_branch"
         # La branche de release va être supprimée : sans cela, exit_safe

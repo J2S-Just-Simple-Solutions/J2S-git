@@ -290,7 +290,7 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 
 | Situation | Comportement attendu |
 | --- | --- |
-| Sans argument | la version suivante est déduite du dernier tag (`1.0.0` → `release/1.1.0`) |
+| Sans argument | la version suivante est déduite du dernier tag (`1.0.0` → `release/1.1.0`) ; son dernier chiffre repart de zéro (`1.2.3` → `release/1.3.0`) |
 | La release part de `main` | ce qui n'est qu'en préprod n'y entre pas |
 | Version explicite, avec ou sans préfixe `release/` | respectée telle quelle, sans double préfixe |
 | Aucun tag dans le dépôt | refus explicite |
@@ -321,6 +321,7 @@ C'est le parcours qui touche la production : chaque effet y est irréversible.
 | `--into` | désigne explicitement la release à terminer, depuis n'importe quelle branche |
 | Release vide | refus explicite |
 | Release plus ancienne que le dernier tag | remplacée par la version calculée |
+| Version majeure (`2.0.0` après `1.0.0`) | terminée sous son numéro : le numéro entier est comparé au dernier tag |
 | `main` porte des commits non poussés | **refus** avant la fusion : sans cela le merge les publierait en production |
 | **Conflit à la fusion dans `main`** | arrêt : **aucun tag**, **aucun push**, **aucune release GitHub**, et la branche de release reste disponible |
 | Échec de `gh release create` | erreur explicite précisant que seul l'appel GitHub reste à rejouer |
