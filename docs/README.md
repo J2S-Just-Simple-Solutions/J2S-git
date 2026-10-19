@@ -15,9 +15,10 @@ les limites connues. Lisible sans être expert Git.
 | [02 — Feature et hotfix](guide/02-feature-et-hotfix.md) | Démarrer et relancer un ticket |
 | [03 — Rebase](guide/03-rebase.md) | Rattraper la préprod sans casser sa PR, le squash |
 | [04 — Release](guide/04-release.md) | Préparer, alimenter et livrer une version |
-| [05 — Démo](guide/05-demo.md) | Assembler des tickets pour les montrer |
+| [05 — Démo](guide/05-demo.md) | Assembler des tickets pour les montrer : créer, lire, ajouter, retirer, remettre à jour |
 | [06 — Utilitaires](guide/06-utilitaires.md) | Nettoyage, vérification de rebase à blanc |
 | [07 — Règles communes](guide/07-regles-communes.md) | Options, questions, refus, configuration |
+| [08 — État des lieux](guide/08-audit.md) | Où en sont tous les tickets et les démos, quoi lancer dans quel ordre, qui est concerné |
 
 ## Vous travaillez sur `jgit`
 
@@ -27,11 +28,16 @@ les limites connues. Lisible sans être expert Git.
 | [02 — Parcours couverts](02-parcours-couverts.md) | Description fonctionnelle des parcours validés par les tests, et garanties associées |
 | [03 — Choix techniques](03-choix-techniques.md) | Les décisions prises pour la suite de tests, leurs raisons et leurs conséquences |
 | [04 — Règles de codage](04-regles-de-codage.md) | Les règles à respecter en modifiant `jgit`, à commencer par l'alignement code / aide / doc |
-| [05 — Portabilité](05-portabilite.md) | Pourquoi `jgit` refuse de tourner ailleurs que sur macOS, et ce qu'il reste à lever |
+| [05 — Portabilité](05-portabilite.md) | macOS et Linux : ce qui a été levé pour Linux, les règles à respecter, et pourquoi tout autre système est refusé |
+| [07 — Feuille de route](07-feuille-de-route.md) | Temps 2 (Jenkins et environnements) et temps 3 (prototypes) : ce qui est déjà prêt, ce qu'il reste à trancher |
+| [06 — Contrat de la ligne de commande](06-contrat-cli.md) | `--json` : le document unique, les codes de sortie, les schémas — ce qu'une IA, l'interface ou Jenkins peuvent attendre de `jgit` |
 
 Le mode d'emploi opérationnel (lancer les tests, écrire un scénario, catalogue
 des étapes) est dans [`tests/README.md`](../tests/README.md).
 L'installation et la configuration sont dans le [README principal](../README.md).
+Le skill Claude Code qui pilote les démos est dans
+[`.claude/skills/jgit-demo`](../.claude/skills/jgit-demo/SKILL.md) ; les notes pour
+travailler sur `jgit` avec Claude sont dans [`CLAUDE.md`](../CLAUDE.md).
 
 ## En une page
 

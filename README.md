@@ -27,13 +27,21 @@
      ```
    - Rechargez votre terminal ou exécutez `source ~/.zprofile`.
 
+   Un lien symbolique placé dans le `PATH` fonctionne aussi : `jgit` retrouve
+   ses modules à côté du vrai `jgit.sh`, pas à côté du lien.
+   ```bash
+   ln -s /chemin/vers/J2S-git/jgit.sh /usr/local/bin/jgit
+   ```
+
 ## Prérequis
 
-- **macOS.** `jgit` refuse de démarrer sur un autre système : plusieurs commandes
-  s'appuient sur des outils BSD dont l'équivalent GNU se comporte différemment, et
-  un `feature rebase` lancé ailleurs écraserait la branche de travail au lieu de
-  la rejouer. Le détail et l'état d'avancement sont dans
-  [`docs/05-portabilite.md`](docs/05-portabilite.md).
+- **macOS ou Linux.** `jgit` refuse de démarrer sur tout autre système : un écart
+  de comportement d'un outil système y a déjà vidé une branche de travail en
+  silence. Linux est celui des conteneurs Docker et des agents Jenkins. Le détail
+  est dans [`docs/05-portabilite.md`](docs/05-portabilite.md).
+- Un clone **complet** : un clone superficiel (`--depth`) est refusé, il n'a pas
+  l'historique dont `jgit` a besoin (`git fetch --unshallow origin`).
+- Une **identité git** configurée (`user.name`, `user.email`) : `jgit` commite.
 - Un dépôt Git avec un remote nommé `origin` pointant vers GitHub (organisation J2S).
 - Git installé en local (`git --version` doit répondre).
 - Le client GitHub CLI (`gh`) installé et configuré : https://cli.github.com/
@@ -82,17 +90,27 @@ jgit <scope> <action> [<cible>] [options...]
 - `feature` / `hotfix`
 - `release`
 - `demo`
+- `audit`
 - `util`
+- `ui`
 
 ### Options globales
 
 - `--based-on <branche>` : force la branche de référence lors d'un `start` ou d'un `rebase`.
 - `--from <branche>` : ajoute une source à fusionner (option répétable).
 - `--into <branche>` : définit explicitement la branche de destination.
+- `--json` : sortie machine, pour une IA, l'interface ou Jenkins. La sortie standard porte **un seul document JSON** ; tous les messages partent sur la sortie d'erreur ; le code de sortie donne la famille du résultat. Implique `--no-interaction`. Le contrat complet est dans [`docs/06-contrat-cli.md`](docs/06-contrat-cli.md).
+- `--no-fetch` : ne contacte pas le serveur et travaille sur les références déjà rapatriées (affichage répété).
 - `--no-interaction` : ne pose aucune question et applique la réponse par défaut de chacune. Cette réponse par défaut est **toujours** celle signalée par la majuscule dans le suffixe de la question — `(Y/n)` quand valider sans rien saisir revient à dire oui, `(y/N)` quand cela revient à dire non. Il n'existe aucune question affichée `(y/n)`. Un conflit de rebase, qui exige une intervention humaine, n'est jamais validé automatiquement : la commande s'arrête proprement (voir ci-dessous).
 - `--no-open` : n'ouvre pas automatiquement la pull request lors d'un `start` ou `restart`.
 - `--squash` : lors d'un `rebase`, squash tous les commits de la branche de travail en un seul avant de rejouer l'historique.
 - `jgit help` / `jgit -h` : affiche l'aide complète.
+
+**Couleurs.** `jgit` ne colore sa sortie que face à un terminal. Redirigée vers
+un fichier, lue par un journal Jenkins ou par une IA, ou lancée sans variable
+`TERM`, elle ne contient aucune séquence ANSI. La variable d'environnement
+`JGIT_COLOR` force le choix (`always` ou `never`, `auto` par défaut), et
+[`NO_COLOR`](https://no-color.org) coupe la couleur dans tous les cas.
 
 ## Fraîcheur des branches
 
@@ -170,7 +188,7 @@ et disparaissent avec le commit d'initialisation au squash-and-merge de la PR.
 
 Sont concernées : `feature start`, `hotfix start`, `feature restart` (qui reprend
 la base portée par la branche de PR), `feature rebase` (qui inscrit la base sur
-laquelle il vient de reconstruire), `release start` et `demo start`.
+laquelle il vient de reconstruire), `release start` et `demo create`.
 
 Deux usages :
 
@@ -197,7 +215,7 @@ base : rejouer des commits ailleurs n'est pas la même opération, et sur un
 `rebase` le résultat part en `push --force`.
 
 ```
-La branche de base demo_sprint12 n'existe pas (ni en local ni sur origin).
+La branche de base demo/sprint12 n'existe pas (ni en local ni sur origin).
 C'est la branche d'origine de feature/MONPROJET-412, enregistrée à sa création :
 elle a sans doute été livrée puis supprimée depuis.
 Rien n'a été modifié : ni vos branches, ni le serveur.
@@ -219,6 +237,16 @@ La référence du projet est develop. Si c'est bien elle que vous voulez :
 - `jgit feature start <ticket> [--based-on <branche>] [--no-open]` : crée ou reprend la branche `feature/<ticket>` et sa branche PR `__PR__feature/<ticket>`, pousse les commits d'initialisation et ouvre la PR (sauf `--no-open`). Identique avec `hotfix`.
 - `jgit feature restart <ticket> [--no-open]` : recrée la branche de travail depuis la branche PR après vérification de l'alignement du code, supprime l'ancienne branche distante et ré-ouvre la PR si nécessaire.
 - `jgit feature rebase <ticket> [--based-on <branche>] [--squash]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`. Sans `--based-on`, il propose la [branche d'origine](#branche-dorigine) enregistrée à la création si elle diffère de la référence du projet — et c'est la réponse par défaut, donc celle qu'applique `--no-interaction`.
+
+#### Rebase d'une PR validée
+
+Une fois la PR squash-mergée, c'est la branche `__PR__` qui sera mergée dans sa branche finale — celle dont le ticket est parti. Si cette branche a bougé entre-temps, le même `jgit feature rebase <ticket>` reconstruit **la seule branche `__PR__`** sur sa base : le conflit éventuel est résolu par le développeur, avant le merge, qui peut ensuite passer sans intervention.
+
+- La branche de travail doit avoir **exactement le même code** que `__PR__` : elle ne sert plus, et elle est supprimée dans le même push que la publication de `__PR__` (`--atomic`, `--force-with-lease` sur les deux). Si elle a disparu, seule `__PR__` est reconstruite.
+- Du code ajouté après la validation (poussé ou non) bloque tout, sans rien modifier : code `2`, `pr_validated_new_work`.
+- Une PR jamais validée dont la branche de travail a disparu est refusée (code `2`, `pr_not_validated`) ; le remède donne la commande qui supprime la branche `__PR__`.
+- Une branche `__PR__` déjà mergée dans sa base n'a plus rien à rebaser : `jgit` propose de la supprimer, avec la branche de travail, en local et sur le serveur (réponse par défaut : oui).
+- `jgit feature restart` reste possible ensuite : il recrée la branche de travail depuis `__PR__`.
 
 #### Squash avant rebase
 
@@ -244,6 +272,10 @@ Le rebase rejoue les commits par cherry-pick : en cas de conflit, `jgit` s'inter
 
 Avec `--no-interaction`, un conflit ne peut pas être résolu : la commande s'arrête sur un message d'erreur explicite après avoir remis l'environnement en ordre — cherry-pick abandonné, branches temporaires `jgit_rebase_*` supprimées, historique de la branche de travail restauré si un squash avait été appliqué. Le remote n'étant poussé qu'en toute fin de rebase, il reste intact. Relancez alors la commande sans `--no-interaction` pour traiter le conflit à la main.
 
+`--on-conflict` choisit la conduite face à un conflit : `ask` (défaut en interactif), `abort` (défaut sans interaction) ou `pause`. En pause, `jgit` s'arrête (code 3) en laissant le conflit à résoudre dans l'espace de travail ; une fois les fichiers résolus et marqués (`git add`), `jgit feature continue <ticket>` reprend là où il s'était arrêté, et `jgit feature abort <ticket>` annule tout. C'est ainsi qu'une IA résout un conflit. Tant qu'une opération est en pause, toute autre commande refuse (code 5).
+
+La publication finale pousse les deux branches **ensemble** (`--atomic`) et **seulement si le serveur n'a pas bougé** depuis le début du rebase (`--force-with-lease` sur la version lue au départ). Si un collègue a poussé entre-temps, rien n'est écrasé : les branches locales reviennent à leur état d'avant et la commande sort en code 4.
+
 ### Release
 
 - `jgit release start [<x.y.z>]` : sans argument, calcule la prochaine version à partir du dernier tag, crée ou reprend `release/x.y.z` et pousse le commit initial. Avec `x.y.z`, prépare la branche correspondante.
@@ -265,10 +297,49 @@ Dans les deux cas l'espace de travail est rendu propre : rien n'est perdu.
 
 ### Demo
 
-- `jgit demo start [<nom_demo>] [--based-on <branche>]` : prépare une branche `demo_<nom>` existante (checkout + fast-forward) ou en crée une nouvelle à partir de la branche fournie après confirmation.
-- `jgit demo merge [--into <branche_demo>] --from feature/<ticket> [--from hotfix/<ticket>]...` : intègre successivement chaque branche listée dans la démo cible (branche courante par défaut). L'intégration procède par **rebase de la branche de démo sur la source**, suivi d'un `push --force-with-lease` : l'historique de la démo est réécrit à chaque ajout, ce qui le garde linéaire. Une branche de démo est jetable et ne doit servir qu'à la démonstration. En cas de conflit, `jgit` s'arrête et vous laisse la main (`git rebase --continue` ou `git rebase --abort`).
-- `jgit demo list` : parcourt les commits `[jgit] DEMO …`, affiche les branches déjà fusionnées et suggère les commandes `jgit release merge --from ...` correspondantes.
-- `jgit demo remove [--no-interaction]` : supprime la branche de démonstration sur le remote puis en local, et replace l'utilisateur sur la branche de référence.
+Une démo est une **recette** : une base et une liste ordonnée de tickets, écrite dans la branche `demo/<nom>` elle-même. Les commits de chaque ticket y sont recopiés tels quels (cherry-pick), puis un commit repère clôt le ticket. Le guide complet, avec les états de chaque ticket, est dans [`docs/guide/05-demo.md`](docs/guide/05-demo.md).
+
+Lire (ne touche ni à l'espace de travail ni à la branche courante) :
+
+- `jgit demo list [--archived | --all]` : les démos du projet, leur base et leur état.
+- `jgit demo show [<nom>]` : le détail d'une démo, ticket par ticket (à jour, a avancé, réécrit, branche supprimée, livré), avec la commande à lancer pour chaque action utile et la commande `jgit release merge` correspondante.
+- `jgit demo candidates [<nom>] [--based-on <branche>]` : les tickets que l'on peut ajouter — à une démo existante, ou à une démo encore à créer sur cette base (les tickets déjà livrés y sont signalés).
+- `jgit demo bases` : les branches dont une démo peut partir, la préprod et la production en tête, puis les releases.
+- [`jgit audit demos [<nom>]`](#audit) : les mises à jour passeront-elles ? Dans quel ordre, et qui est concerné par chaque conflit ?
+
+Fabriquer (sur une branche temporaire `jgit_demo_<nom>`, à partir de la version du serveur, publication finale par `--force-with-lease`, rien n'est publié si rien ne change, `--dry-run` disponible) :
+
+- `jgit demo create <nom> [--based-on <branche>] [--from <ticket>]...`
+- `jgit demo add [<nom>] --from <ticket>...` : ajoute des tickets à la suite, ou les nouveaux commits d'un ticket déjà présent, sans rien réécrire.
+- `jgit demo drop [<nom>] --from <ticket>...` : reconstruit la démo sans ces tickets, à partir d'elle-même.
+- `jgit demo refresh [<nom>] --from <ticket>...` : reprend en entier un ticket réécrit (squash), à sa place.
+- `jgit demo rebase [<nom>] [--based-on <branche>] [--from <ticket>]... [--keep-delivered] [--keep-missing] [--drop-foreign]` : reconstruit la démo sur la version actuelle de sa base ; les tickets livrés et ceux dont la branche a disparu sont retirés. `--from` reprend un ticket depuis sa branche plutôt que depuis la démo : après que son auteur l'a rebasé et y a résolu un conflit avec la base, la démo prend sa version résolue.
+- `jgit demo continue [<nom>]` / `jgit demo abort [<nom>]` : reprise ou annulation après un conflit mis en pause (`--on-conflict pause`).
+
+Cycle de vie (chaque changement de nom est un seul push `--atomic`, protégé par lease) :
+
+- `jgit demo archive <nom>` : renomme la démo `demo-archive/<AAAA-MM-JJ>_<nom>` (`<AAAA-MM-JJ>.2_<nom>` pour une seconde archive le même jour). Son nom est libéré pour une nouvelle démo ; l'archive reste consultable, en lecture seule.
+- `jgit demo unarchive <archive>` : la restaure sous son nom (refusé si une démo active le porte).
+- `jgit demo delete <nom|archive>` : la supprime du serveur, après confirmation.
+- `jgit demo migrate <nom> [--based-on <branche>]` : recrée une démo `demo_<nom>` (ancien format) au format actuel, avec les mêmes tickets ; l'ancienne est conservée.
+
+Tout cela est aussi accessible au clavier, sans retenir les commandes : [`jgit ui`](#interface-en-terminal-jgit-ui).
+
+Les résolutions de conflit sont des commits de la démo : les reconstructions suivantes les rejouent sans les redemander.
+
+Les anciennes démos `demo_<nom>` restent lisibles par `list` et `show`, en lecture seule ; `migrate` les convertit.
+
+### Audit
+
+L'état des lieux de tous les tickets et de toutes les démos, en simulation : rien n'est modifié. Le guide complet est dans [`docs/guide/08-audit.md`](docs/guide/08-audit.md).
+
+- `jgit audit` : tous les tickets du serveur, puis toutes les démos.
+- `jgit audit tickets` : chaque ticket est-il à jour sur sa base ? Sinon, son rebase passerait-il ? Comme `jgit feature rebase`, seuls ses propres commits comptent. Sa base est celle enregistrée à sa création ; pour un ticket plus ancien, elle est supposée (la base connue dont il s'écarte le moins) et donnée à la commande par `--based-on`. Pour chaque ticket qui demande une action : le titre de sa PR sur GitHub, **qui doit intervenir** (pour un rebase qui coince, les auteurs des commits en conflit) et la commande à lancer.
+- `jgit audit demos [<nom>]` : pour chaque démo, les commandes dans l'ordre — d'abord rebaser chez eux les tickets en retard sur leur base (leurs conflits avec la base se résolvent là, par leur auteur), puis `jgit demo rebase` avec un `--from` pour chaque ticket à reprendre depuis sa branche, puis `jgit demo add` — et, pour chaque conflit qui resterait dans la démo, qui est concerné et les deux issues (résoudre, retirer).
+
+Le rapport ne dit que qui et quoi ; le détail (commits, fichiers, et en face le commit de la base et son auteur) est dans `--json`. Sur un projet de centaines de branches, les tickets hors démo simplement à rebaser sont comptés par personne. Code de sortie 3 dès que quelque chose coince.
+
+- `jgit audit [tickets | demos [<nom>]] --apply [--dry-run]` : après l'état des lieux, montre le plan, demande confirmation et lance ce qui passe sans conflit — le rebase de **mes** tickets (ceux où mon identité git doit intervenir), puis la mise à jour des démos faisables. Les tickets des autres et ceux à base supposée sont laissés de côté et listés. Chaque opération est la vraie commande jgit (même lease, même abandon propre) ; l'espace de travail doit être propre.
 
 ### Espace de travail et stash automatique
 
@@ -292,7 +363,8 @@ parvenir reviendrait à prendre une décision qui ne revient pas à `jgit`.
 
 ### Utilitaires
 
-- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_verify_rebase_*`, `__PR__*`).
+- `jgit util clean` : supprime les branches locales temporaires créées par `jgit` (`jgit_rebase_*`, `jgit_demo_*`, `jgit_verify_rebase_*`, `__PR__*`). Refusé tant qu'une opération est en pause sur un conflit.
+- `jgit util status` : dit si une opération attend la résolution d'un conflit, le fichier à résoudre et les deux commandes pour en sortir. Ne modifie rien.
 - `jgit util check_rebase [--from <branche>]` : dit si la branche (par défaut la branche courante) est encore à jour sur [sa branche d'origine](#branche-dorigine) et si le rebase passerait. Ne modifie rien.
 - `jgit util verify_rebase --from <branche_source> --into <branche_cible>` : vérifie si la branche source peut être rebasée sur la branche cible sans conflit. Affiche `true` ou `false` et ne laisse aucune modification en local ou sur le remote.
 
@@ -321,7 +393,7 @@ tout seul, là où `verify_rebase` attend qu'on lui nomme les deux branches.
 
 ### Syntaxes dépréciées
 
-Deux commandes ont changé de forme. Les anciennes restent acceptées et
+Plusieurs commandes ont changé de forme. Les anciennes restent acceptées et
 fonctionnent à l'identique, mais affichent un avertissement et seront retirées
 dans une prochaine version.
 
@@ -329,11 +401,79 @@ dans une prochaine version.
 | --- | --- |
 | `jgit release merge <branche>` | `jgit release merge --from <branche>` |
 | `jgit clean` | `jgit util clean` |
+| `jgit demo start [<nom>]` | `jgit demo create <nom>` (sans nom : celui de la base) |
+| `jgit demo merge --from <ticket> [--into <nom>]` | `jgit demo add <nom> --from <ticket>` (sans `--into` : la démo de la branche courante) |
+| `jgit demo remove` | `jgit demo delete <nom>` (depuis la branche de la démo) |
+| `jgit demo list` depuis une démo | `jgit demo show <nom>` |
 
 La distinction entre les deux formes de `release merge` se fait sur le format de
 l'argument : `1.2.0` ou `release/1.2.0` est une version cible, tout le reste est
 traité comme une branche source. Mélanger les deux — `jgit release merge
 feature/X --from feature/Y` — est refusé explicitement.
+
+## Interface en terminal (`jgit ui`)
+
+```bash
+jgit ui
+```
+
+Une interface au clavier pour les démos, pensée pour qui ne veut pas retenir les
+commandes : la liste des démos et leur état, le détail ticket par ticket,
+l'état des lieux (`v`, voir [`jgit audit`](#audit)), le choix des tickets **en tapant leur numéro** (la liste se réduit à la frappe ; un
+ticket seul à correspondre est coché d'office), la création d'une démo, le
+plan de chaque réécriture montré avant d'être appliqué (`--dry-run`), et un
+écran de conflit (fichiers à résoudre, ouverture dans l'éditeur, reprise,
+annulation, « résoudre avec Claude » quand Claude Code est installé).
+
+Elle est écrite en TypeScript avec [Ink](https://github.com/vadimdemedes/ink)
+(dossier [`ui/`](ui/)) et ne fait **aucune** opération git elle-même : tout passe
+par `jgit … --json`.
+
+**Elle tourne dans Docker** : rien à installer d'autre. `jgit ui` construit
+l'image `j2s/jgit:local` avec [`docker-compose.yml`](docker-compose.yml) (la
+première fois, puis seulement ce qui a changé), puis la lance :
+
+- le dépôt du projet est monté **au même chemin** que sur le poste ;
+- le conteneur tourne sous **votre identité** : les fichiers du dépôt restent les
+  vôtres ;
+- `~/.gitconfig` et `~/.ssh/known_hosts` sont montés en lecture, et **l'agent
+  SSH** du poste est transmis (Docker Desktop sur Mac, `$SSH_AUTH_SOCK` sous
+  Linux) : les remotes doivent être en SSH (`git@github.com:…`) ;
+- l'éditeur du conteneur est `nano`.
+
+Sans Docker, l'interface se lance avec le `node` du poste (Node 20 ou plus) :
+
+```bash
+(cd /chemin/vers/J2S-git/ui && npm ci && npm run build)
+JGIT_UI=native jgit ui
+```
+
+La même image fournit la ligne de commande, pour un agent de CI :
+
+```bash
+docker run --rm -v "$PWD:$PWD" -w "$PWD" j2s/jgit:local jgit demo list --json
+```
+
+## Piloter jgit par une IA (Claude Code)
+
+Le dépôt fournit un **skill** Claude Code, [`.claude/skills/jgit-demo`](.claude/skills/jgit-demo/SKILL.md),
+qui apprend à Claude à gérer les démos d'un projet : les lister, dire où elles en
+sont, y ajouter ou retirer des tickets, les remettre à jour, **résoudre leurs
+conflits**, les archiver. Il s'appuie uniquement sur `jgit … --json` (voir le
+[contrat](docs/06-contrat-cli.md)) et demande votre accord avant toute
+réécriture.
+
+Pour qu'il soit disponible dans tous vos projets, liez-le dans vos skills
+personnels :
+
+```bash
+mkdir -p ~/.claude/skills
+ln -s /chemin/vers/J2S-git/.claude/skills/jgit-demo ~/.claude/skills/jgit-demo
+```
+
+Il suffit ensuite de demander, dans un projet J2S : *« où en est la démo
+client-a ? »*, *« ajoute MONPROJET-88 à la démo sprint12 »*, *« remets la démo à
+jour sur la préprod »*, *« fais l'état des lieux des tickets et des démos »*.
 
 ## Tests
 

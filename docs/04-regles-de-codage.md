@@ -90,6 +90,10 @@ grep -rn "git checkout" *.sh
 
 Les seules occurrences légitimes sont celles de `switch_branch` elle-même.
 
+**Exception** : la copie de travail temporaire de `jgit audit` (`audit_git`,
+dans `audit.sh`), qui n'est pas l'espace de travail de l'utilisateur et ne sert
+qu'à simuler (choix technique n°17).
+
 ---
 
 ## 4. Le code de retour d'une commande git destructrice est toujours contrôlé
@@ -178,12 +182,38 @@ quitterait que le sous-shell.
 
 ---
 
-## 8. Compatibilité bash 3.2 et macOS
+## 8. Une erreur s'arrête par `jgit_fail`
+
+**La règle.** Une nouvelle erreur s'arrête par
+`jgit_fail <code> <code_de_sortie> <message> [remède]` (`json.sh`) : le message
+part en rouge sur la sortie d'erreur, le remède en dessous, et le tout est repris
+dans le document `jgit.error/1` en mode `--json`. Quand le message est déjà
+affiché par ailleurs, `jgit_error_set <code> <message> [remède]` puis
+`exit_safe`.
+
+**Pourquoi.** Une IA ou Jenkins ne lit pas les phrases : il lit `error.code`. Un
+`exit_safe 1` nu reste un document valide, mais réduit à `failed` — le
+programme sait que ça a échoué, pas pourquoi, et ne peut rien proposer.
+
+**Corollaire.** Avec `--json`, la sortie standard est réservée au document : rien
+d'autre ne doit y être écrit que par `json_emit`. Le contrat est dans
+[`06-contrat-cli.md`](06-contrat-cli.md).
+
+---
+
+## 9. Compatibilité bash 3.2 / 5.2, macOS et Linux
 
 Le bash livré par Apple est le 3.2 : pas de tableaux associatifs, pas de
 `readarray`/`mapfile`, pas de `${var^^}`. Voir le
 [choix technique n°8](03-choix-techniques.md).
 
-`jgit` ne tourne par ailleurs que sur macOS, pour des raisons détaillées dans
-[`05-portabilite.md`](05-portabilite.md) : avant d'introduire une dépendance à un
-outil système, vérifiez qu'elle ne fige pas davantage cette situation.
+`jgit` tourne aussi sous Linux (bash 5.2, outils GNU) pour Docker et Jenkins.
+Toute dépendance à un outil système se limite à sa partie POSIX ; les pièges
+connus sont listés dans [`05-portabilite.md`](05-portabilite.md#règles-pour-la-suite).
+Une modification passe les deux suites : `./tests/run.sh` et
+`./tests/run-in-docker.sh`.
+
+Les couleurs passent exclusivement par les variables `C_RED`, `C_GREEN`…
+et par `jgit_tput` (`functions.sh`) : jamais de séquence `\033[` écrite à la
+main, jamais d'appel direct à `tput`. C'est ce qui garantit une sortie sans
+séquence ANSI hors d'un terminal.

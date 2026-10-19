@@ -184,11 +184,11 @@ Fonctionnalité: Utilitaires et garde-fous transverses
 
   Scénario: Les commandes de démo refusent elles aussi
     Étant donné je modifie le fichier "src/app.txt" avec "travail en cours"
-    Quand je lance "jgit demo start sprint12 --no-interaction"
+    Quand je lance "jgit demo create sprint12 --no-interaction"
     Alors jgit se termine en erreur
     Et la sortie contient "Une démo ne se fabrique pas sur un dépôt en cours de modification."
     Et le fichier de travail "src/app.txt" contient "travail en cours"
-    Et la branche distante "demo_sprint12" n'existe pas
+    Et la branche distante "demo/sprint12" n'existe pas
 
   Scénario: util ne déclenche pas le stash automatique
     Étant donné je modifie le fichier "src/app.txt" avec "travail en cours"

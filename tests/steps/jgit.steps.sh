@@ -43,6 +43,14 @@ step_lance_commande() {
 }
 step_def "je lance {chaine}" step_lance_commande
 
+# Variante pour le contrat --json : la sortie standard (le document) est
+# capturee a part de la sortie d'erreur (les messages).
+step_lance_commande_json() {
+    jgit_args_from_command "$1"
+    run_jgit_json ${JGIT_ARGS[@]+"${JGIT_ARGS[@]}"}
+}
+step_def "je lance {chaine} en lisant le JSON" step_lance_commande_json
+
 # Variante interactive : le tableau fournit les questions attendues et les
 # reponses a taper.
 #
@@ -90,6 +98,16 @@ step_checkout() {
 }
 step_def "je me place sur la branche {chaine}" step_checkout
 
+step_resout_conflit() {
+    repo_resolve_file "$1" "$2"
+}
+step_def "je résous le conflit du fichier {chaine} avec {texte}" step_resout_conflit
+
+step_marque_resolu() {
+    repo_mark_resolved "$1"
+}
+step_def "je marque le fichier {chaine} résolu sans retirer les marqueurs" step_marque_resolu
+
 ###############################################
 #            Actions : GitHub (simule)
 ###############################################
@@ -104,25 +122,78 @@ step_branches_non_standard() {
 }
 step_def "le projet utilise {chaine} au lieu de develop, master ou main" step_branches_non_standard
 
-# jgit refuse de tourner ailleurs que sur macOS (docs/05-portabilite.md). Le bac
-# a sable place deja $SANDBOX/bin en tete du PATH : y deposer un faux `uname`
-# suffit a faire croire a jgit qu'il tourne sur Linux.
+# jgit ne tourne que sur macOS et Linux (docs/05-portabilite.md). Le bac a sable
+# place deja $SANDBOX/bin en tete du PATH : y deposer un faux `uname` suffit a
+# faire croire a jgit qu'il tourne sur un autre systeme.
 step_systeme_non_macos() {
     local systeme="${1:-Linux}"
     cat > "$SANDBOX/bin/uname" <<UNAME_MOCK
 #!/bin/bash
-# Faux uname : simule un systeme autre que macOS.
+# Faux uname : simule un autre systeme.
 printf '%s\n' "$systeme"
 UNAME_MOCK
     chmod +x "$SANDBOX/bin/uname"
     info "uname simule : $systeme"
 }
-step_def "le système est {chaine} et non macOS" step_systeme_non_macos
+step_def "le système détecté est {chaine}" step_systeme_non_macos
+
+step_clone_superficiel() {
+    repo_reclone --depth 1 --no-single-branch
+}
+step_def "le dépôt de travail est un clone superficiel" step_clone_superficiel
+
+step_clone_une_branche() {
+    repo_reclone --single-branch --branch "$1"
+}
+step_def "le dépôt de travail est un clone de la seule branche {chaine}" step_clone_une_branche
+
+step_sans_identite() {
+    repo_remove_git_identity
+}
+step_def "aucune identité git n'est configurée" step_sans_identite
+
+step_appel_par_lien() {
+    jgit_use_symlink
+}
+step_def "jgit est installé par un lien symbolique" step_appel_par_lien
+
+step_terminal_non_defini() {
+    unset TERM
+    info "variable TERM retiree"
+}
+step_def "le terminal n'est pas défini" step_terminal_non_defini
+
+step_demo_ancien_format() {
+    # shellcheck disable=SC2086
+    github_create_legacy_demo "$1" "$2" true $3
+}
+step_def "une démo à l'ancien format {chaine} basée sur {chaine} contient les tickets {chaine}" step_demo_ancien_format
+
+step_demo_ancien_format_sans_base() {
+    # shellcheck disable=SC2086
+    github_create_legacy_demo "$1" develop false $2
+}
+step_def "une démo à l'ancien format {chaine} sans base enregistrée contient les tickets {chaine}" step_demo_ancien_format_sans_base
+
+step_pr_livree() {
+    github_deliver_pr "$1" "$2"
+}
+step_def "la PR de {chaine} est livrée dans {chaine}" step_pr_livree
 
 step_github_supprime_branche() {
     github_delete_branch "$1"
 }
 step_def "la branche {chaine} est supprimée sur GitHub" step_github_supprime_branche
+
+step_github_renomme_pr() {
+    github_rename_pr "$1" "$2"
+}
+step_def "la PR de {chaine} s'intitule {chaine} sur GitHub" step_github_renomme_pr
+
+step_ancien_ticket() {
+    github_create_old_ticket "$1" "$2" "$3" "$4"
+}
+step_def "un ancien ticket {chaine} parti de {chaine}, sans branche d'origine enregistrée, ajoute le fichier {chaine} contenant {texte}" step_ancien_ticket
 
 step_github_en_echec() {
     export JGIT_GH_FAIL="$1"
@@ -160,6 +231,104 @@ step_sortie_ne_contient_pas() {
     assert_jgit_output_not_contains "$1"
 }
 step_def "la sortie ne contient pas {chaine}" step_sortie_ne_contient_pas
+
+step_sortie_sans_couleur() {
+    assert_jgit_output_plain
+}
+step_def "la sortie ne contient aucune séquence de couleur" step_sortie_sans_couleur
+
+###############################################
+#            Verifications : document JSON
+###############################################
+
+step_json_unique() {
+    assert_json_document
+}
+step_def "la sortie standard est un unique document JSON" step_json_unique
+
+step_json_egal() {
+    assert_json_equals "$1" "$2"
+}
+step_def "le JSON a {chaine} égal à {texte}" step_json_egal
+
+step_json_contient() {
+    local actual
+    actual=$(json_value_at "$1") || exit 1
+    assert_contains "$actual" "$2" "JSON $1 contient [$2]"
+}
+step_def "le JSON a {chaine} qui contient {chaine}" step_json_contient
+
+step_json_nombre() {
+    assert_json_equals "$1" "$2"
+    assert_json_type "$1" number
+}
+step_def "le JSON a {chaine} égal au nombre {nombre}" step_json_nombre
+
+step_json_vrai() {
+    assert_json_equals "$1" true
+}
+step_def "le JSON a {chaine} vrai" step_json_vrai
+
+step_json_faux() {
+    assert_json_equals "$1" false
+}
+step_def "le JSON a {chaine} faux" step_json_faux
+
+step_json_nul() {
+    assert_json_type "$1" null
+}
+step_def "le JSON a {chaine} nul" step_json_nul
+
+step_json_longueur() {
+    assert_json_length "$1" "$2"
+}
+step_def "la liste JSON {chaine} contient {nombre} éléments" step_json_longueur
+
+step_json_absent() {
+    assert_json_missing "$1"
+}
+step_def "le JSON n'a pas de {chaine}" step_json_absent
+
+###############################################
+#            Verifications : demos
+###############################################
+
+# Le tableau liste les tickets attendus, un par ligne, dans l'ordre.
+step_demo_tickets() {
+    local rows row=1 expected=""
+
+    rows=$(step_table_row_count)
+    while [[ $row -le $rows ]]; do
+        expected="$expected$(step_table_cell "$row" 1)"$'\n'
+        row=$((row + 1))
+    done
+    assert_remote_demo_tickets "$1" "${expected%$'\n'}"
+}
+step_def "la démo distante {chaine} contient dans l'ordre les tickets :" step_demo_tickets
+
+step_demo_sans_ticket() {
+    assert_remote_demo_tickets "$1" ""
+}
+step_def "la démo distante {chaine} ne contient aucun ticket" step_demo_sans_ticket
+
+###############################################
+#            Verifications : operation en pause
+###############################################
+
+step_operation_en_pause() {
+    assert_operation_paused
+}
+step_def "une opération jgit est en pause" step_operation_en_pause
+
+step_aucune_copie_temporaire() {
+    assert_no_extra_worktree
+}
+step_def "aucune copie de travail temporaire ne reste" step_aucune_copie_temporaire
+
+step_aucune_operation_en_pause() {
+    assert_no_operation_paused
+}
+step_def "aucune opération jgit n'est en pause" step_aucune_operation_en_pause
 
 ###############################################
 #            Verifications : branches
@@ -320,6 +489,11 @@ step_autre_dev_pousse() {
 }
 step_def "un autre développeur pousse le fichier {chaine} contenant {texte} sur la branche {chaine} avec le message {chaine}" step_autre_dev_pousse
 
+step_personne_pousse() {
+    github_commit_file_as "$1" "$4" "$2" "$3" "$5"
+}
+step_def "{chaine} pousse le fichier {chaine} contenant {texte} sur la branche {chaine} avec le message {chaine}" step_personne_pousse
+
 step_note_etat_branche_distante() {
     remote_snapshot_save "$1"
 }
@@ -333,6 +507,11 @@ step_branche_distante_inchangee() {
     assert_remote_branch_unchanged "$1"
 }
 step_def "la branche distante {chaine} est inchangée" step_branche_distante_inchangee
+
+step_branche_distante_avance_rapide() {
+    assert_remote_branch_fast_forwarded "$1"
+}
+step_def "la branche distante {chaine} a avancé sans réécriture" step_branche_distante_avance_rapide
 
 step_branche_distante_modifiee() {
     assert_remote_branch_changed "$1"

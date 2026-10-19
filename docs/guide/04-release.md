@@ -41,8 +41,9 @@ jgit release start            # numéro calculé automatiquement
 jgit release start 2.0.0      # numéro imposé
 ```
 
-Sans argument, `jgit` lit le dernier tag du dépôt et incrémente le chiffre du
-milieu : `1.3.0` → `release/1.4.0`.
+Sans argument, `jgit` lit le dernier tag du dépôt, incrémente le chiffre du
+milieu et remet le dernier à zéro : `1.3.0` → `release/1.4.0`, `1.3.2` →
+`release/1.4.0`.
 
 Il crée la branche à partir de la **production telle qu'elle est sur le serveur**,
 y pose un commit repère, et la pousse.
@@ -269,26 +270,12 @@ Le numéro repart automatiquement du nouveau tag.
 | La version ne contient aucun ticket | refuse : *« It seems that the release is empty… »* | |
 | Commits non poussés sur la production | refuse | sans ça, la fusion les publierait en production sans votre accord |
 | **Conflit à la fusion en production** | annule : **aucun tag, aucune publication**, la branche de version reste disponible | |
-| Le numéro de version est plus ancien que le dernier tag | bascule sur une version recalculée | |
+| Le numéro de version n'est pas plus récent que le dernier tag | bascule sur une version recalculée | le numéro entier est comparé : une `2.0.0` vient bien après une `1.9.0` |
 | GitHub refuse de créer la release | sort en erreur | **la fusion et le tag sont déjà poussés** : il ne reste que la publication GitHub, le message le dit |
 
 ---
 
 ## Limites connues
-
-Deux défauts de numérotation sont identifiés et suivis dans
-l'[issue #40](https://github.com/J2S-Just-Simple-Solutions/J2S-git/issues/40) :
-
-- **Les versions majeures ne fonctionnent pas.** `jgit release finish` sur une
-  `release/2.0.0` l'abandonne, crée une version vide à la place et s'arrête en
-  erreur. En attendant le correctif, une montée en version majeure doit se faire à
-  la main.
-- **Le numéro de correctif n'est pas remis à zéro.** Si le dernier tag est
-  `1.2.3`, la version suivante proposée est `1.3.3` au lieu de `1.3.0`. Sans effet
-  tant que tous les tags se terminent par `.0`, ce qui est le cas aujourd'hui ;
-  indiquez le numéro explicitement en cas de doute.
-
-Par ailleurs :
 
 - **`release finish` ne met pas la préprod à jour.** Après une livraison, c'est à
   vous de reporter la production dans la préprod si votre projet le demande.

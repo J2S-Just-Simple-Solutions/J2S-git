@@ -87,6 +87,6 @@ Fonctionnalité: Fraîcheur des branches
 
   Scénario: Une démo démarre sur la branche de référence du serveur
     Étant donné un autre développeur pousse le fichier "src/preprod.txt" contenant "livré en préprod" sur la branche "develop" avec le message "Travail d'un collègue"
-    Quand je lance "jgit demo start sprint12 --no-interaction"
+    Quand je lance "jgit demo create sprint12 --no-interaction"
     Alors jgit se termine sans erreur
-    Et le fichier "src/preprod.txt" existe sur la branche distante "demo_sprint12"
+    Et le fichier "src/preprod.txt" existe sur la branche distante "demo/sprint12"

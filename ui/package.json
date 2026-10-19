@@ -1,0 +1,28 @@
+{
+  "name": "jgit-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interface en terminal des démos jgit (TypeScript + Ink). Elle ne contient aucune logique git : elle appelle « jgit … --json ».",
+  "type": "module",
+  "bin": {
+    "jgit-ui": "dist/src/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "test": "npm run build && node --test 'dist/test/*.test.js'",
+    "start": "node dist/src/cli.js"
+  },
+  "dependencies": {
+    "ink": "6.8.0",
+    "react": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.21",
+    "@types/react": "19.1.8",
+    "ink-testing-library": "4.0.0",
+    "typescript": "5.9.3"
+  }
+}
