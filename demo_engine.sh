@@ -804,10 +804,17 @@ demo_strip_foreign_from_plan() {
 # Reconstruit la démo sur la version actuelle de sa base (ou d'une autre, avec
 # --based-on). Les tickets livrés dans la base et ceux dont la branche a
 # disparu sont retirés, sauf --keep-delivered / --keep-missing.
+#
+# --from <ticket> reprend ce ticket depuis sa branche, à sa place, au lieu de
+# rejouer la copie que la démo en a : c'est ce qu'il faut après avoir rebasé
+# le ticket lui-même (jgit feature rebase), pour que la démo profite des
+# conflits qui y ont été résolus.
 demo_rebase_cmd() {
   local target="$1"
   local based_on="$2"
-  local base provenance="record" i ticket kept=0 base_ref
+  shift 2
+  local fresh=("$@")
+  local base provenance="record" i ticket kept=0 base_ref refreshed=""
 
   jgit_fetch_once || exit_safe "$JGIT_EXIT_REMOTE"
   demo_load_for_update "$target" "demo rebase"
@@ -830,6 +837,14 @@ demo_rebase_cmd() {
   if [[ $JGIT_DROP_FOREIGN != true ]]; then
     demo_refuse_foreign_merges
   fi
+  for ticket in ${fresh[@]+"${fresh[@]}"}; do
+    demo_check_ticket_source "$ticket"
+    if ! demo_ticket_index "$ticket" >/dev/null; then
+      jgit_fail ticket_not_in_demo "$JGIT_EXIT_REFUSED" \
+        "$ticket n'est pas dans la démo $DEMO_BRANCH : il n'y a rien à reprendre." \
+        "Pour l'ajouter : jgit demo add $DEMO_NAME --from $ticket"
+    fi
+  done
 
   # Le nouveau point de départ : livraisons de la nouvelle base.
   if [[ "$base" != "$DEMO_BASE" ]]; then
@@ -851,6 +866,15 @@ demo_rebase_cmd() {
     fi
     if [[ $JGIT_KEEP_MISSING != true ]] && ! demo_remote_exists "$ticket"; then
       demo_list_has "$OP_dropped" "$ticket:missing" || OP_dropped=$(demo_list_add "$OP_dropped" "$ticket:missing")
+      continue
+    fi
+    if [[ " ${fresh[*]+${fresh[*]}} " == *" $ticket "* ]]; then
+      # Repris depuis sa branche, une seule fois, à sa première place.
+      demo_list_has "$refreshed" "$ticket" && continue
+      refreshed=$(demo_list_add "$refreshed" "$ticket")
+      OP_updated=$(demo_list_add "$OP_updated" "$ticket")
+      OP_plan=$(demo_list_add "$OP_plan" "$(demo_plan_fresh_segment "$ticket" "$base")")
+      kept=$((kept + 1))
       continue
     fi
     OP_plan=$(demo_list_add "$OP_plan" "$(demo_plan_replay_segment "$i")")
@@ -875,7 +899,7 @@ demo_rebase_cmd() {
 
   base_ref=$(demo_remote_ref "$base")
   if [[ "$base" == "$DEMO_BASE" && "$(git rev-parse "$base_ref")" == "$(git rev-parse "$DEMO_INIT^")" \
-        && -z "$OP_dropped" ]]; then
+        && -z "$OP_dropped" && -z "$OP_updated" ]]; then
     demo_nothing_to_do "La démo $DEMO_BRANCH est déjà à jour sur $base : rien n'a été modifié."
   fi
 

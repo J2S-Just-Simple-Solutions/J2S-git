@@ -1,6 +1,6 @@
 ---
 name: jgit-demo
-description: Gérer les démos jgit d'un projet J2S (branches demo/<nom>) — lister, montrer leur contenu et leur état, créer, ajouter ou retirer des tickets, remettre à jour sur la préprod, résoudre les conflits, archiver. À utiliser dès qu'on parle de « démo », de branche demo/…, de montrer des tickets ensemble, ou de préparer un environnement de démonstration, dans un dépôt où jgit est installé.
+description: Gérer les démos jgit d'un projet J2S (branches demo/<nom>) et faire l'état des lieux des tickets — lister, montrer leur contenu et leur état, créer, ajouter ou retirer des tickets, remettre à jour sur la préprod, résoudre les conflits, archiver ; dire quels tickets sont à rebaser, lesquels coinceront et qui est concerné. À utiliser dès qu'on parle de « démo », de branche demo/…, de montrer des tickets ensemble, de préparer un environnement de démonstration, ou d'« état des lieux » / « où en sont les tickets », dans un dépôt où jgit est installé.
 ---
 
 # Piloter les démos avec jgit
@@ -55,13 +55,15 @@ jgit demo show [<nom>] --json                    # le détail, ticket par ticket
 jgit demo candidates [<nom>] --json              # tickets que l'on peut ajouter
 jgit demo candidates --based-on <base> --json    # … à une démo encore à créer sur cette base
 jgit demo bases --json                           # branches dont une démo peut partir
-jgit demo check [<nom>] --json                   # simule les mises à jour : faisable ? conflits ? qui ?
+jgit audit --json                                # état des lieux : tous les tickets, puis toutes les démos
+jgit audit tickets --json                        # les tickets seulement
+jgit audit demos [<nom>] --json                  # les démos : quoi lancer, dans l'ordre ; conflits ; qui ?
 
 jgit demo create <nom> [--based-on <base>] [--from <ticket>]... --json
 jgit demo add <nom> --from <ticket>... --on-conflict pause --json
 jgit demo drop <nom> --from <ticket>... --on-conflict pause --json
 jgit demo refresh <nom> --from <ticket>... --on-conflict pause --json
-jgit demo rebase <nom> [--based-on <base>] [--keep-delivered] [--keep-missing] [--drop-foreign] --on-conflict pause --json
+jgit demo rebase <nom> [--based-on <base>] [--from <ticket>]... [--keep-delivered] [--keep-missing] [--drop-foreign] --on-conflict pause --json
 jgit demo continue [<nom>] --json                # reprendre après résolution d'un conflit
 jgit demo abort [<nom>] --json                   # tout annuler, rien n'est publié
 
@@ -116,24 +118,39 @@ par défaut est appliquée. `--dry-run` montre le plan sans rien publier.
    chiffres, `.`, `_`, `-`. Si `already_exists` : la démo existe ; proposer `add`,
    ou `archive` puis `create` pour la remplacer.
 
-### Vérifier avant de mettre à jour
-`jgit demo check [<nom>] --json` simule toutes les mises à jour, sans rien
-modifier (code de sortie 3 si un conflit est prévu, le document est émis quand
-même). Pour chaque démo : `status`, `actions` (les commandes, dans l'ordre) et
-`conflicts` — pour chacun, le ticket, `commit.author` (qui a écrit le commit qui
-ne passe plus) et, par fichier, `other.author` / `other.origin` (qui a modifié
-le même fichier en face, et d'où ça vient). Présenter à l'humain : qui contacter,
-et les deux issues (`commands.resolve`, `commands.drop`). C'est la première
-chose à faire quand l'humain demande « où en sont les démos » ou « peut-on les
-mettre à jour ».
+### Faire l'état des lieux (`jgit.audit/1`)
+`jgit audit --json` (ou `jgit audit demos <nom> --json`) simule tout, sans rien
+modifier — c'est la première chose à faire quand l'humain demande « où en sont
+les démos », « où en sont les tickets » ou « peut-on les mettre à jour ». Code
+de sortie 3 si quelque chose coince ; le document est émis quand même.
+
+- `tickets[]` : pour chaque ticket du serveur, `status` (`up_to_date`,
+  `to_rebase`, `conflicts`, `base_missing`, `delivered`), `owner.author` (son
+  propriétaire), `command`, et pour `conflicts` : `conflict.commit.author` (qui a
+  écrit le commit qui coincera) et, par fichier, `other.author` (qui a modifié
+  le même fichier dans la base).
+- `demos[]` : `status`, `actions` — les commandes **dans l'ordre** : d'abord
+  `kind: ticket` (rebaser chez eux les tickets en retard sur leur base), puis
+  `kind: demo` (`jgit demo rebase` avec ses `--from`, `jgit demo add`) —,
+  `held` (tickets dont le rebase coince : la démo attend que leur auteur les
+  résolve), `conflicts` (entre tickets, à résoudre dans la démo :
+  `commands.resolve` ou `commands.drop`).
+
+Présenter à l'humain : qui contacter pour quoi, et les commandes dans l'ordre.
+Le rebase d'un ticket (`jgit feature rebase`) appartient à son propriétaire : ne
+le lance pas sans demande explicite.
 
 ### Mettre une démo à jour
-1. `jgit demo check <nom> --json`, puis `jgit demo show <nom> --json`.
-2. Tickets `ahead` : `jgit demo add <nom> --from <ticket> --on-conflict pause --json`.
-3. Tickets `diverged` : `--dry-run`, accord, puis `jgit demo refresh …`.
-4. Base en retard, ou tickets livrés/supprimés : `jgit demo rebase <nom> --dry-run --json`,
-   montrer `dropped` à l'humain, accord, puis la même commande sans `--dry-run`
-   et avec `--on-conflict pause`.
+1. `jgit audit demos <nom> --json`, puis `jgit demo show <nom> --json`.
+2. Les `actions` `kind: ticket` d'abord : à faire par les propriétaires (ou avec
+   leur accord). Relancer l'audit ensuite.
+3. Tickets `ahead` : `jgit demo add <nom> --from <ticket> --on-conflict pause --json`.
+4. Tickets `diverged` : `--dry-run`, accord, puis `jgit demo refresh …`.
+5. Base en retard, ou tickets livrés/supprimés : la commande `jgit demo rebase`
+   de l'audit (avec ses `--from`), d'abord en `--dry-run --json` : montrer
+   `dropped` à l'humain, accord, puis sans `--dry-run` et avec
+   `--on-conflict pause`. `--from <ticket>` reprend le ticket depuis sa branche
+   (sa version rebasée et résolue par son auteur) au lieu de son segment.
 
 ### Résoudre un conflit (`jgit.conflict/1`, code 3, `paused: true`)
 1. Lire `context.ticket` (le ticket en cours d'ajout), `commit.subject`,

@@ -90,7 +90,9 @@ jgit <scope> <action> [<cible>] [options...]
 - `feature` / `hotfix`
 - `release`
 - `demo`
+- `audit`
 - `util`
+- `ui`
 
 ### Options globales
 
@@ -293,7 +295,7 @@ Lire (ne touche ni à l'espace de travail ni à la branche courante) :
 - `jgit demo show [<nom>]` : le détail d'une démo, ticket par ticket (à jour, a avancé, réécrit, branche supprimée, livré), avec la commande à lancer pour chaque action utile et la commande `jgit release merge` correspondante.
 - `jgit demo candidates [<nom>] [--based-on <branche>]` : les tickets que l'on peut ajouter — à une démo existante, ou à une démo encore à créer sur cette base (les tickets déjà livrés y sont signalés).
 - `jgit demo bases` : les branches dont une démo peut partir, la préprod et la production en tête, puis les releases.
-- `jgit demo check [<nom>]` : **simule** toutes les mises à jour en attente (rebase sur la base à jour, tickets livrés ou disparus retirés, tickets réécrits repris, nouveaux commits ajoutés) et rend un rapport : les commandes à lancer dans l'ordre et, pour chaque conflit, le ticket, le commit et son auteur, les fichiers, et en face le commit qui les a touchés, son auteur et sa provenance. Rien n'est modifié — la simulation tourne dans une copie de travail temporaire. Code de sortie 3 si un conflit est prévu.
+- [`jgit audit demos [<nom>]`](#audit) : les mises à jour passeront-elles ? Dans quel ordre, et qui est concerné par chaque conflit ?
 
 Fabriquer (sur une branche temporaire `jgit_demo_<nom>`, à partir de la version du serveur, publication finale par `--force-with-lease`, rien n'est publié si rien ne change, `--dry-run` disponible) :
 
@@ -301,7 +303,7 @@ Fabriquer (sur une branche temporaire `jgit_demo_<nom>`, à partir de la version
 - `jgit demo add [<nom>] --from <ticket>...` : ajoute des tickets à la suite, ou les nouveaux commits d'un ticket déjà présent, sans rien réécrire.
 - `jgit demo drop [<nom>] --from <ticket>...` : reconstruit la démo sans ces tickets, à partir d'elle-même.
 - `jgit demo refresh [<nom>] --from <ticket>...` : reprend en entier un ticket réécrit (squash), à sa place.
-- `jgit demo rebase [<nom>] [--based-on <branche>] [--keep-delivered] [--keep-missing] [--drop-foreign]` : reconstruit la démo sur la version actuelle de sa base ; les tickets livrés et ceux dont la branche a disparu sont retirés.
+- `jgit demo rebase [<nom>] [--based-on <branche>] [--from <ticket>]... [--keep-delivered] [--keep-missing] [--drop-foreign]` : reconstruit la démo sur la version actuelle de sa base ; les tickets livrés et ceux dont la branche a disparu sont retirés. `--from` reprend un ticket depuis sa branche plutôt que depuis la démo : après que son auteur l'a rebasé et y a résolu un conflit avec la base, la démo prend sa version résolue.
 - `jgit demo continue [<nom>]` / `jgit demo abort [<nom>]` : reprise ou annulation après un conflit mis en pause (`--on-conflict pause`).
 
 Cycle de vie (chaque changement de nom est un seul push `--atomic`, protégé par lease) :
@@ -316,6 +318,16 @@ Tout cela est aussi accessible au clavier, sans retenir les commandes : [`jgit u
 Les résolutions de conflit sont des commits de la démo : les reconstructions suivantes les rejouent sans les redemander.
 
 Les anciennes démos `demo_<nom>` restent lisibles par `list` et `show`, en lecture seule ; `migrate` les convertit.
+
+### Audit
+
+L'état des lieux de tous les tickets et de toutes les démos, en simulation : rien n'est modifié. Le guide complet est dans [`docs/guide/08-audit.md`](docs/guide/08-audit.md).
+
+- `jgit audit` : tous les tickets du serveur, puis toutes les démos.
+- `jgit audit tickets` : chaque ticket est-il à jour sur sa base (celle enregistrée à sa création) ? Sinon, son rebase passerait-il ? S'il coince : le commit en cause et son auteur, les fichiers, et en face le commit de la base qui les a touchés et son auteur ; le propriétaire du ticket et la commande à lancer.
+- `jgit audit demos [<nom>]` : pour chaque démo, les commandes dans l'ordre — d'abord rebaser chez eux les tickets en retard sur leur base (leurs conflits avec la base se résolvent là, par leur auteur), puis `jgit demo rebase` avec un `--from` pour chaque ticket à reprendre depuis sa branche, puis `jgit demo add` — et, pour chaque conflit qui resterait dans la démo, qui est concerné et les deux issues (résoudre, retirer).
+
+Sur un projet de centaines de branches, le rapport détaille ce qui coince et les tickets des démos, et compte les autres par propriétaire ; `--json` donne tout, ticket par ticket. Code de sortie 3 dès que quelque chose coince.
 
 ### Espace de travail et stash automatique
 
@@ -394,8 +406,8 @@ jgit ui
 ```
 
 Une interface au clavier pour les démos, pensée pour qui ne veut pas retenir les
-commandes : la liste des démos et leur état, le détail ticket par ticket, le
-vérification des mises à jour (`v`), le choix des tickets **en tapant leur numéro** (la liste se réduit à la frappe ; un
+commandes : la liste des démos et leur état, le détail ticket par ticket,
+l'état des lieux (`v`, voir [`jgit audit`](#audit)), le choix des tickets **en tapant leur numéro** (la liste se réduit à la frappe ; un
 ticket seul à correspondre est coché d'office), la création d'une démo, le
 plan de chaque réécriture montré avant d'être appliqué (`--dry-run`), et un
 écran de conflit (fichiers à résoudre, ouverture dans l'éditeur, reprise,
@@ -449,7 +461,7 @@ ln -s /chemin/vers/J2S-git/.claude/skills/jgit-demo ~/.claude/skills/jgit-demo
 
 Il suffit ensuite de demander, dans un projet J2S : *« où en est la démo
 client-a ? »*, *« ajoute MONPROJET-88 à la démo sprint12 »*, *« remets la démo à
-jour sur la préprod »*.
+jour sur la préprod »*, *« fais l'état des lieux des tickets et des démos »*.
 
 ## Tests
 

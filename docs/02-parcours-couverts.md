@@ -116,7 +116,7 @@ faute de frappe ne doit jamais se traduire par une action partielle sur le dép�
 | `jgit` sans argument | affiche l'aide, sans erreur |
 | `jgit -h`, `--help`, `help` | affichent la même aide complète |
 | Scope inconnu (`jgit bidule`) | refus explicite nommant le scope |
-| Action inconnue (`jgit feature bidule`) | refus explicite, pour chacun des cinq scopes |
+| Action inconnue (`jgit feature bidule`) | refus explicite, pour chacun des six scopes qui ont des actions |
 | Scope sans action (`jgit feature`) | affiche l'aide **et** sort en erreur |
 | `feature`/`hotfix` sans identifiant | refus explicite nommant le type attendu |
 | Option privée de sa valeur (`--based-on` en fin de ligne, ou suivie d'une autre option) | refus explicite nommant l'option |
@@ -766,6 +766,8 @@ Fichier : [`tests/features/19_demo_rebase.feature`](../tests/features/19_demo_re
 | Commits poussés à la main | rejoués à la fin et signalés ; `--drop-foreign` les écarte |
 | `--dry-run` | le plan est annoncé, rien n'est publié |
 | Base inconnue | même refus que partout ailleurs |
+| `--from` après le rebase d'un ticket par son auteur | le ticket est repris depuis sa branche : la démo contient sa version résolue, sans nouveau conflit |
+| `--from` d'un ticket absent de la démo | refusé (`ticket_not_in_demo`), avec la commande `add` |
 
 ---
 
@@ -815,21 +817,26 @@ Fichier : [`tests/features/21_demo_archive.feature`](../tests/features/21_demo_a
 
 ---
 
-## Parcours 22 — Vérifier que les mises à jour des démos sont faisables
+## Parcours 22 — L'état des lieux des tickets et des démos
 
-Fichier : [`tests/features/22_demo_verification.feature`](../tests/features/22_demo_verification.feature)
+Fichier : [`tests/features/22_audit.feature`](../tests/features/22_audit.feature)
 
-`jgit demo check` simule tout ce qui remettrait chaque démo à jour et rend un
-rapport, sans rien modifier.
+`jgit audit` fait l'état des lieux de tous les tickets du serveur, puis de
+toutes les démos, et dit quoi lancer, dans l'ordre, et qui est concerné — sans
+rien modifier.
 
 | Situation | Comportement attendu |
 | --- | --- |
-| Démo à jour | `up_to_date`, aucune action |
-| Base qui a avancé, sans conflit | `feasible`, action `jgit demo rebase <nom>` et sa raison |
-| Conflit avec la base | ticket, étape, commit et auteur ; fichier ; **en face**, le commit de la base qui l'a touché, son auteur (une autre personne) et sa provenance ; commandes `resolve` (avec `--on-conflict pause`) et `drop` ; code de sortie 3 |
-| Conflit entre deux tickets | le nouveau commit (et son auteur) en face du ticket déjà dans la démo, qui est nommé |
-| Plusieurs tickets en conflit | **tous** sont signalés, chacun avec son vis-à-vis |
-| Ticket livré | annoncé comme retiré par le rebase |
-| Espace de travail modifié | la vérification fonctionne ; rien n'a bougé : fichier, branche, serveur ; aucune copie temporaire ne reste |
+| Tout à jour | tickets `up_to_date` (base enregistrée, propriétaire, PR non validée, démos qui les contiennent) ; démo `up_to_date`, aucune action |
+| Base qui a avancé, sans conflit | tickets `to_rebase` avec `jgit feature rebase <id>` ; démo `feasible` : d'abord les tickets (chez eux), puis `jgit demo rebase <nom>` et sa raison |
+| Le rebase d'un ticket sur sa base coince | ticket `conflicts` : commit et auteur, fichier, **en face** le commit de la base et son auteur ; commande avec `--on-conflict pause` ; la démo le met de côté (`held`) et le reprendra depuis sa branche (`--from`) ; code de sortie 3 |
+| Le ticket rebasé et résolu par son auteur | la démo est faisable avec `--from` ; la commande proposée passe, et la démo contient la version résolue |
+| Conflit entre deux tickets | dans la démo, à l'ajout : le nouveau commit (et son auteur) en face du ticket déjà dans la démo, qui est nommé |
+| Plusieurs conflits dans une démo | **tous** sont signalés, chacun avec son vis-à-vis |
+| Tickets hors démo | audités aussi ; rapport humain : le détail de ce qui coince, les autres comptés par propriétaire |
+| Base d'un ticket disparue | `base_missing`, commande avec `--based-on <branche>` ; `audit tickets` n'audite pas les démos |
+| Ticket livré | `delivered` ; annoncé comme retiré par le rebase de la démo |
+| Espace de travail modifié | l'audit fonctionne ; rien n'a bougé : fichier, branche, serveur ; aucune copie temporaire ne reste |
 | Démo archivée, démo à l'ancien format | refusée ; ignorée et comptée |
+| Arguments | action inconnue ou nom de démo hors `audit demos` : `usage` ; démo inconnue : `demo_not_found` |
 

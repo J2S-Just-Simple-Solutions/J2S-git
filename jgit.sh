@@ -100,7 +100,7 @@ help() {
     printf "\n${C_BLUE}Usage:${C_RESET}\n"
     printf "  jgit ${C_GREEN}<scope>${C_RESET} ${C_CYAN}<action>${C_RESET} ${C_ORANGE}[<target>]${C_RESET} ${C_ORANGE}[options…]${C_RESET}\n\n"
 
-    printf "${C_BLUE}Scopes:${C_RESET} feature | hotfix | release | demo | util | ui\n\n"
+    printf "${C_BLUE}Scopes:${C_RESET} feature | hotfix | release | demo | audit | util | ui\n\n"
 
     printf "${C_BLUE}Options communes:${C_RESET}\n"
     printf "  --based-on <branch>   Branche de référence pour les créations / rebase.\n"
@@ -135,14 +135,13 @@ help() {
     printf "  jgit demo candidates [<nom>] [--based-on <branch>]\n"
     printf "                                        Les tickets que l'on peut ajouter à une démo (ou à une démo sur cette base).\n"
     printf "  jgit demo bases                       Les branches dont une démo peut partir.\n"
-    printf "  jgit demo check [<nom>]               Simule les mises à jour en attente et dit si elles passent :\n"
-    printf "                                        conflits, commits et auteurs en cause, commandes à lancer.\n"
     printf "  jgit demo create <nom> [--based-on <branch>] [--from <ticket>]...\n"
     printf "  jgit demo add [<nom>] --from <ticket>...      Ajoute des tickets, ou leurs nouveaux commits.\n"
     printf "  jgit demo drop [<nom>] --from <ticket>...     Reconstruit la démo sans ces tickets.\n"
     printf "  jgit demo refresh [<nom>] --from <ticket>...  Reprend ces tickets en entier depuis leur branche.\n"
-    printf "  jgit demo rebase [<nom>] [--based-on <branch>] [--keep-delivered] [--keep-missing]\n"
-    printf "                                        Reconstruit la démo sur la version actuelle de sa base.\n"
+    printf "  jgit demo rebase [<nom>] [--based-on <branch>] [--from <ticket>]... [--keep-delivered] [--keep-missing]\n"
+    printf "                                        Reconstruit la démo sur la version actuelle de sa base ;\n"
+    printf "                                        --from reprend ce ticket depuis sa branche (une fois rebasé chez lui).\n"
     printf "  jgit demo continue [<nom>] | abort [<nom>]   Reprend ou annule une opération en pause.\n"
     printf "  jgit demo archive <nom>               Archive la démo (demo-archive/<date>_<nom>) et libère son nom.\n"
     printf "  jgit demo unarchive <archive>         Restaure une démo archivée sous son nom.\n"
@@ -150,6 +149,12 @@ help() {
     printf "  jgit demo migrate <nom> [--based-on <branch>]\n"
     printf "                                        Recrée une démo demo_<nom> (ancien format) au format actuel.\n"
     printf "  Options des commandes qui modifient : --dry-run, --drop-foreign, --on-conflict <mode>\n\n"
+
+    printf "${C_BLUE}Audit:${C_RESET} (simulation : rien n'est modifié)\n"
+    printf "  jgit audit                     État des lieux de tous les tickets du serveur et de toutes les démos.\n"
+    printf "  jgit audit tickets             Chaque ticket est-il à jour sur sa base ? Son rebase passerait-il ?\n"
+    printf "  jgit audit demos [<nom>]       Les démos : tickets à rebaser d'abord, puis remise à jour de la démo.\n"
+    printf "                                 Pour chaque conflit : commit, auteurs, fichiers, commandes à lancer.\n\n"
 
     printf "${C_BLUE}Interface:${C_RESET}\n"
     printf "  jgit ui                        Les démos dans une interface en terminal (Docker ; JGIT_UI=native sans Docker).\n\n"
@@ -362,7 +367,8 @@ ensure_full_history || exit_safe 1
 jgit_command_is_read_only() {
     case "$JGIT_TYPE $JGIT_ACTION" in
         "ui ") return 0 ;;
-        "demo list"|"demo show"|"demo candidates"|"demo bases"|"demo check"|"util status") return 0 ;;
+        "demo list"|"demo show"|"demo candidates"|"demo bases"|"util status") return 0 ;;
+        "audit "*) return 0 ;;
     esac
     return 1
 }
@@ -545,7 +551,7 @@ case "$JGIT_TYPE" in
                 ;;
             rebase)
                 refuse_if_worktree_dirty "Une démo" || exit_safe 1
-                demo_rebase_cmd "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE"
+                demo_rebase_cmd "$JGIT_TARGET" "$JGIT_BASED_ON_OVERRIDE" ${JGIT_FROM_SOURCES[@]+"${JGIT_FROM_SOURCES[@]}"}
                 ;;
             continue)
                 demo_continue_cmd "$JGIT_TARGET"
@@ -558,9 +564,6 @@ case "$JGIT_TYPE" in
                 ;;
             bases)
                 demo_bases_cmd
-                ;;
-            check)
-                demo_check_cmd "$JGIT_TARGET"
                 ;;
             archive)
                 demo_archive_cmd "$JGIT_TARGET"
@@ -609,6 +612,18 @@ case "$JGIT_TYPE" in
                 jgit_fail usage "$JGIT_EXIT_ERROR" "Action '$JGIT_ACTION' non supportée pour util."
                 ;;
         esac
+        ;;
+    audit)
+        case "$JGIT_ACTION" in
+            ""|tickets|demos) ;;
+            *) jgit_fail usage "$JGIT_EXIT_ERROR" \
+                   "Action '$JGIT_ACTION' non supportée pour audit." \
+                   "jgit audit, jgit audit tickets ou jgit audit demos [<nom>]" ;;
+        esac
+        if [[ -n "$JGIT_TARGET" && "$JGIT_ACTION" != "demos" ]]; then
+            jgit_fail usage "$JGIT_EXIT_ERROR" "Seul « jgit audit demos » accepte un nom de démo."
+        fi
+        audit_cmd "${JGIT_ACTION:-all}" "$JGIT_TARGET"
         ;;
     ui)
         if [[ -n "$JGIT_ACTION" ]]; then

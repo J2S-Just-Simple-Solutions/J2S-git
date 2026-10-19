@@ -18,6 +18,7 @@ les limites connues. Lisible sans être expert Git.
 | [05 — Démo](guide/05-demo.md) | Assembler des tickets pour les montrer : créer, lire, ajouter, retirer, remettre à jour |
 | [06 — Utilitaires](guide/06-utilitaires.md) | Nettoyage, vérification de rebase à blanc |
 | [07 — Règles communes](guide/07-regles-communes.md) | Options, questions, refus, configuration |
+| [08 — État des lieux](guide/08-audit.md) | Où en sont tous les tickets et les démos, quoi lancer dans quel ordre, qui est concerné |
 
 ## Vous travaillez sur `jgit`
 

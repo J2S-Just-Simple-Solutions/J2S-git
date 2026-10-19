@@ -222,36 +222,72 @@ récentes aux plus anciennes). `default` est la base que prend `demo create`
 sans `--based-on`. Les branches de tickets, de PR, de démos et les branches
 temporaires de jgit n'y figurent pas.
 
-### `jgit.demo.check/1` — `jgit demo check`
+### `jgit.audit/1` — `jgit audit`, `jgit audit tickets`, `jgit audit demos [<nom>]`
+
+L'état des lieux : chaque ticket du serveur par rapport à sa base, puis chaque
+démo, avec les commandes à lancer dans l'ordre. Tout est simulé, rien n'est
+modifié.
 
 ```json
-{"schema":"jgit.demo.check/1","ok":true,"command":"demo check",
+{"schema":"jgit.audit/1","ok":true,"command":"audit","scope":"all",
+ "tickets":[{"ticket":"feature/FACT-1","type":"feature","id":"FACT-1",
+   "base":"develop","base_recorded":true,"behind_base":1,"status":"conflicts",
+   "delivered":false,"pr_validated":false,
+   "owner":{"author":"Yann","email":"yann@j2s.net"},"last_activity":"2026-10-19T07:54:16+02:00",
+   "command":"jgit feature rebase FACT-1 --on-conflict pause",
+   "conflict":{"commit":{"sha":"…","subject":"Affiche le total TTC","author":"Yann","email":"yann@j2s.net","date":"2026-10-19"},
+     "files":[{"path":"src/accueil.txt","kind":"both_modified",
+               "other":{"sha":"…","subject":"Nouveau message d'accueil","author":"Camille","email":"camille@j2s.net","origin":"develop"}}]},
+   "demos":["client-a"]}],
  "demos":[{"name":"client-a","branch":"demo/client-a","base":"develop","behind_base":1,
    "status":"conflicts","message":null,
-   "actions":[{"command":"jgit demo rebase client-a --on-conflict pause","reason":"base develop en retard de 1 commit(s)"},
-              {"command":"jgit demo add client-a --from feature/MENU-3","reason":"feature/MENU-3 a de nouveaux commits"}],
-   "dropped":[],
-   "conflicts":[{"ticket":"feature/FACT-2","step":"rebase",
-     "commit":{"sha":"…","subject":"Affiche la remise fidélité","author":"Yann","email":"yann@j2s.net","date":"2026-10-12"},
-     "files":[{"path":"src/accueil.txt","kind":"both_modified",
-               "other":{"sha":"…","subject":"Nouveau message d'accueil","author":"Camille","email":"camille@j2s.net","origin":"develop"}}],
-     "commands":{"resolve":"jgit demo rebase client-a --on-conflict pause","drop":"jgit demo drop client-a --from feature/FACT-2"}}]}],
- "summary":{"demos":1,"up_to_date":0,"feasible":0,"conflicts":1,"blocked":0,"skipped_legacy":0}}
+   "prerequisites":[{"ticket":"feature/FACT-1","status":"conflicts","command":"jgit feature rebase FACT-1 --on-conflict pause"}],
+   "held":["feature/FACT-1"],
+   "actions":[{"kind":"ticket","command":"jgit feature rebase FACT-1 --on-conflict pause","reason":"d'abord rebaser le ticket chez lui : …"},
+              {"kind":"demo","command":"jgit demo rebase client-a --from feature/FACT-1","reason":"base develop en retard de 1 commit(s) ; reprend feature/FACT-1 depuis leur branche"}],
+   "dropped":[],"conflicts":[]}],
+ "summary":{"tickets":{"total":1,"up_to_date":0,"to_rebase":0,"conflicts":1,"base_missing":0,"delivered":0},
+            "demos":{"total":1,"up_to_date":0,"feasible":0,"conflicts":1,"blocked":0,"skipped_legacy":0}}}
 ```
+
+`scope` vaut `all`, `tickets` (`demos` est alors vide) ou `demos` (les tickets
+sont alors ceux des démos auditées). Les tickets sont rangés du plus récemment
+modifié au plus ancien.
+
+**Les tickets**
 
 | Champ | Sens |
 | --- | --- |
-| `status` | `up_to_date` (rien à faire), `feasible` (tout passe), `conflicts`, `blocked` (base disparue, commit de fusion ajouté à la main : `message` dit quoi faire) |
-| `actions` | les commandes qui remettraient la démo à jour, dans l'ordre : `rebase`, puis `refresh`, puis `add` ; `--on-conflict pause` est ajouté là où un conflit est prévu |
+| `base` | sa base : celle enregistrée à sa création (`base_recorded: true`), à défaut la référence du projet pour son type |
+| `behind_base` | nombre de commits de la base absents du ticket |
+| `status` | `up_to_date`, `to_rebase` (son rebase passera), `conflicts` (il coincera), `base_missing` (sa base n'existe plus), `delivered` (déjà dans sa base) |
+| `pr_validated` | `false` : sa PR n'a que son commit d'init ; `true` : elle a avancé ; `null` : pas de branche de PR |
+| `owner` | l'auteur du dernier commit de la branche |
+| `command` | ce qu'il faut lancer, `null` s'il n'y a rien à faire |
+| `conflict` | pour `conflicts` : `commit`, le commit du ticket qui coincera, et son auteur ; `files[].other`, le dernier commit de la base qui a touché le fichier depuis le départ du ticket, son auteur, et `origin` (le nom de la base) |
+| `demos` | les démos qui contiennent le ticket |
+
+**Les démos**
+
+| Champ | Sens |
+| --- | --- |
+| `status` | `up_to_date` (rien à faire), `feasible` (tout passe), `conflicts` (un conflit est prévu dans la démo, ou un ticket est `held`), `blocked` (base disparue, commit de fusion ajouté à la main : `message` dit quoi faire) |
+| `prerequisites` | les tickets de la démo à rebaser d'abord, chez eux |
+| `held` | ceux dont ce rebase coince : leur auteur résout le conflit chez lui ; la démo ne les simule pas avant, ils sont repris depuis leur branche (`--from`) |
+| `actions` | les commandes dans l'ordre : `kind: ticket` (les prérequis), puis `kind: demo` (`jgit demo rebase` avec ses `--from`, puis `jgit demo add`) ; `--on-conflict pause` est ajouté là où un conflit est prévu |
 | `dropped` | tickets que le rebase retirera (`delivered`, `missing`) |
-| `conflicts[].step` | l'étape où le conflit apparaît : `rebase`, `refresh`, `add`, `foreign` (commits ajoutés à la main ; `ticket` vaut alors `-`) |
-| `conflicts[].commit` | le commit qui ne passe plus, et son auteur |
+| `conflicts[].step` | l'étape où le conflit apparaît : `rebase`, `fresh` (reprise du ticket depuis sa branche), `add`, `foreign` (commits ajoutés à la main ; `ticket` vaut alors `-`) |
+| `conflicts[].commit` | le commit qui ne passe pas, et son auteur |
 | `conflicts[].files[].other` | en face : le dernier commit qui a touché le fichier dans la démo en cours de reconstruction, son auteur, et `origin` (un ticket de la démo, `commit ajouté à la main`, ou le nom de la base) ; `null` si le fichier n'existe pas de ce côté |
 | `conflicts[].commands` | `resolve` : la commande qui ouvrira le conflit en pause ; `drop` : retirer le ticket |
 
-Les démos archivées ne se vérifient pas (`read_only`, code 2) ; les démos à
-l'ancien format sont ignorées (`summary.skipped_legacy`). **Code de sortie 3**
-dès qu'un conflit ou un blocage est prévu, 0 sinon — le document est émis dans
+`kind` d'un fichier en conflit : les mêmes valeurs que `jgit.conflict/1`.
+
+`jgit audit demos <archive>` est refusé (`read_only`, code 2) ; les démos à
+l'ancien format sont ignorées (`summary.demos.skipped_legacy`). Une action
+inconnue, ou un nom de démo ailleurs qu'après `audit demos`, donne `usage`.
+**Code de sortie 3** dès qu'un ticket coincera, qu'une base a disparu, ou
+qu'une démo est en conflit ou bloquée ; 0 sinon — le document est émis dans
 les deux cas.
 
 ### `jgit.demo.result/1` — `create`, `add`, `drop`, `refresh`, `rebase`, `continue`
@@ -274,6 +310,10 @@ les deux cas.
 | `warnings[].code` | `foreign_commits_kept`, `delivered_with_pending_work`, `local_branch_stale` |
 
 Un conflit produit `jgit.conflict/1`, avec `context.demo` et `context.ticket`.
+
+`jgit demo rebase <nom> --from <ticket>` reprend ce ticket depuis sa branche
+au lieu de rejouer son segment : il figure dans `updated`. Un ticket absent de
+la démo est refusé (`ticket_not_in_demo`, code 2).
 
 `archive`, `unarchive` et `delete` produisent le même schéma, réduit à
 l'essentiel :

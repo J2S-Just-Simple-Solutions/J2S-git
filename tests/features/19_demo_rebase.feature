@@ -127,3 +127,32 @@ Fonctionnalité: Rebaser une démo sur la version actuelle de sa base
     Alors jgit se termine avec le code 2
     Et le JSON a "error.code" égal à "base_not_found"
     Et la sortie contient "La branche de base inexistante n'existe pas (ni en local ni sur origin)."
+
+  # Le bon ordre : on rebase d'abord le ticket lui-même, et c'est chez lui que
+  # le conflit avec la base se résout. La démo reprend ensuite le ticket résolu
+  # depuis sa branche (--from) au lieu de rejouer la copie qu'elle en avait.
+  Scénario: Après le rebase d'un ticket, --from reprend sa version résolue
+    Étant donné "Camille" pousse le fichier "src/feature1.txt" contenant "version de develop" sur la branche "develop" avec le message "Ajoute feature1.txt dans develop"
+    Et je lance "jgit feature rebase TEST-1 --on-conflict pause"
+    Et je résous le conflit du fichier "src/feature1.txt" avec "feature 1 et develop réunis"
+    Et je lance "jgit feature continue TEST-1"
+    Et je me place sur la branche "develop"
+    Et je note l'état de la branche distante "demo/sprint12"
+    # Sans --from, la démo rejoue son ancienne copie du ticket : le conflit revient.
+    Quand je lance "jgit demo rebase sprint12 --json" en lisant le JSON
+    Alors jgit se termine avec le code 3
+    Et la branche distante "demo/sprint12" est inchangée
+    Quand je lance "jgit demo rebase sprint12 --from feature/TEST-1 --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "updated[0]" égal à "feature/TEST-1"
+    Et le fichier "src/feature1.txt" de la branche distante "demo/sprint12" contient "feature 1 et develop réunis"
+    Et la démo distante "demo/sprint12" contient dans l'ordre les tickets :
+      | feature/TEST-1 |
+      | feature/TEST-2 |
+
+  Scénario: --from d'un ticket absent de la démo est refusé
+    Étant donné je lance "jgit feature start TEST-9 --no-interaction --no-open"
+    Et je me place sur la branche "develop"
+    Quand je lance "jgit demo rebase sprint12 --from feature/TEST-9 --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "ticket_not_in_demo"

@@ -463,33 +463,60 @@ l'interface avec le Node du poste, sans Docker.
 
 ---
 
-## 17. La vérification des mises à jour simule dans une copie de travail à part
+## 17. L'état des lieux simule : fusion pour les tickets, copie de travail pour les démos
 
-**Contexte.** Avant de lancer les mises à jour d'une démo — ou de laisser un job
-planifié le faire —, on veut savoir si elles passeront, et sinon qui est
-concerné. La seule façon fiable de le savoir est de rejouer les commits.
+**Contexte.** Avant de remettre les démos à jour — ou de laisser un job
+planifié le faire —, on veut savoir si ça passera, et sinon qui est concerné.
+Et la question vaut pour chaque ticket, avant même les démos : sa base a-t-elle
+avancé, son rebase passerait-il ? Sur un vrai projet, il y a des centaines de
+branches.
 
-**Décision.** `jgit demo check` rejoue, pour chaque démo, ce que feraient
-`rebase`, `refresh` et `add`, dans une **copie de travail temporaire**
-(`git worktree add --detach`, sous `.git/jgit/check/`), avec la même mécanique de
-cherry-pick que la vraie fabrication. Un ticket qui conflicte est écarté et la
-simulation reprend sans lui. Pour chaque fichier en conflit, le dernier commit
-qui l'a touché du côté de la démo donne « en face » : auteur et provenance.
-La copie est supprimée en sortant, quelle que soit la sortie (`jgit_on_exit`).
+**Décision.** `jgit audit` simule tout, sans rien modifier.
 
-**Conséquences.** La vérification ne touche ni à l'espace de travail de
-l'utilisateur (même modifié), ni à sa branche courante, ni au serveur ; elle
-peut tourner pendant qu'une opération est en pause, pour une IA ou un job
-planifié. Elle n'a pas besoin de l'identité git du poste. Les commits de
-simulation n'ont de branche nulle part : git les oublie. C'est une **exception
-assumée** à la règle n°3 (un seul `git checkout`) : la copie de simulation n'est
-pas l'espace de travail de l'utilisateur.
+- **Un ticket** : `git merge-tree --write-tree` (git 2.38) fusionne sa branche
+  avec sa base **sans copie de travail**. Sortie en code 1 : les fichiers en
+  conflit ; le dernier commit du ticket qui les a touchés depuis son départ
+  désigne l'auteur concerné, le dernier commit de la base qui les a touchés,
+  « en face ». À défaut de git 2.38, les commits du ticket sont rejoués un par
+  un dans la copie de travail des démos. Les lectures communes (base enregistrée,
+  propriétaire, PR, tickets livrés) sont faites **une fois pour tous les
+  tickets**, puis jointes par `awk` : un appel à git par ticket et par
+  information, et sous bash 3.2 l'extraction d'une valeur dans une longue chaîne
+  (`${var#*motif}`, de coût quadratique), coûtaient 49 secondes pour 300 tickets
+  — 6 secondes ensuite.
+- **Une démo** : ce que feraient `jgit feature rebase` de ses tickets en retard,
+  puis `jgit demo rebase` et `add`, rejoué dans une **copie de travail
+  temporaire** (`git worktree add --detach`, sous `.git/jgit/audit/`), avec la
+  même mécanique de cherry-pick que la vraie fabrication. Un ticket dont le
+  rebase sur sa base coince n'y est pas simulé : sa version résolue n'existe pas
+  encore. Un segment qui coince est d'abord repris depuis la branche du ticket
+  (`--from`) : son auteur a pu y résoudre le conflit. Un ticket qui coince encore
+  est écarté et la simulation reprend sans lui. Pour chaque fichier en conflit,
+  le dernier commit qui l'a touché dans la démo donne « en face » : auteur et
+  provenance. La copie est supprimée en sortant, quelle que soit la sortie
+  (`jgit_on_exit`).
+
+**Conséquences.** L'audit ne touche ni à l'espace de travail de l'utilisateur
+(même modifié), ni à sa branche courante, ni au serveur ; il peut tourner
+pendant qu'une opération est en pause, pour une IA ou un job planifié. Il n'a
+pas besoin de l'identité git du poste. Les commits de simulation n'ont de
+branche nulle part : git les oublie. La copie de simulation est une **exception
+assumée** à la règle n°3 (un seul `git checkout`) : elle n'est pas l'espace de
+travail de l'utilisateur. La fusion juge un ticket sur l'ensemble de ses
+modifications : rarement, un rebase commit par commit peut s'arrêter sur un
+commit intermédiaire alors que l'ensemble passe — `jgit feature rebase` s'arrête
+alors sur ce conflit comme d'habitude.
 
 **Écarté.**
 - Simuler dans l'espace de travail, comme `util verify_rebase` : il faudrait un
   dépôt propre et des bascules de branche, pour une question qui ne modifie rien.
-- `git merge-tree --merge-base` : sans copie de travail, mais exige git 2.40,
-  absent de Debian bookworm (image Docker, agents Jenkins).
+- Rejouer chaque ticket commit par commit dans la copie de travail : exact, mais
+  des dizaines de secondes sur un projet de centaines de branches.
+- `git merge-tree --merge-base` pour les démos (rejouer chaque commit sans copie
+  de travail) : exige git 2.40, absent de Debian bookworm (image Docker, agents
+  Jenkins).
+- Simuler la démo avec les tickets dont le rebase coince : le conflit qu'elle
+  rencontrerait est celui que leur auteur doit résoudre chez lui.
 - S'arrêter au premier conflit : le rapport ne dirait pas qui d'autre est
   concerné.
 

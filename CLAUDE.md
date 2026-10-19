@@ -13,7 +13,8 @@ le projet — code, messages, documentation, tests — est **en français**.
 | `json.sh` | contrat `--json` : fragments JSON, `json_emit`, `jgit_fail` |
 | `replay.sh` | moteur de rejeu commun (cherry-pick, pause/reprise sur conflit, état `.git/jgit/operation.state`) |
 | `feature.sh`, `rebase.sh`, `release.sh` | feature/hotfix, rebase, release |
-| `demo.sh`, `demo_model.sh`, `demo_engine.sh`, `demo_lifecycle.sh`, `demo_check.sh` | démos : commandes et vues, lecture de la recette, fabrication, archive/migration, vérification (simulation dans une copie de travail temporaire) |
+| `demo.sh`, `demo_model.sh`, `demo_engine.sh`, `demo_lifecycle.sh` | démos : commandes et vues, lecture de la recette, fabrication, archive/migration |
+| `audit.sh` | `jgit audit` : état des lieux des tickets et des démos (simulation : `git merge-tree`, copie de travail temporaire) |
 | `docs/` | contrat, choix techniques, règles de codage, parcours couverts ; `docs/guide/` pour les utilisateurs |
 | `tests/` | suite Gherkin en français, moteur maison en bash (`tests/README.md`) |
 | `ui.sh`, `ui/` | `jgit ui` : interface en terminal (TypeScript + Ink), qui n'appelle que `jgit … --json` |
@@ -31,7 +32,8 @@ Elles sont détaillées dans `docs/04-regles-de-codage.md`. Les plus importantes
 - **bash 3.2** (macOS) **et 5.2** (Linux) : pas de tableaux associatifs, pas de
   `${var,,}`, remplacements `${s//a/b}` entre guillemets, outils système limités
   à POSIX (`docs/05-portabilite.md`).
-- **Un seul `git checkout`** : celui de `switch_branch`.
+- **Un seul `git checkout`** : celui de `switch_branch` (seule exception : la
+  copie de simulation de `jgit audit`, via `audit_git`).
 - **Une erreur s'arrête par `jgit_fail <code> <exit> <message> [remède]`** ;
   avec `--json`, rien d'autre que `json_emit` n'écrit sur la sortie standard.
 - **Couleurs** : variables `C_RED`… et `jgit_tput`, jamais `\033[` ni `tput`.

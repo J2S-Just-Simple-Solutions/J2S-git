@@ -55,12 +55,11 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "jgit demo show [<nom>]"
     Et la sortie contient "jgit demo candidates [<nom>] [--based-on <branch>]"
     Et la sortie contient "jgit demo bases"
-    Et la sortie contient "jgit demo check [<nom>]"
     Et la sortie contient "jgit demo create <nom> [--based-on <branch>] [--from <ticket>]..."
     Et la sortie contient "jgit demo add [<nom>] --from <ticket>..."
     Et la sortie contient "jgit demo drop [<nom>] --from <ticket>..."
     Et la sortie contient "jgit demo refresh [<nom>] --from <ticket>..."
-    Et la sortie contient "jgit demo rebase [<nom>] [--based-on <branch>] [--keep-delivered] [--keep-missing]"
+    Et la sortie contient "jgit demo rebase [<nom>] [--based-on <branch>] [--from <ticket>]... [--keep-delivered] [--keep-missing]"
     Et la sortie contient "jgit demo continue [<nom>] | abort [<nom>]"
     Et la sortie contient "--dry-run, --drop-foreign, --on-conflict <mode>"
     Et la sortie contient "jgit demo archive <nom>"
@@ -69,6 +68,11 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "jgit demo migrate <nom> [--based-on <branch>]"
     Et la sortie contient "jgit demo start [<nom>]        → jgit demo create <nom>"
     Et la sortie contient "jgit demo remove               → jgit demo delete <nom>"
+    # Audit : l'état des lieux, en lecture seule
+    Et la sortie contient "jgit audit                     État des lieux"
+    Et la sortie contient "jgit audit tickets"
+    Et la sortie contient "jgit audit demos [<nom>]"
+    Et la sortie ne contient pas "jgit demo check"
     # Util
     Et la sortie contient "jgit util clean"
     Et la sortie contient "jgit util status"
@@ -129,6 +133,9 @@ Fonctionnalité: Analyse de la ligne de commande
     Quand je lance "jgit util bidule"
     Alors jgit se termine en erreur
     Et la sortie contient "Action 'bidule' non supportée pour util."
+    Quand je lance "jgit audit bidule"
+    Alors jgit se termine en erreur
+    Et la sortie contient "Action 'bidule' non supportée pour audit."
 
   Scénario: Un scope sans action affiche l'aide et sort en erreur
     Quand je lance "jgit feature"

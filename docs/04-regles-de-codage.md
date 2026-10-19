@@ -90,9 +90,9 @@ grep -rn "git checkout" *.sh
 
 Les seules occurrences légitimes sont celles de `switch_branch` elle-même.
 
-**Exception** : la copie de travail temporaire de `jgit demo check`
-(`demo_check_git`, dans `demo_check.sh`), qui n'est pas l'espace de travail de
-l'utilisateur et ne sert qu'à simuler (choix technique n°17).
+**Exception** : la copie de travail temporaire de `jgit audit` (`audit_git`,
+dans `audit.sh`), qui n'est pas l'espace de travail de l'utilisateur et ne sert
+qu'à simuler (choix technique n°17).
 
 ---
 

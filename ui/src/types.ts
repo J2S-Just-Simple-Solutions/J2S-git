@@ -88,7 +88,8 @@ export interface BasesDoc {
   bases: Base[];
 }
 
-export interface CheckOther {
+// jgit audit : l'état des lieux des tickets et des démos (simulation).
+export interface AuditOther {
   sha: string;
   subject: string;
   author: string;
@@ -96,31 +97,69 @@ export interface CheckOther {
   origin: string;
 }
 
-export interface CheckConflict {
+export interface AuditCommit {
+  sha: string;
+  subject: string;
+  author: string;
+  email: string;
+  date: string;
+}
+
+export interface AuditFile {
+  path: string;
+  kind: string;
+  other: AuditOther | null;
+}
+
+export interface AuditTicket {
   ticket: string;
-  step: 'rebase' | 'refresh' | 'add' | 'foreign';
-  commit: { sha: string; subject: string; author: string; email: string; date: string };
-  files: { path: string; kind: string; other: CheckOther | null }[];
+  type: string;
+  id: string;
+  base: string | null;
+  base_recorded: boolean;
+  behind_base: number;
+  status: 'up_to_date' | 'to_rebase' | 'conflicts' | 'delivered' | 'base_missing';
+  delivered: boolean;
+  pr_validated: boolean | null;
+  owner: { author: string | null; email: string | null };
+  last_activity: string | null;
+  command: string | null;
+  conflict: { commit: AuditCommit; files: AuditFile[] } | null;
+  demos: string[];
+}
+
+export interface AuditDemoConflict {
+  ticket: string;
+  step: 'rebase' | 'fresh' | 'foreign' | 'add';
+  commit: AuditCommit;
+  files: AuditFile[];
   commands: { resolve: string; drop: string };
 }
 
-export interface CheckedDemo {
+export interface AuditDemo {
   name: string;
   branch: string;
   base: string | null;
   behind_base: number | null;
   status: 'up_to_date' | 'feasible' | 'conflicts' | 'blocked';
   message: string | null;
-  actions: { command: string; reason: string }[];
+  prerequisites: { ticket: string; status: string; command: string }[];
+  held: string[];
+  actions: { kind: 'ticket' | 'demo'; command: string; reason: string }[];
   dropped: { ticket: string; reason: string }[];
-  conflicts: CheckConflict[];
+  conflicts: AuditDemoConflict[];
 }
 
-export interface CheckDoc {
-  schema: 'jgit.demo.check/1';
+export interface AuditDoc {
+  schema: 'jgit.audit/1';
   ok: true;
-  demos: CheckedDemo[];
-  summary: { demos: number; up_to_date: number; feasible: number; conflicts: number; blocked: number; skipped_legacy: number };
+  scope: 'all' | 'tickets' | 'demos';
+  tickets: AuditTicket[];
+  demos: AuditDemo[];
+  summary: {
+    tickets: { total: number; up_to_date: number; to_rebase: number; conflicts: number; base_missing: number; delivered: number };
+    demos: { total: number; up_to_date: number; feasible: number; conflicts: number; blocked: number; skipped_legacy: number };
+  };
 }
 
 export interface DemoResultDoc {
@@ -188,7 +227,7 @@ export type AnyDoc =
   | DemoShowDoc
   | CandidatesDoc
   | BasesDoc
-  | CheckDoc
+  | AuditDoc
   | DemoResultDoc
   | ConflictDoc
   | StatusDoc

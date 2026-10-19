@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Box, Text, useApp } from 'ink';
 import type { JgitResult, JgitRunner, ConflictView } from './jgit.js';
 import { conflictFromDoc, conflictFromStatus, failureText } from './jgit.js';
-import type { CheckDoc, DemoResultDoc } from './types.js';
+import type { AuditDoc, DemoResultDoc } from './types.js';
 import { FlashLine, Spinner } from './components.js';
 import type { Flash } from './components.js';
 import { ListScreen } from './screens/ListScreen.js';
@@ -13,7 +13,7 @@ import { NameScreen } from './screens/NameScreen.js';
 import { BasePickScreen } from './screens/BasePickScreen.js';
 import { ConfirmScreen } from './screens/ConfirmScreen.js';
 import { ConflictScreen } from './screens/ConflictScreen.js';
-import { CheckScreen } from './screens/CheckScreen.js';
+import { AuditScreen } from './screens/AuditScreen.js';
 import type { ConflictAction } from './screens/ConflictScreen.js';
 
 export type Screen =
@@ -27,7 +27,7 @@ export type Screen =
   | { kind: 'confirm'; title: string; plan: DemoResultDoc; args: string[]; back: Screen }
   | { kind: 'running'; label: string }
   | { kind: 'conflict'; view: ConflictView; back: Screen }
-  | { kind: 'check'; doc: CheckDoc; demo: string | null; back: Screen };
+  | { kind: 'audit'; doc: AuditDoc; demo: string | null; back: Screen };
 
 // Ce que l'interface ne peut pas faire elle-même pendant qu'elle occupe le
 // terminal : ouvrir un éditeur, lancer Claude Code. Le lanceur (cli.tsx) rend
@@ -132,13 +132,14 @@ export function App({ runner, claudeAvailable, stage, onSpawn, initialFlash = nu
     go(back);
   };
 
-  // Vérification (simulation, rien n'est modifié) : toutes les démos, ou une.
-  const check = async (demo: string | null, back: Screen) => {
+  // État des lieux (simulation, rien n'est modifié) : tous les tickets et
+  // toutes les démos, ou une démo et ses tickets.
+  const audit = async (demo: string | null, back: Screen) => {
     setFlash(null);
-    setScreen({ kind: 'running', label: 'Vérification des mises à jour (simulation, rien ne sera modifié)…' });
-    const result = await runner.run(demo ? ['demo', 'check', demo] : ['demo', 'check']);
-    if (result.doc && result.doc.schema === 'jgit.demo.check/1') {
-      return setScreen({ kind: 'check', doc: result.doc, demo, back });
+    setScreen({ kind: 'running', label: 'État des lieux (simulation, rien ne sera modifié)…' });
+    const result = await runner.run(demo ? ['audit', 'demos', demo] : ['audit']);
+    if (result.doc && result.doc.schema === 'jgit.audit/1') {
+      return setScreen({ kind: 'audit', doc: result.doc, demo, back });
     }
     error(failureText(result));
     go(back);
@@ -147,7 +148,7 @@ export function App({ runner, claudeAvailable, stage, onSpawn, initialFlash = nu
   const onDetailAction = (branch: string) => (action: DetailAction) => {
     const back: Screen = { kind: 'detail', branch };
     if (action.kind === 'back') return go({ kind: 'list' });
-    if (action.kind === 'check') return void check(action.demo, back);
+    if (action.kind === 'audit') return void audit(action.demo, back);
     if (action.kind === 'pick') return setScreen({ kind: 'pick', mode: 'add', demo: action.demo });
     void mutate(action.args, action.title, action.preview, back);
   };
@@ -195,7 +196,7 @@ export function App({ runner, claudeAvailable, stage, onSpawn, initialFlash = nu
           runner={runner}
           onOpen={(demo) => go({ kind: 'detail', branch: demo.branch })}
           onCreate={() => setScreen({ kind: 'name' })}
-          onCheck={() => void check(null, { kind: 'list' })}
+          onAudit={() => void audit(null, { kind: 'list' })}
           onQuit={() => exit()}
           onError={error}
         />
@@ -288,9 +289,9 @@ export function App({ runner, claudeAvailable, stage, onSpawn, initialFlash = nu
       );
       break;
     }
-    case 'check': {
+    case 'audit': {
       const { doc, demo, back } = screen;
-      body = <CheckScreen doc={doc} onBack={() => go(back)} onRerun={() => void check(demo, back)} />;
+      body = <AuditScreen doc={doc} onBack={() => go(back)} onRerun={() => void audit(demo, back)} />;
       break;
     }
     case 'conflict':
