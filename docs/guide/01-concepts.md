@@ -111,6 +111,10 @@ Chaque étape a sa fiche.
          ↓
   4. quelqu'un valide la PR sur GitHub    → le code relu arrive sur __PR__
          ↓
+     (si la branche finale a bougé depuis)
+     jgit feature rebase MONPROJET-123    → __PR__ seule est remise à jour,
+                                            le conflit est réglé avant le merge
+         ↓
   5. jgit release merge --from feature/MONPROJET-123
                                           → le code relu entre dans la version
          ↓

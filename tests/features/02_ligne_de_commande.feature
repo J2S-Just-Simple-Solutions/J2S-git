@@ -44,6 +44,8 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "jgit feature start <ticket> [--based-on <branch>] [--no-open]"
     Et la sortie contient "jgit feature restart <ticket> [--no-open]"
     Et la sortie contient "jgit feature rebase <ticket> [--based-on <branch>] [--squash] [--on-conflict <mode>]"
+    Et la sortie contient "PR validée : seule __PR__ est reconstruite, la branche de travail supprimée."
+    Et la sortie contient "PR déjà mergée dans sa base : ses deux branches sont supprimées."
     Et la sortie contient "jgit feature continue <ticket>"
     Et la sortie contient "jgit feature abort <ticket>"
     # Release : finish accepte --into, au même titre que merge

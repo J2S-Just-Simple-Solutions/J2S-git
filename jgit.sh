@@ -121,6 +121,8 @@ help() {
     printf "  jgit feature start <ticket> [--based-on <branch>] [--no-open]\n"
     printf "  jgit feature restart <ticket> [--no-open]\n"
     printf "  jgit feature rebase <ticket> [--based-on <branch>] [--squash] [--on-conflict <mode>]\n"
+    printf "                                   PR validée : seule __PR__ est reconstruite, la branche de travail supprimée.\n"
+    printf "                                   PR déjà mergée dans sa base : ses deux branches sont supprimées.\n"
     printf "  jgit feature continue <ticket>   Reprend un rebase mis en pause sur un conflit.\n"
     printf "  jgit feature abort <ticket>      Annule un rebase mis en pause : rien n'a été poussé.\n"
     printf "  (idem avec hotfix)\n\n"

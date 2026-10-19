@@ -51,9 +51,9 @@ Deux réserves, héritées de l'existant et conservées pour ne casser aucun scr
 
 - les commandes `feature`, `hotfix` et `release` sortent en `1` sur un refus,
   comme avant ; leur document porte le code précis (`worktree_dirty`…). Le
-  rebase de feature suit en revanche la table pour ce qui est nouveau : `3`
-  conflit, `4` lease refusé, `5` opération en pause ; `continue` et `abort`
-  suivent la table complète ;
+  rebase de feature suit en revanche la table pour ce qui est nouveau : `2`
+  pour le rebase d'une PR validée refusé, `3` conflit, `4` lease refusé, `5`
+  opération en pause ; `continue` et `abort` suivent la table complète ;
 - `util check_rebase` garde ses propres codes (`0` à jour, `1` impossible de
   répondre, `2` en retard sans conflit, `3` en retard avec conflits).
 
@@ -356,6 +356,23 @@ l'essentiel :
 
 `branch` est le nouveau nom (`null` après `delete`), `previous_branch` l'ancien.
 `migrate` produit le schéma complet, comme `create`.
+
+### Codes d'erreur du rebase de feature
+
+| `error.code` | Code de sortie | Situation |
+| --- | --- | --- |
+| `branch_not_found` | 1 | ni la branche de travail ni la branche de PR n'existent |
+| `branch_not_on_remote` | 1 | la branche de PR, ou la branche de travail en cours de développement, n'est pas sur le serveur |
+| `history_diverged` | 1 | la branche de travail ne descend plus de sa branche de PR, alors que la PR n'a jamais été validée |
+| `pr_validated_new_work` | 2 | PR validée, mais la branche de travail porte du code absent de la branche de PR : rien n'est modifié |
+| `pr_not_validated` | 2 | branche de travail disparue et PR jamais validée : `hint` donne la commande qui supprime la branche de PR |
+| `cancelled` | 1 | une confirmation a été refusée |
+| `conflict`, `unresolved_files`, `conflict_markers_left` | 3 | conflit |
+| `lease_rejected`, `push_failed` | 4, 1 | publication refusée : quelqu'un a poussé entre-temps, ou le serveur a refusé |
+
+Une PR validée dont la branche de PR est déjà mergée dans sa base n'est pas une
+erreur : la commande réussit (`jgit.result/1`), après avoir supprimé ses
+branches si la confirmation l'a accepté.
 
 ### Codes d'erreur des démos
 

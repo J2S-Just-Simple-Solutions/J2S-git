@@ -260,9 +260,9 @@ intact.** Plusieurs scénarios le vérifient explicitement.
 | Refus de la confirmation finale | rien n'est poussé, et l'historique local est rendu à son état d'origine |
 | Conflit en `--no-interaction` | arrêt explicite, cherry-pick abandonné, branches temporaires supprimées, remote intact |
 | Conflit après un squash | l'historique initial de la branche de travail est **restauré** |
-| PR déjà mergée (plus un fast-forward) | refus explicite, avec la raison |
+| PR squash-mergée, puis branche finale qui a bougé | seule `__PR__` est reconstruite : voir le [parcours 23](#parcours-23--rebaser-une-pr-validée-avant-son-merge) |
 | Commit de fusion dans l'historique | refus explicite : un merge ne se rejoue pas en cherry-pick |
-| Feature inconnue, ou paire de branches supprimée du serveur | refus, sans rien créer |
+| Feature inconnue, ou branche `__PR__` supprimée du serveur | refus, sans rien créer |
 
 ### Ce que ce parcours protège
 
@@ -865,3 +865,33 @@ passe sans conflit : le rebase de mes tickets, puis la mise à jour des démos.
 | Espace de travail modifié | refusé (`worktree_dirty`), rien ne bouge |
 | `--apply` hors de `jgit audit` | refusé (`usage`) |
 
+---
+
+## Parcours 24 — Rebaser une PR validée avant son merge
+
+Fichier : [`tests/features/24_rebase_pr_validee.feature`](../tests/features/24_rebase_pr_validee.feature)
+
+Une PR squash-mergée attend parfois longtemps son merge dans sa branche finale
+— celle dont le ticket est parti. Si cette branche bouge entre-temps, le merge
+coince, et c'est celui qui merge qui hérite du conflit. Le même
+`jgit feature rebase` reconstruit alors la seule branche `__PR__` : le
+développeur résout le conflit avant, et le merge peut passer sans intervention.
+
+| Situation | Comportement attendu |
+| --- | --- |
+| PR squash-mergée, branche finale qui a avancé | `__PR__` reconstruite seule (son commit d'init et le commit validé), base enregistrée à jour ; la branche de travail, au même code, est supprimée en local et sur le serveur dans le même push |
+| La branche de travail a déjà disparu | `__PR__` reconstruite seule, rien d'autre n'est demandé |
+| Conflit avec la branche finale | pause, résolution, `continue` : `__PR__` publiée avec la résolution, branche de travail supprimée ; rien ne bouge tant que la pause dure |
+| Second lot après ce rebase | `restart` recrée la branche de travail depuis `__PR__` reconstruite |
+| PR rouverte, livrée, puis revalidée | seul le nouveau lot est rejoué : le premier est déjà dans la branche finale |
+| `hotfix` | reconstruit sur `main` |
+| Du code ajouté après la validation, poussé ou non | refus `pr_validated_new_work` (code 2) : rien n'est modifié, ni en local ni sur le serveur |
+| PR jamais validée, branche de travail disparue | refus `pr_not_validated` (code 2), avec la commande qui supprime `__PR__` |
+| `__PR__` déjà mergée dans sa branche finale | rien à rebaser ; ses deux branches sont supprimées sur confirmation (oui par défaut) ; un refus ne touche à rien |
+
+| Régression qui serait attrapée |
+| --- |
+| Une branche de travail supprimée alors qu'elle portait du travail non relu |
+| Une branche de travail supprimée sans que `__PR__` ait été publiée, ou l'inverse |
+| Un commit validé et déjà livré rejoué une seconde fois |
+| Un ticket qui ne pourrait plus repartir (`restart`) après ce rebase |

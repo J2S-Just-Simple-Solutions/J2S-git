@@ -238,6 +238,16 @@ La référence du projet est develop. Si c'est bien elle que vous voulez :
 - `jgit feature restart <ticket> [--no-open]` : recrée la branche de travail depuis la branche PR après vérification de l'alignement du code, supprime l'ancienne branche distante et ré-ouvre la PR si nécessaire.
 - `jgit feature rebase <ticket> [--based-on <branche>] [--squash]` : orchestre le rebase complet (branches temporaires `jgit_rebase_*`, cherry-pick, force-push final). Disponible également pour `hotfix`. Sans `--based-on`, il propose la [branche d'origine](#branche-dorigine) enregistrée à la création si elle diffère de la référence du projet — et c'est la réponse par défaut, donc celle qu'applique `--no-interaction`.
 
+#### Rebase d'une PR validée
+
+Une fois la PR squash-mergée, c'est la branche `__PR__` qui sera mergée dans sa branche finale — celle dont le ticket est parti. Si cette branche a bougé entre-temps, le même `jgit feature rebase <ticket>` reconstruit **la seule branche `__PR__`** sur sa base : le conflit éventuel est résolu par le développeur, avant le merge, qui peut ensuite passer sans intervention.
+
+- La branche de travail doit avoir **exactement le même code** que `__PR__` : elle ne sert plus, et elle est supprimée dans le même push que la publication de `__PR__` (`--atomic`, `--force-with-lease` sur les deux). Si elle a disparu, seule `__PR__` est reconstruite.
+- Du code ajouté après la validation (poussé ou non) bloque tout, sans rien modifier : code `2`, `pr_validated_new_work`.
+- Une PR jamais validée dont la branche de travail a disparu est refusée (code `2`, `pr_not_validated`) ; le remède donne la commande qui supprime la branche `__PR__`.
+- Une branche `__PR__` déjà mergée dans sa base n'a plus rien à rebaser : `jgit` propose de la supprimer, avec la branche de travail, en local et sur le serveur (réponse par défaut : oui).
+- `jgit feature restart` reste possible ensuite : il recrée la branche de travail depuis `__PR__`.
+
 #### Squash avant rebase
 
 Le rebase rejoue les commits un par un : chaque commit peut donc générer son propre conflit. Sur une PR volumineuse, cela devient vite fastidieux.

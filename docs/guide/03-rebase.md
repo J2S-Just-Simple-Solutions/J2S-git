@@ -106,6 +106,49 @@ qu'une branche d'avant ce mécanisme en acquiert une.
 
 ---
 
+## Après la validation de la PR
+
+Une fois votre PR validée (« Squash and merge »), c'est la branche de PR qui sera
+mergée dans sa **branche finale** — celle dont votre ticket est parti. Ce merge
+n'a pas toujours lieu tout de suite. Si la branche finale bouge entre-temps, il
+risque de coincer, et c'est celui qui merge qui hérite du conflit.
+
+Lancez simplement la même commande :
+
+```bash
+jgit feature rebase MONPROJET-123
+```
+
+`jgit` reconnaît que la PR a été validée et ne reconstruit **que la branche de
+PR**, sur la branche finale à jour. Le conflit éventuel, c'est vous qui le
+résolvez — vous connaissez le code —, et le merge pourra ensuite passer sans
+intervention.
+
+```
+La PR de feature/MONPROJET-123 a été validée : seule la branche
+__PR__feature/MONPROJET-123 est reconstruite, pour que son merge dans develop
+passe sans conflit.
+La branche de travail feature/MONPROJET-123 a exactement le même code : elle ne
+sert plus, elle sera supprimée en local et sur le serveur.
+```
+
+| Votre situation | Ce que fait `jgit` |
+| --- | --- |
+| La branche de travail a **exactement le même code** que la branche de PR | il reconstruit la branche de PR, et supprime la branche de travail **dans le même envoi** au serveur : les deux, ou aucune |
+| La branche de travail a déjà été supprimée | il reconstruit la branche de PR, c'est tout |
+| Vous avez ajouté du code **après** la validation, poussé ou non | il **refuse**, sans rien toucher : ce travail n'a pas été relu (voir *Ce qui bloque*) |
+| La branche de PR est **déjà mergée** dans la branche finale | il n'y a rien à rebaser ; il propose de supprimer ses branches, qui ne servent plus |
+
+Les conflits se traitent exactement comme pour un rebase ordinaire, y compris en
+pause (`--on-conflict pause`, puis `continue`). `--squash` est sans effet : les
+commits validés sont repris tels quels.
+
+> **Et si le ticket doit repartir ?** Un `jgit feature restart` recrée la
+> branche de travail à partir de la branche de PR reconstruite, comme
+> d'habitude.
+
+---
+
 ## Les conflits
 
 Comme vos commits sont rejoués **un par un**, chacun peut produire son propre
@@ -293,8 +336,10 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 
 | Situation | Ce que fait `jgit` | Pourquoi |
 | --- | --- | --- |
-| Votre branche ou sa branche de PR n'existe pas sur le serveur | refuse en la nommant | il n'y a rien à republier |
-| Votre PR a **déjà été mergée** | refuse : *« n'est PAS un fast-forward … Cela peut se produire si vous avez déjà cloturé la PR »* | le cas n'est pas géré ; faites un `restart` à la place |
+| Votre branche de travail, en cours de développement, n'existe pas sur le serveur | refuse en la nommant | poussez-la d'abord |
+| Votre PR a été validée, mais votre branche de travail contient du code ajouté **après** | refuse, sans rien modifier (code `2`, `pr_validated_new_work`), et donne la commande pour voir ce code | ce travail n'a pas été relu ; supprimer la branche le perdrait |
+| Votre branche de travail a disparu et la PR n'a **jamais été validée** | refuse (code `2`, `pr_not_validated`), et donne la commande pour supprimer la branche de PR si le ticket est abandonné | il n'y a rien à rebaser |
+| La branche de PR n'existe plus sur le serveur | refuse en la nommant | il n'y a rien à reconstruire ni à publier |
 | Un **commit de fusion** est présent dans l'historique | refuse en le nommant | une fusion ne se rejoue pas commit par commit ; ne mélangez pas merge et rebase |
 | La base enregistrée n'existe plus (ni en local ni sur le serveur) | **refuse**, sans rien modifier, et demande de nommer la base avec `--based-on` | se rabattre sur la référence du projet déplacerait la branche, et le résultat partirait en `push --force` |
 | `--based-on` sur une branche inconnue | **même refus, mot pour mot** | une saisie fausse et une base disparue sont le même problème |
@@ -314,8 +359,8 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 
 ## Limites connues
 
-- **Un `rebase` ne sait pas traiter une PR déjà mergée puis rouverte.** Le message
-  vous oriente vers `restart`.
+- **Après la validation, la branche finale est celle dont le ticket est parti.**
+  Pour une autre, nommez-la avec `--based-on`.
 - **Les commits de fusion sont rédhibitoires.** Si vous avez fusionné la préprod
   dans votre branche par le passé, `jgit` ne pourra plus la rebaser : il faudra la
   reprendre à la main, ou passer par un `restart` après validation de la PR.
