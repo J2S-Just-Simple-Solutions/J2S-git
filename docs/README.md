@@ -19,6 +19,7 @@ les limites connues. Lisible sans être expert Git.
 | [06 — Utilitaires](guide/06-utilitaires.md) | Nettoyage, vérification de rebase à blanc |
 | [07 — Règles communes](guide/07-regles-communes.md) | Options, questions, refus, configuration |
 | [08 — État des lieux](guide/08-audit.md) | Où en sont tous les tickets et les démos, quoi lancer dans quel ordre, qui est concerné |
+| [09 — Migration de l'installation](guide/09-migration-installation.md) | Script macOS autonome et `jgit auto-update` |
 
 ## Vous travaillez sur `jgit`
 

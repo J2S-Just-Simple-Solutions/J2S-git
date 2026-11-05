@@ -52,7 +52,7 @@ documents JSON. Tu ne manipules jamais une branche de démo à la main avec git.
 ```bash
 jgit demo list [--archived|--all] --json         # toutes les démos et leur état
 jgit demo show [<nom>] --json                    # le détail, ticket par ticket
-jgit demo candidates [<nom>] --json              # tickets que l'on peut ajouter
+jgit demo candidates [<nom>] --json              # branches que l'on peut ajouter (toutes, sauf develop/master/main)
 jgit demo candidates --based-on <base> --json    # … à une démo encore à créer sur cette base
 jgit demo bases --json                           # branches dont une démo peut partir
 jgit audit --json                                # état des lieux : tous les tickets, puis toutes les démos
@@ -206,6 +206,7 @@ des deux tickets en conflit fait en revanche disparaître le besoin de résoluti
 | `already_exists` | proposer `add`, ou `archive` puis `create` |
 | `ticket_diverged` | `refresh` au lieu de `add` |
 | `ticket_delivered` | inutile : le code est déjà dans la base ; proposer `rebase` si la démo est en retard |
+| `ticket_has_merges` | la branche du ticket contient des fusions qu'une démo ne rejoue pas : ne pas contourner ; montrer les fusions listées et laisser l'auteur rendre la branche linéaire (rebase, ou squash en un commit) |
 | `ticket_not_found`, `bad_ticket_format` | `jgit demo candidates --json` pour les noms exacts |
 | `archived` | `unarchive` d'abord (accord) |
 | `legacy_format` | `migrate` d'abord |

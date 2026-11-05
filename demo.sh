@@ -102,13 +102,16 @@ demo_summary_json() {
 demo_ticket_json() {
   local i="$1"
   local ticket="${DEMO_TICKETS[$i]}"
-  local remote_exists=false
+  local remote_exists=false type=""
+
+  # Le type est le préfixe de la branche (feature, hotfix, bugfix…), null sans « / ».
+  [[ "$ticket" == */* ]] && type="${ticket%%/*}"
 
   demo_remote_exists "$ticket" && remote_exists=true
 
   json_object \
     "$(json_kv_str ticket "$ticket")" \
-    "$(json_kv_str type "${ticket%%/*}")" \
+    "$(json_kv_str_or_null type "$type")" \
     "$(json_kv_str id "${ticket#*/}")" \
     "$(json_kv_num position "$((i + 1))")" \
     "$(json_kv_str status "${DEMO_T_STATUS[$i]}")" \
@@ -348,8 +351,10 @@ demo_show_cmd() {
 #            jgit demo candidates
 ###############################################
 
-# Les tickets que l'on peut ajouter : branches feature/ et hotfix/ du serveur,
-# des plus récentes aux plus anciennes, moins celles déjà dans la démo.
+# Les tickets que l'on peut ajouter : toutes les branches du serveur — pas
+# seulement feature/ et hotfix/ —, des plus récentes aux plus anciennes, sauf
+# les branches de référence (demo_branch_is_selectable), la base et la démo
+# elles-mêmes, et celles déjà dans la démo.
 demo_candidates_cmd() {
   local target="$1"
   local based_on="${2:-}"
@@ -388,7 +393,8 @@ demo_candidates_cmd() {
   demo_delivered_cache_load "$base"
 
   while IFS=$'\037' read -r ticket date subject author; do
-    [[ -n "$ticket" ]] || continue
+    demo_branch_is_selectable "$ticket" || continue
+    [[ "$ticket" == "$base" || ( -n "$demo_name" && "$ticket" == "$DEMO_PREFIX$demo_name" ) ]] && continue
     for known in ${DEMO_TICKETS[@]+"${DEMO_TICKETS[@]}"}; do
       [[ "$known" == "$ticket" ]] && continue 2
     done
@@ -398,7 +404,7 @@ demo_candidates_cmd() {
 
     # Des centaines de tickets possibles : aucun sous-shell dans la boucle.
     json_str_into j_ticket "$ticket"
-    json_str_into j_type "${ticket%%/*}"
+    if [[ "$ticket" == */* ]]; then json_str_into j_type "${ticket%%/*}"; else j_type=null; fi
     json_str_into j_id "${ticket#*/}"
     json_str_into j_date "$date"
     json_str_into j_subject "$subject"
@@ -414,7 +420,7 @@ demo_candidates_cmd() {
     fi
   done < <(git for-each-ref --sort=-committerdate \
              --format="%(refname:strip=3)%1f%(committerdate:iso-strict)%1f%(subject)%1f%(authorname)" \
-             "refs/remotes/$j2s_remote/feature" "refs/remotes/$j2s_remote/hotfix" 2>/dev/null)
+             "refs/remotes/$j2s_remote" 2>/dev/null)
 
   if [[ -n "$demo_name" ]]; then
     printf "%sTickets disponibles pour la démo %s%s (base %s)\n" "$C_BLUE" "$demo_name" "$C_RESET" "${base:-?}"

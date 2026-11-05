@@ -202,6 +202,16 @@ qu'il faut à quelqu'un — un collègue, une IA, l'interface — qui arrive au 
                 "author":"Camille","delivered":false}]}
 ```
 
+Les candidats sont toutes les branches du serveur — pas seulement `feature/…`
+et `hotfix/…` —, sauf `develop`, `master`, `main` (et la préprod et la
+production du projet si elles portent un autre nom), la base et la démo
+elles-mêmes, et les tickets déjà dans la démo. `type` est le préfixe de la
+branche avant le premier `/` (`feature`, `hotfix`, `bugfix`, `__PR__feature`…),
+`null` pour une branche sans `/` ; `id` est ce qui suit ce `/`, ou le nom
+entier. Il en va de même dans `jgit.demo.show/1` et `jgit.audit/1`. `--from`
+accepte les mêmes branches : une branche de référence donne
+`bad_ticket_format` (code 2).
+
 Avec `--based-on <branche>` (sans nom de démo), les candidats d'une démo encore
 à créer sur cette base : `demo` vaut `null`, `base` la branche demandée, et
 `delivered` se lit par rapport à elle. Une branche absente du serveur donne
@@ -269,7 +279,7 @@ modifié au plus ancien.
 | `pr_validated` | `false` : sa branche de PR n'a que son commit d'init ; `true` : elle a avancé ; `null` : pas de branche de PR |
 | `owner` | l'auteur du dernier commit de la branche |
 | `concerned` | qui doit intervenir : pour `conflicts`, les auteurs des commits du ticket qui touchent les fichiers en conflit ; sinon le propriétaire ; vide quand il n'y a rien à faire |
-| `command` | ce qu'il faut lancer (avec `--based-on` quand la base est supposée), `null` s'il n'y a rien à faire ou que jgit ne sait pas le faire (`no_init`) |
+| `command` | ce qu'il faut lancer (avec `--based-on` quand la base est supposée), `null` s'il n'y a rien à faire ou que jgit ne sait pas le faire (`no_init`, ou une branche ni `feature/` ni `hotfix/` : à rebaser à la main) |
 | `conflict` | pour `conflicts` : `commit`, le dernier commit du ticket qui touche les fichiers en conflit ; `files[].other`, le dernier commit de la base qui a touché le fichier depuis le départ du ticket, son auteur, et `origin` (le nom de la base) |
 | `demos` | les démos qui contiennent le ticket |
 
@@ -281,7 +291,7 @@ qui suivent son commit d'init.
 | Champ | Sens |
 | --- | --- |
 | `status` | `up_to_date` (rien à faire), `feasible` (tout passe), `conflicts` (un conflit est prévu dans la démo, ou un ticket est `held`), `blocked` (base disparue, commit de fusion ajouté à la main : `message` dit quoi faire) |
-| `prerequisites` | les tickets de la démo à rebaser d'abord, chez eux |
+| `prerequisites` | les tickets de la démo à rebaser d'abord, chez eux ; `command` vaut `null` pour une branche ni `feature/` ni `hotfix/` (à rebaser à la main) |
 | `held` | ceux dont ce rebase coince : leur auteur résout le conflit chez lui ; la démo ne les simule pas avant, ils sont repris depuis leur branche (`--from`) |
 | `actions` | les commandes dans l'ordre : `kind: ticket` (les prérequis), puis `kind: demo` (`jgit demo rebase` avec ses `--from`, puis `jgit demo add`) ; `--on-conflict pause` est ajouté là où un conflit est prévu |
 | `dropped` | tickets que le rebase retirera (`delivered`, `missing`) |
@@ -314,7 +324,7 @@ l'option) :
 | --- | --- |
 | `operations[]` | dans l'ordre : le rebase de mes tickets (`kind: ticket`), puis les commandes des démos faisables (`kind: demo`) |
 | `operations[].status` | `done`, `failed` (`error` : le code et le message de la commande), `planned` (`--dry-run`), `cancelled` (plan refusé) |
-| `left_aside[].reason` | `not_mine` : ticket d'autres personnes (`concerned`, leurs noms) ; `inferred_base` : base supposée, à vérifier avant de lancer `command` |
+| `left_aside[].reason` | `not_mine` : ticket d'autres personnes (`concerned`, leurs noms) ; `inferred_base` : base supposée, à vérifier avant de lancer `command` ; `manual` : branche ni `feature/` ni `hotfix/`, que jgit ne sait pas rebaser (`command` vaut `null`) |
 
 Avec `--apply`, l'espace de travail doit être propre (`worktree_dirty`, code 1),
 et le code de sortie vaut aussi 3 si une opération a échoué. `--apply` ailleurs
@@ -381,7 +391,8 @@ branches si la confirmation l'a accepté.
 | `usage` | 1 | nom ou `--from` manquant |
 | `invalid_name`, `already_exists`, `demo_not_found`, `not_a_demo` | 2 | la démo elle-même |
 | `base_not_found`, `base_not_published` | 2 | la base |
-| `bad_ticket_format`, `ticket_not_found`, `ticket_not_in_demo`, `ticket_diverged`, `ticket_delivered` | 2 | un ticket |
+| `bad_ticket_format`, `ticket_not_found`, `ticket_not_in_demo`, `ticket_diverged`, `ticket_delivered` | 2 | un ticket (`bad_ticket_format` : `develop`, `master` ou `main` demandé par `--from`) |
+| `ticket_has_merges` | 2 | les commits à rejouer d'un ticket comptent un commit de fusion (`create`, `add`, `refresh`, `rebase --from`) ; le message les liste |
 | `archived`, `legacy_format` | 2 | démo en lecture seule |
 | `ambiguous` | 2 | `unarchive` d'un nom qui a plusieurs archives |
 | `not_legacy`, `base_unknown` | 2 | `migrate` d'une démo déjà au format actuel, ou sans base enregistrée |
@@ -422,3 +433,18 @@ branches si la confirmation l'a accepté.
 `jgit_fail <code> <code_de_sortie> <message> [remède]`, ou, quand le message est
 déjà affiché, par `jgit_error_set` suivi de `exit_safe`. Un `exit_safe 1` nu
 reste lisible par un programme, mais seulement comme `failed`.
+
+
+## Mise à jour de l'installation
+
+`jgit auto-update --json` fonctionne même hors d'un projet Git. Le programme
+partagé avec le script autonome envoie ses diagnostics sur la sortie d'erreur.
+La sortie standard porte un unique `jgit.result/1` ou `jgit.error/1`, avec
+`command` égal à `auto-update`.
+
+Le mode sans interaction conserve la confirmation par défaut **non** : si une
+mise à jour est nécessaire, elle est annulée (code 0, résultat générique).
+Les erreurs d'usage portent `usage`, un moteur absent `updater_missing`, un
+moteur illisible `updater_unreadable`, et un échec du programme partagé
+`auto_update_failed`. Le diagnostic de ce dernier et le résultat de sa
+restauration restent dans la sortie d'erreur.

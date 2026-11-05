@@ -319,33 +319,59 @@ demo_read_legacy() {
 #            Tickets
 ###############################################
 
-# Commits utiles d'un ticket : ceux de sa version serveur qui suivent son
-# dernier commit d'init (START, ou RESTART). Un par ligne, du plus ancien au
-# plus récent, au format demandé (« %H » par défaut).
+# Plage git des commits propres d'un ticket : ceux de sa version serveur qui
+# suivent son dernier commit d'init (START, ou RESTART).
 #
-#   demo_ticket_log <ticket> <base> [format]
+#   demo_ticket_range <ticket> <base>
 #
 # Sans commit d'init (branche créée hors de jgit), on se rabat sur les commits
 # absents de la base. Code 1 si le ticket n'existe pas sur le serveur.
-demo_ticket_log() {
+demo_ticket_range() {
   local ticket="$1"
   local base="$2"
-  local format="${3:-%H}"
-  local ref start range
+  local ref start
 
   ref=$(demo_remote_ref "$ticket")
   git show-ref --verify --quiet "$ref" || return 1
 
   start=$(git log --first-parent -n 1 --format=%H -F --grep="$suffix_init_commit" "$ref" 2>/dev/null)
   if [[ -n "$start" ]]; then
-    range="$start..$ref"
+    printf '%s' "$start..$ref"
   elif [[ -n "$base" ]] && git show-ref --verify --quiet "$(demo_remote_ref "$base")"; then
-    range="$(demo_remote_ref "$base")..$ref"
+    printf '%s' "$(demo_remote_ref "$base")..$ref"
   else
-    range="$ref"
+    printf '%s' "$ref"
   fi
+}
 
+# Commits utiles d'un ticket (cf. demo_ticket_range), sans ses commits de
+# fusion. Un par ligne, du plus ancien au plus récent, au format demandé
+# (« %H » par défaut).
+#
+#   demo_ticket_log <ticket> <base> [format]
+#
+# Code 1 si le ticket n'existe pas sur le serveur.
+demo_ticket_log() {
+  local format="${3:-%H}"
+  local range
+
+  range=$(demo_ticket_range "$1" "$2") || return 1
   git log --first-parent --reverse --no-merges --format="$format" "$range" 2>/dev/null
+}
+
+# Commits de fusion parmi les commits propres d'un ticket : ceux que
+# demo_ticket_log écarte. Une démo rejoue un ticket commit par commit
+# (cherry-pick), et une fusion ne se rejoue pas : ce qu'elle a fait entrer dans
+# la branche — une autre branche, une résolution de conflit — n'arriverait
+# jamais dans la démo. Un par ligne, du plus ancien au plus récent, au format
+# « <sha court> « <sujet> » ». Rien si le ticket n'existe pas sur le serveur.
+#
+#   demo_ticket_merges <ticket> <base>
+demo_ticket_merges() {
+  local range
+
+  range=$(demo_ticket_range "$1" "$2") || return 0
+  git log --first-parent --reverse --merges --format='%h « %s »' "$range" 2>/dev/null
 }
 
 demo_ticket_fingerprints() {
