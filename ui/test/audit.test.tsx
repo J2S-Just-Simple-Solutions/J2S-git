@@ -109,6 +109,27 @@ test("pour chaque démo : qui est concerné par un conflit, puis les commandes d
   assert.match(text, /démos — 1 à jour, 0 faisable\(s\), 1 en conflit, 0 bloquée\(s\)/);
 });
 
+test("une branche que jgit ne sait pas rebaser (ni feature/ ni hotfix/) : à rebaser à la main, sans commande", () => {
+  const manual: AuditDoc = {
+    ...report,
+    tickets: [ticket({ ticket: 'bugfix/LOGIN-3', type: 'bugfix', id: 'LOGIN-3', demos: ['client-a'], command: null })],
+    demos: [{
+      name: 'client-a', branch: 'demo/client-a', base: 'develop', behind_base: 1, status: 'feasible', message: null,
+      prerequisites: [{ ticket: 'bugfix/LOGIN-3', status: 'to_rebase', command: null }],
+      held: [],
+      actions: [
+        { kind: 'ticket', command: null, reason: "d'abord rebaser la branche à la main : en retard de 1 commit(s) sur develop — à faire par : Yann" },
+        { kind: 'demo', command: 'jgit demo rebase client-a', reason: 'base develop en retard de 1 commit(s)' },
+      ],
+      dropped: [], conflicts: [],
+    }],
+  };
+  const text = reportLines(manual).map((line) => line.text).join('\n');
+  assert.match(text, /↻ bugfix\/LOGIN-3 — en retard de 1 commit\(s\) sur develop, son rebase passe\n      à faire par : Yann\n      → à rebaser à la main/);
+  assert.match(text, /Dans l'ordre :\n      d'abord rebaser la branche à la main : en retard de 1 commit\(s\) sur develop — à faire par : Yann\n      jgit demo rebase client-a/);
+  assert.doesNotMatch(text, /null/);
+});
+
 test("v depuis la liste lance l'état des lieux complet", async () => {
   const runner = new FakeRunner((args) => {
     if (args[0] === 'util') return { doc: noPause };

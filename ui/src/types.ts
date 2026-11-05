@@ -39,7 +39,8 @@ export type SuggestedAction = 'none' | 'add' | 'refresh' | 'drop';
 
 export interface DemoTicket {
   ticket: string;
-  type: string;
+  // Préfixe de la branche (feature, hotfix, bugfix…) ; null sans « / ».
+  type: string | null;
   id: string;
   position: number;
   status: TicketStatus;
@@ -118,7 +119,7 @@ export interface AuditPerson {
 
 export interface AuditTicket {
   ticket: string;
-  type: string;
+  type: string | null;
   id: string;
   pr_title: string | null;
   base: string | null;
@@ -150,9 +151,10 @@ export interface AuditDemo {
   behind_base: number | null;
   status: 'up_to_date' | 'feasible' | 'conflicts' | 'blocked';
   message: string | null;
-  prerequisites: { ticket: string; status: string; command: string }[];
+  // command : null pour une branche que jgit ne sait pas rebaser (ni feature/ ni hotfix/).
+  prerequisites: { ticket: string; status: string; command: string | null }[];
   held: string[];
-  actions: { kind: 'ticket' | 'demo'; command: string; reason: string }[];
+  actions: { kind: 'ticket' | 'demo'; command: string | null; reason: string }[];
   dropped: { ticket: string; reason: string }[];
   conflicts: AuditDemoConflict[];
 }
@@ -169,7 +171,7 @@ export interface AuditApply {
     status: 'planned' | 'done' | 'failed' | 'cancelled';
     error: { code: string; message: string } | null;
   }[];
-  left_aside: { ticket: string; reason: 'not_mine' | 'inferred_base'; concerned: string[]; command: string }[];
+  left_aside: { ticket: string; reason: 'not_mine' | 'inferred_base' | 'manual'; concerned: string[]; command: string | null }[];
 }
 
 export interface AuditDoc {

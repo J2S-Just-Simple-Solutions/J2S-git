@@ -51,7 +51,17 @@ jgit_ui() {
   [[ -n "$zone" ]] || zone=$(readlink /etc/localtime 2>/dev/null | sed -n 's#.*/zoneinfo/##p')
   [[ -n "$zone" ]] && run+=(-e "TZ=$zone")
   [[ -f "$HOME/.gitconfig" ]] && run+=(-v "$HOME/.gitconfig:/home/jgit/.gitconfig:ro")
-  [[ -f "$HOME/.ssh/known_hosts" ]] && run+=(-v "$HOME/.ssh/known_hosts:/home/jgit/.ssh/known_hosts:ro")
+  # Tout ~/.ssh, pas seulement known_hosts : un remote peut passer par un alias
+  # de ~/.ssh/config (« git:projet » → Host git, autre serveur, autre clé, autres
+  # algorithmes), et sa clé n'est pas forcément chargée dans l'agent.
+  if [[ -d "$HOME/.ssh" ]]; then
+    run+=(-v "$HOME/.ssh:/home/jgit/.ssh:ro")
+    # UseKeychain n'existe que dans le ssh de macOS : le ssh Linux du conteneur
+    # refuserait la config entière. Sauf si le poste a choisi sa commande ssh.
+    if [[ -z "${GIT_SSH_COMMAND:-}" && -z "$(git config --get core.sshCommand 2>/dev/null)" ]]; then
+      run+=(-e "GIT_SSH_COMMAND=ssh -o IgnoreUnknown=UseKeychain")
+    fi
+  fi
   if [[ "$(uname -s)" == "Darwin" ]]; then
     # Docker Desktop expose l'agent SSH du Mac à cet emplacement, sur un socket
     # root:root en rw-rw---- : le groupe root suffit pour s'en servir sans

@@ -726,6 +726,13 @@ audit_ticket_eval() {
     up_to_date|delivered) command="" ;;
     no_init) command="" ;;
   esac
+  # Une démo peut contenir n'importe quelle branche (bugfix/, branche
+  # personnelle…) : jgit ne sait rebaser que feature/ et hotfix/, les autres se
+  # rebasent à la main.
+  case "$type" in
+    feature|hotfix) ;;
+    *) command="" ;;
+  esac
 
   # Qui doit intervenir : pour un conflit, les auteurs des commits en cause ;
   # sinon, le dernier à avoir travaillé sur la branche.
@@ -753,7 +760,7 @@ audit_ticket_eval() {
   AUDIT_T_TITLE[$i]="$pr_title"
 
   json_str_into j_ticket "$ticket"
-  json_str_into j_type "$type"
+  if [[ "$ticket" == */* ]]; then json_str_into j_type "$type"; else j_type=null; fi
   json_str_into j_id "$id"
   json_str_into j_status "$status"
   if [[ -n "$base" ]]; then json_str_into j_base "$base"; else j_base=null; fi
@@ -913,6 +920,8 @@ audit_print_ticket() {
     *) return 0 ;;
   esac
 
+  # Ni feature/ ni hotfix/ : jgit ne sait pas la rebaser.
+  [[ -n "$command" ]] || command="à rebaser à la main"
   [[ -n "${AUDIT_T_TITLE[$i]}" ]] && printf "      « %s »\n" "${AUDIT_T_TITLE[$i]}"
   printf "      à faire par : %s\n" "${AUDIT_T_PEOPLE[$i]:-?}"
   printf "      → %s%s%s%s\n" "$C_CYAN" "$command" "$C_RESET" "$demos"
@@ -1127,10 +1136,14 @@ audit_demo_action() {
     AUDIT_APPLY_DEMO[${#AUDIT_APPLY_DEMO[@]}]="$DEMO_NAME"$'\037'"$command"
   fi
 
-  printf "      %s%s%s\n        %s%s%s\n" "$C_CYAN" "$command" "$C_RESET" "$C_DIM" "$reason" "$C_RESET"
+  if [[ -n "$command" ]]; then
+    printf "      %s%s%s\n        %s%s%s\n" "$C_CYAN" "$command" "$C_RESET" "$C_DIM" "$reason" "$C_RESET"
+  else
+    printf "      %s%s%s\n" "$C_DIM" "$reason" "$C_RESET"
+  fi
   AUDIT_D_ACTIONS_JSON[${#AUDIT_D_ACTIONS_JSON[@]}]=$(json_object \
     "$(json_kv_str kind "$kind")" \
-    "$(json_kv_str command "$command")" \
+    "$(json_kv_str_or_null command "$command")" \
     "$(json_kv_str reason "$reason")")
 }
 
@@ -1286,11 +1299,14 @@ audit_demo_eval() {
       base_missing) reason="d'abord rebaser le ticket chez lui : sa base ${AUDIT_T_BASE[$t]:-?} n'existe plus — à faire par : ${AUDIT_T_PEOPLE[$t]:-?}" ;;
       *) reason="d'abord rebaser le ticket chez lui : en retard de ${AUDIT_T_BEHIND[$t]} commit(s) sur $(audit_ticket_base_text "$t") — à faire par : ${AUDIT_T_PEOPLE[$t]:-?}" ;;
     esac
+    # Une branche que jgit ne sait pas rebaser (ni feature/ ni hotfix/) : pas
+    # de commande, son auteur la rebase à la main.
+    [[ -n "${AUDIT_T_COMMAND[$t]}" ]] || reason="${reason/rebaser le ticket chez lui/rebaser la branche à la main}"
     audit_demo_action "${AUDIT_T_COMMAND[$t]}" "$reason" "ticket"
     prereq_json[${#prereq_json[@]}]=$(json_object \
       "$(json_kv_str ticket "$ticket")" \
       "$(json_kv_str status "${AUDIT_T_STATUS[$t]}")" \
-      "$(json_kv_str command "${AUDIT_T_COMMAND[$t]}")")
+      "$(json_kv_str_or_null command "${AUDIT_T_COMMAND[$t]}")")
   done
 
   if [[ "$AUDIT_D_REBASE" == true ]]; then
@@ -1424,7 +1440,10 @@ audit_apply() {
     json_str_into j_command "${AUDIT_T_COMMAND[$i]}"
     audit_people_json "${AUDIT_T_PEOPLE[$i]}"
     j_people="$AUDIT_V"
-    if [[ "${AUDIT_T_MINE[$i]}" != true ]]; then
+    if [[ -z "${AUDIT_T_COMMAND[$i]}" ]]; then
+      # Ni feature/ ni hotfix/ : jgit ne sait pas la rebaser.
+      aside_json[${#aside_json[@]}]="{\"ticket\":$j_ticket,\"reason\":\"manual\",\"concerned\":$j_people,\"command\":null}"
+    elif [[ "${AUDIT_T_MINE[$i]}" != true ]]; then
       aside_others="$aside_others${AUDIT_T_PEOPLE[$i]:-?}"$'\n'
       aside_json[${#aside_json[@]}]="{\"ticket\":$j_ticket,\"reason\":\"not_mine\",\"concerned\":$j_people,\"command\":$j_command}"
     elif [[ "${AUDIT_T_BASE_SOURCE[$i]}" == "inferred" ]]; then
@@ -1449,6 +1468,11 @@ audit_apply() {
   if [[ ${#aside_json[@]} -gt 0 ]]; then
     printf "  Laissé de côté :\n"
     for i in ${AUDIT_T_NAME[@]+"${!AUDIT_T_NAME[@]}"}; do
+      if [[ "${AUDIT_T_STATUS[$i]}" == "to_rebase" && -z "${AUDIT_T_COMMAND[$i]}" ]]; then
+        printf "    %s — jgit ne sait rebaser que feature/ et hotfix/ : à rebaser à la main sur %s\n" \
+          "${AUDIT_T_NAME[$i]}" "${AUDIT_T_BASE[$i]}"
+        continue
+      fi
       if [[ "${AUDIT_T_STATUS[$i]}" == "to_rebase" && "${AUDIT_T_MINE[$i]}" == true \
             && "${AUDIT_T_BASE_SOURCE[$i]}" == "inferred" ]]; then
         printf "    %s — base supposée %s, à vérifier avant de lancer : %s\n" \

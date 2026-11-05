@@ -5,7 +5,7 @@
 #
 # « jgit ui » construit l'image avec ce fichier, puis la lance avec docker run
 # et ce que ce fichier ne peut pas décider seul : l'identité de l'hôte (--user),
-# le ~/.gitconfig, les known_hosts et l'agent SSH, montés seulement s'ils
+# le ~/.gitconfig, le ~/.ssh et l'agent SSH, montés seulement s'ils
 # existent (voir ui.sh).
 services:
   jgit:

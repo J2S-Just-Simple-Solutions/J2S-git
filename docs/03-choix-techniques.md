@@ -399,6 +399,15 @@ ou Jenkins pilote le tout par `--json`. En contrepartie, un ticket squashé ou
 réécrit à la main n'est plus reconnu commit par commit : il passe en
 « réécrit », et `refresh` le reprend.
 
+Un ticket dont la branche contient un commit de fusion est **refusé** avant
+toute modification (`ticket_has_merges`) : le cherry-pick ne rejoue que les
+commits ordinaires (`--first-parent --no-merges`), si bien que ce qu'une fusion
+a fait entrer — une autre branche, une résolution de conflit — manquerait à la
+démo, publiée sans un mot. Les empreintes ignorant les fusions, un ticket déjà
+présent dont la seule nouveauté est une fusion passerait même pour « à jour ».
+La règle est celle de `jgit feature rebase`, qui refuse aussi les fusions, y
+compris celles de la base.
+
 **Écarté.**
 - Des commits de fusion (`merge --no-ff` de chaque ticket) : un ticket rebasé par
   `jgit` n'est plus un ancêtre de sa version précédente, et le rebase de feature
@@ -447,6 +456,13 @@ d'interface au clavier digne de ce nom.
   `rw-rw----` : le conteneur reçoit le groupe root (`--group-add 0`) pour s'en
   servir sans changer d'identité. `docker compose run` ne sait pas ajouter un
   groupe : compose construit, `docker run` lance.
+- `~/.ssh` est monté en entier, en lecture : un remote peut être un alias de
+  `~/.ssh/config` (`git:projet` → `Host git`, autre serveur, clé RSA, options
+  `ssh-rsa`) dont la clé n'est pas dans l'agent. Avec `known_hosts` seul, le
+  fetch échouait dans l'interface (« Impossible de contacter origin ») alors
+  qu'il passait sur le poste. `UseKeychain`, propre au ssh de macOS, est
+  neutralisé par `GIT_SSH_COMMAND=ssh -o IgnoreUnknown=UseKeychain`, sauf si le
+  poste fixe déjà sa commande ssh.
 
 **Conséquences.** Rien à installer sur un poste que Docker ; la même image sert
 la ligne de commande à un agent de CI. Les remotes doivent être en SSH (le
@@ -550,3 +566,27 @@ alors sur ce conflit comme d'habitude.
 - S'arrêter au premier conflit : le rapport ne dirait pas qui d'autre est
   concerné.
 
+## 18. La mise à jour partage un programme autonome et précède le contexte projet
+
+`Mettre-a-jour-jgit.sh` contient le moteur complet : reconnaissance d'un ZIP,
+contrôles du clone, confirmation, installation et restauration. Il reste
+transmissible seul. `jgit auto-update` lui passe le chemin réel de son
+installation, déjà résolu par `jgit_resolve_home`, et ne dépend donc pas d'un
+alias enregistré dans les fichiers du shell.
+
+L'aiguillage se fait avant le chargement des modules et de la configuration du
+projet. Une mise à jour de l'outil doit fonctionner hors dépôt et ne doit ni
+charger `.jgit/conf_local.sh` du projet, ni changer sa branche, ni lui demander
+une identité Git. Le lanceur charge seulement le contrat JSON, dont les
+fonctions restent en mémoire pendant le remplacement de l'installation.
+
+Le moteur est lu entièrement avant d'être confié à `bash -c`, avec des
+arguments séparés du code. Il peut ainsi remplacer son propre fichier sans
+relire une version partiellement remplacée. Le processus jgit qui attend ce
+programme est exclu du contrôle des utilisations concurrentes ; les autres
+processus restent bloquants.
+
+Le moteur conserve la confirmation par défaut « non ». `--no-interaction`,
+y compris via `--json`, annule donc une mise à jour nécessaire. La commande
+CLI adapte la sortie au contrat JSON et relaie les diagnostics du moteur sur
+la sortie d'erreur ; elle ne duplique aucune opération de migration.

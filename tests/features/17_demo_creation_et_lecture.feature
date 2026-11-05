@@ -5,8 +5,9 @@ Fonctionnalité: Créer une démo, puis la lire
   cherry-pickés tels quels, puis un repère clôt le segment du ticket.
 
   « demo list » montre toutes les démos et leur état, « demo show » le détail
-  d'une démo ticket par ticket, « demo candidates » les tickets que l'on peut
-  y ajouter. Ces trois commandes ne font que lire.
+  d'une démo ticket par ticket, « demo candidates » les branches que l'on peut
+  y ajouter (toutes, sauf develop, master et main). Ces trois commandes ne font
+  que lire.
 
   Contexte:
     Étant donné un projet git initialisé pour jgit
@@ -113,14 +114,48 @@ Fonctionnalité: Créer une démo, puis la lire
     Et la sortie contient "jgit demo create vitrine --based-on <branche>"
     Et la branche distante "demo/vitrine" n'existe pas
 
-  Scénario: Un ticket au mauvais format ou absent du serveur est refusé
-    Quand je lance "jgit demo create sprint12 --from TEST-1 --no-interaction --json" en lisant le JSON
+  Scénario: Une branche de référence ou absente du serveur est refusée
+    Quand je lance "jgit demo create sprint12 --from develop --no-interaction --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "bad_ticket_format"
+    Et le JSON a "error.message" qui contient "c'est une branche de référence"
+    Quand je lance "jgit demo create sprint12 --from main --no-interaction --json" en lisant le JSON
     Alors jgit se termine avec le code 2
     Et le JSON a "error.code" égal à "bad_ticket_format"
     Quand je lance "jgit demo create sprint12 --from feature/INCONNU --no-interaction --json" en lisant le JSON
     Alors jgit se termine avec le code 2
     Et le JSON a "error.code" égal à "ticket_not_found"
+    Quand je lance "jgit demo create sprint12 --from TEST-1 --no-interaction --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "ticket_not_found"
     Et la branche distante "demo/sprint12" n'existe pas
+
+  # Une démo montre ce que l'on veut : pas seulement feature/ et hotfix/, mais
+  # aussi une branche bugfix/, ou une branche sans préfixe.
+  Scénario: Une branche qui n'est ni feature ni hotfix entre dans une démo
+    Étant donné je crée la branche locale "bugfix/LOGIN-3" depuis "develop"
+    Et je me place sur la branche "bugfix/LOGIN-3"
+    Et je commite le fichier "src/login.txt" contenant "login" avec le message "Corrige la connexion"
+    Et je pousse la branche courante
+    Et je crée la branche locale "essai-julien" depuis "develop"
+    Et je me place sur la branche "essai-julien"
+    Et je commite le fichier "src/essai.txt" contenant "essai" avec le message "Essai d'écran"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Quand je lance "jgit demo create sprint12 --from bugfix/LOGIN-3 --from essai-julien --no-interaction --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et la démo distante "demo/sprint12" contient dans l'ordre les tickets :
+      | bugfix/LOGIN-3 |
+      | essai-julien   |
+    Et le fichier "src/login.txt" de la branche distante "demo/sprint12" contient "login"
+    Et le fichier "src/essai.txt" de la branche distante "demo/sprint12" contient "essai"
+    Quand je lance "jgit demo show sprint12 --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "tickets[ticket=bugfix/LOGIN-3].type" égal à "bugfix"
+    Et le JSON a "tickets[ticket=bugfix/LOGIN-3].id" égal à "LOGIN-3"
+    Et le JSON a "tickets[ticket=bugfix/LOGIN-3].status" égal à "up_to_date"
+    Et le JSON a "tickets[ticket=essai-julien].type" nul
+    Et le JSON a "tickets[ticket=essai-julien].id" égal à "essai-julien"
 
   # Une démo se fabrique à partir du serveur, sur une branche temporaire : un
   # espace de travail en cours de modification n'y a pas sa place.
@@ -304,18 +339,32 @@ Fonctionnalité: Créer une démo, puis la lire
     Et le JSON a "schema" égal à "jgit.demo.candidates/1"
     Et le JSON a "demo" égal à "sprint12"
     Et le JSON a "base" égal à "develop"
-    Et la liste JSON "candidates" contient 2 éléments
     Et le JSON a "candidates[ticket=feature/TEST-2].delivered" faux
     Et le JSON a "candidates[ticket=feature/TEST-2].last_subject" égal à "Ajoute la feature 2"
     Et le JSON a "candidates[ticket=hotfix/URGENT-1].delivered" vrai
     Et la sortie contient "Ajouter : jgit demo add sprint12 --from <ticket>"
     Et la sortie contient "Déjà livrés dans develop"
+    # Ni ses tickets, ni sa base, ni la démo elle-même.
+    Et le JSON n'a pas de "candidates[ticket=feature/TEST-1]"
+    Et le JSON n'a pas de "candidates[ticket=develop]"
+    Et le JSON n'a pas de "candidates[ticket=demo/sprint12]"
 
-  Scénario: Sans démo, les candidats sont tous les tickets du serveur
+  Scénario: Sans démo, les candidats sont toutes les branches du serveur, sauf develop, master et main
+    Étant donné je crée la branche locale "bugfix/LOGIN-3" depuis "develop"
+    Et je me place sur la branche "bugfix/LOGIN-3"
+    Et je commite le fichier "src/login.txt" contenant "login" avec le message "Corrige la connexion"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
     Quand je lance "jgit demo candidates --json" en lisant le JSON
     Alors jgit se termine sans erreur
     Et le JSON a "demo" nul
-    Et la liste JSON "candidates" contient 2 éléments
+    Et le JSON a "candidates[ticket=feature/TEST-1].type" égal à "feature"
+    Et le JSON a "candidates[ticket=hotfix/URGENT-1].type" égal à "hotfix"
+    Et le JSON a "candidates[ticket=bugfix/LOGIN-3].type" égal à "bugfix"
+    Et le JSON a "candidates[ticket=bugfix/LOGIN-3].last_subject" égal à "Corrige la connexion"
+    Et le JSON a "candidates[ticket=__PR__feature/TEST-1].id" égal à "TEST-1"
+    Et le JSON n'a pas de "candidates[ticket=develop]"
+    Et le JSON n'a pas de "candidates[ticket=main]"
 
   # --- demo bases --------------------------------------------------------------
 

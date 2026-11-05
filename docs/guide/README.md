@@ -21,6 +21,7 @@ ici est ce que fait l'outil — et ce qui est vérifié par sa suite de tests.
 | savoir où en sont tous les tickets et les démos, et qui doit faire quoi | [08 — État des lieux](08-audit.md) |
 | savoir si votre branche est à jour, faire le ménage, tester un rebase à blanc | [06 — Utilitaires](06-utilitaires.md) |
 | comprendre les options, les refus, la configuration | [07 — Règles communes](07-regles-communes.md) |
+| mettre jgit à jour ou convertir une installation ZIP sur macOS | [09 — Migration de l'installation](09-migration-installation.md) |
 
 ## En trois phrases
 
