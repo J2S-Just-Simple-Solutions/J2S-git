@@ -19,6 +19,67 @@ jgit_resolve_home() {
 
 JGIT_HOME=$(jgit_resolve_home)
 
+# La mise à jour concerne l'installation, même hors d'un projet. L'aiguiller
+# avant les modules et .jgit/conf_local.sh du projet courant.
+jgit_auto_update() {
+    source "$JGIT_HOME/json.sh"
+    C_RED=""; C_RESET=""
+    # Ce chemin n'a ni branche projet ni stash à restaurer.
+    exit_safe() { exit "${1:-0}"; }
+    JGIT_COMMAND="auto-update"
+    local argument json=false sans_interaction=false aide=false statut contenu commandes=0
+    for argument in "$@"; do
+        [[ "$argument" == --json ]] && json=true
+    done
+    [[ "$json" == true ]] && jgit_json_enable
+    for argument in "$@"; do
+        case "$argument" in
+            auto-update)
+                commandes=$((commandes + 1))
+                [[ "$commandes" -eq 1 ]] || jgit_fail usage 1 "Arguments supplémentaires après auto-update." ;;
+            --json) sans_interaction=true ;;
+            --no-interaction) sans_interaction=true ;;
+            -h|--help) aide=true ;;
+            *) jgit_fail usage 1 "Argument non accepté pour auto-update : $argument" \
+                   "jgit auto-update [--no-interaction] [--json]" ;;
+        esac
+    done
+    if [[ "$aide" == true ]]; then
+        printf 'jgit auto-update [--no-interaction] [--json]\nMet à jour l’installation de jgit sur main (macOS), avec confirmation.\nSans interaction : la confirmation prend sa valeur par défaut (non).\n'
+        exit 0
+    fi
+    [[ -f "$JGIT_HOME/Mettre-a-jour-jgit.sh" ]] \
+        || jgit_fail updater_missing 1 "Le script Mettre-a-jour-jgit.sh manque dans l'installation." \
+               "Téléchargez et lancez le script autonome Mettre-a-jour-jgit.sh."
+    # Le programme complet est chargé avant de remplacer ses fichiers ; les
+    # fonctions JSON du lanceur sont elles aussi déjà en mémoire.
+    contenu=$(cat "$JGIT_HOME/Mettre-a-jour-jgit.sh") \
+        || jgit_fail updater_unreadable 1 "Impossible de lire le script de mise à jour."
+    local options=()
+    [[ "$sans_interaction" == true ]] && options+=(--no-interaction)
+    if [[ "$json" == true ]]; then
+        bash -c "$contenu" "$JGIT_HOME/Mettre-a-jour-jgit.sh" --installation "$JGIT_HOME" "${options[@]}" >&2
+    else
+        bash -c "$contenu" "$JGIT_HOME/Mettre-a-jour-jgit.sh" --installation "$JGIT_HOME" "${options[@]}"
+    fi
+    statut=$?
+    [[ "$statut" -eq 0 ]] || jgit_fail auto_update_failed "$statut" \
+        "La mise à jour de jgit a échoué ; consultez le diagnostic ci-dessus."
+    exit 0
+}
+
+jgit_premier_argument=""
+for jgit_argument in "$@"; do
+    case "$jgit_argument" in
+        --json|--no-interaction) ;;
+        *) jgit_premier_argument=$jgit_argument; break ;;
+    esac
+done
+if [[ "$jgit_premier_argument" == auto-update ]]; then
+    jgit_auto_update "$@"
+fi
+unset jgit_argument jgit_premier_argument
+
 # --json est repéré avant tout le reste : dès la première ligne écrite, la
 # sortie standard doit être réservée au document, y compris pour une erreur de
 # syntaxe dans la suite de la ligne de commande. Après « -- », plus d'option.
@@ -101,7 +162,7 @@ help() {
     printf "\n${C_BLUE}Usage:${C_RESET}\n"
     printf "  jgit ${C_GREEN}<scope>${C_RESET} ${C_CYAN}<action>${C_RESET} ${C_ORANGE}[<target>]${C_RESET} ${C_ORANGE}[options…]${C_RESET}\n\n"
 
-    printf "${C_BLUE}Scopes:${C_RESET} feature | hotfix | release | demo | audit | util | ui\n\n"
+    printf "${C_BLUE}Scopes:${C_RESET} feature | hotfix | release | demo | audit | util | ui | auto-update\n\n"
 
     printf "${C_BLUE}Options communes:${C_RESET}\n"
     printf "  --based-on <branch>   Branche de référence pour les créations / rebase.\n"
@@ -136,7 +197,8 @@ help() {
     printf "  jgit demo list [--archived | --all]   Les démos du projet et leur état.\n"
     printf "  jgit demo show [<nom>]                Le contenu d'une démo, ticket par ticket.\n"
     printf "  jgit demo candidates [<nom>] [--based-on <branch>]\n"
-    printf "                                        Les tickets que l'on peut ajouter à une démo (ou à une démo sur cette base).\n"
+    printf "                                        Les branches que l'on peut ajouter à une démo (ou à une démo sur cette base) :\n"
+    printf "                                        toutes celles du serveur, sauf develop, master et main.\n"
     printf "  jgit demo bases                       Les branches dont une démo peut partir.\n"
     printf "  jgit demo create <nom> [--based-on <branch>] [--from <ticket>]...\n"
     printf "  jgit demo add [<nom>] --from <ticket>...      Ajoute des tickets, ou leurs nouveaux commits.\n"
@@ -164,6 +226,11 @@ help() {
 
     printf "${C_BLUE}Interface:${C_RESET}\n"
     printf "  jgit ui                        Les démos dans une interface en terminal (Docker ; JGIT_UI=native sans Docker).\n\n"
+
+    printf "${C_BLUE}Installation:${C_RESET}\n"
+    printf "  jgit auto-update [--no-interaction] [--json]\n"
+    printf "                                 Met à jour jgit sur main (macOS), même hors d'un projet.\n"
+    printf "                                 Demande confirmation ; sans interaction, annule par défaut.\n\n"
 
     printf "${C_BLUE}Utility:${C_RESET}\n"
     printf "  jgit util clean                Supprime les branches locales jgit_rebase_*, jgit_demo_*, jgit_verify_rebase_* et __PR__*.\n"

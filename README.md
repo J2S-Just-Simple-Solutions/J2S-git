@@ -33,6 +33,52 @@
    ln -s /chemin/vers/J2S-git/jgit.sh /usr/local/bin/jgit
    ```
 
+### Mettre jgit à jour sur macOS
+
+Depuis n'importe quel dossier, même hors d'un projet Git :
+
+```bash
+jgit auto-update
+```
+
+La commande réutilise `Mettre-a-jour-jgit.sh` et cible l'installation de jgit
+qui vient d'être appelée, même avec un lien symbolique ou un alias différent.
+Elle présente les versions avant de demander confirmation, puis met `main` à
+jour en avance rapide. Un travail local, une autre branche ou une divergence
+provoquent un refus. En cas d'échec après mise à jour, elle tente de restaurer
+la version précédente. Aucun dépôt projet n'est modifié.
+
+`--no-interaction` prend la réponse par défaut, **non** : une mise à jour
+nécessaire est donc annulée. `--json` implique ce mode et produit un document
+unique ; les diagnostics restent sur la sortie d'erreur. Les autres options
+de travail sur les projets ne s'appliquent pas à cette commande.
+
+### Migrer une ancienne installation ZIP sur macOS
+
+Le script autonome `Mettre-a-jour-jgit.sh` transforme une installation ZIP en
+clone du dépôt officiel, à jour sur `main`, en conservant le chemin de l'alias.
+Il peut aussi mettre à jour un clone déjà sur `main`.
+
+Ce fichier contient tout le programme : aucun ZIP ni fichier compagnon à
+fournir. Enregistrez-le dans **Téléchargements**, puis ouvrez Terminal dans ce
+dossier et lancez ces deux lignes :
+
+```bash
+chmod +x Mettre-a-jour-jgit.sh
+./Mettre-a-jour-jgit.sh
+```
+
+Il vérifie le poste, l'alias, l'accès SSH et la version installée, puis présente
+la migration et demande confirmation (Entrée annule). L'installation ZIP doit
+correspondre exactement à une version de l'historique de `main`. Les fichiers
+personnels ou modifiés provoquent un refus, sauf les exclusions décrites dans
+le [guide de migration](docs/guide/09-migration-installation.md).
+
+Le dossier ZIP complet est sauvegardé à côté de l'installation. Si la
+vérification finale échoue ou si le script reçoit une interruption, il tente
+de remettre l'installation précédente en place et indique le résultat.
+Après migration, utilisez `jgit auto-update` pour les mises à jour suivantes.
+
 ## Prérequis
 
 - **macOS ou Linux.** `jgit` refuse de démarrer sur tout autre système : un écart
@@ -303,7 +349,7 @@ Lire (ne touche ni à l'espace de travail ni à la branche courante) :
 
 - `jgit demo list [--archived | --all]` : les démos du projet, leur base et leur état.
 - `jgit demo show [<nom>]` : le détail d'une démo, ticket par ticket (à jour, a avancé, réécrit, branche supprimée, livré), avec la commande à lancer pour chaque action utile et la commande `jgit release merge` correspondante.
-- `jgit demo candidates [<nom>] [--based-on <branche>]` : les tickets que l'on peut ajouter — à une démo existante, ou à une démo encore à créer sur cette base (les tickets déjà livrés y sont signalés).
+- `jgit demo candidates [<nom>] [--based-on <branche>]` : les branches que l'on peut ajouter — à une démo existante, ou à une démo encore à créer sur cette base (les tickets déjà livrés y sont signalés). Toutes les branches du serveur y figurent (`feature/…`, `hotfix/…`, mais aussi `bugfix/…`, une branche sans préfixe…), sauf `develop`, `master` et `main` ; `--from` accepte les mêmes.
 - `jgit demo bases` : les branches dont une démo peut partir, la préprod et la production en tête, puis les releases.
 - [`jgit audit demos [<nom>]`](#audit) : les mises à jour passeront-elles ? Dans quel ordre, et qui est concerné par chaque conflit ?
 
@@ -436,9 +482,10 @@ première fois, puis seulement ce qui a changé), puis la lance :
 - le dépôt du projet est monté **au même chemin** que sur le poste ;
 - le conteneur tourne sous **votre identité** : les fichiers du dépôt restent les
   vôtres ;
-- `~/.gitconfig` et `~/.ssh/known_hosts` sont montés en lecture, et **l'agent
-  SSH** du poste est transmis (Docker Desktop sur Mac, `$SSH_AUTH_SOCK` sous
-  Linux) : les remotes doivent être en SSH (`git@github.com:…`) ;
+- `~/.gitconfig` et `~/.ssh` (config, clés, known_hosts) sont montés en
+  lecture, et **l'agent SSH** du poste est transmis (Docker Desktop sur Mac,
+  `$SSH_AUTH_SOCK` sous Linux) : les remotes doivent être en SSH
+  (`git@github.com:…`, ou un alias de `~/.ssh/config` comme `git:projet`) ;
 - l'éditeur du conteneur est `nano`.
 
 Sans Docker, l'interface se lance avec le `node` du poste (Node 20 ou plus) :

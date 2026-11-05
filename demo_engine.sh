@@ -65,13 +65,25 @@ demo_load_for_update() {
   fi
 }
 
-# Vérifie un ticket demandé par --from : format, et présence sur le serveur.
+# Une branche peut-elle entrer dans une démo ? Toutes le peuvent — feature/,
+# hotfix/, mais aussi bugfix/, une branche personnelle… — sauf les branches de
+# référence (préprod, production, et develop, master, main quel que soit le
+# rôle que le projet leur donne).
+demo_branch_is_selectable() {
+  case "$1" in
+    ""|HEAD|*/|develop|master|main|"$branch_preprod"|"$branch_prod") return 1 ;;
+  esac
+  return 0
+}
+
+# Vérifie un ticket demandé par --from : branche autorisée, et présence sur le
+# serveur.
 demo_check_ticket_source() {
   local ticket="$1"
 
-  if [[ "$ticket" != feature/* && "$ticket" != hotfix/* ]] || [[ "$ticket" == */ ]]; then
+  if ! demo_branch_is_selectable "$ticket"; then
     jgit_fail bad_ticket_format "$JGIT_EXIT_REFUSED" \
-      "« $ticket » n'est pas un ticket : le format attendu est feature/<ticket> ou hotfix/<ticket>." \
+      "« $ticket » ne peut pas entrer dans une démo : c'est une branche de référence (develop, master, main)." \
       "Les tickets disponibles : jgit demo candidates"
   fi
 
@@ -80,6 +92,26 @@ demo_check_ticket_source() {
       "La branche $ticket n'existe pas sur $j2s_remote." \
       "Les tickets disponibles : jgit demo candidates"
   fi
+}
+
+# Refuse un ticket dont les commits à rejouer comptent un commit de fusion :
+# la démo n'en recevrait que les commits ordinaires, et tout ce que la fusion a
+# fait entrer serait perdu sans un mot — une démo publiée mais incomplète. À
+# appeler avant que l'opération ne commence : rien n'est alors modifié.
+#
+#   demo_refuse_ticket_merges <ticket> <base>
+demo_refuse_ticket_merges() {
+  local ticket="$1"
+  local base="$2"
+  local merges
+
+  merges=$(demo_ticket_merges "$ticket" "$base")
+  [[ -n "$merges" ]] || return 0
+
+  jgit_fail ticket_has_merges "$JGIT_EXIT_REFUSED" \
+    "$ticket contient des commits de fusion : une démo rejoue les commits d'un ticket un par un, et ce qu'une fusion a fait entrer dans la branche n'y arriverait pas. Rien n'a été modifié.
+$(printf '%s\n' "$merges" | sed 's/^/  - /')" \
+    "Rendez $ticket linéaire sur $base (git rebase, ou un seul commit avec git merge --squash), puis relancez."
 }
 
 # Index d'un ticket dans DEMO_TICKETS, ou code 1.
@@ -555,6 +587,7 @@ demo_create_cmd() {
 
   for ticket in ${tickets[@]+"${tickets[@]}"}; do
     demo_check_ticket_source "$ticket"
+    demo_refuse_ticket_merges "$ticket" "$base"
   done
 
   DEMO_NAME="$name"
@@ -598,6 +631,9 @@ demo_add_cmd() {
 
   for ticket in "${tickets[@]}"; do
     demo_check_ticket_source "$ticket"
+    # Avant tout : un ticket déjà présent dont la seule nouveauté est une
+    # fusion passerait pour « à jour » (ses empreintes ignorent les fusions).
+    demo_refuse_ticket_merges "$ticket" "$DEMO_BASE"
     if index=$(demo_ticket_index "$ticket"); then
       case "${DEMO_T_STATUS[$index]}" in
         up_to_date)
@@ -755,6 +791,7 @@ demo_refresh_cmd() {
         "$ticket n'est pas dans la démo $DEMO_BRANCH." \
         "Pour l'ajouter : jgit demo add $DEMO_NAME --from $ticket"
     fi
+    demo_refuse_ticket_merges "$ticket" "$DEMO_BASE"
     if [[ "${DEMO_T_STATUS[$index]}" == "up_to_date" ]]; then
       printf "%s est déjà à jour dans la démo.\n" "$ticket"
       continue
@@ -844,6 +881,7 @@ demo_rebase_cmd() {
         "$ticket n'est pas dans la démo $DEMO_BRANCH : il n'y a rien à reprendre." \
         "Pour l'ajouter : jgit demo add $DEMO_NAME --from $ticket"
     fi
+    demo_refuse_ticket_merges "$ticket" "$base"
   done
 
   # Le nouveau point de départ : livraisons de la nouvelle base.

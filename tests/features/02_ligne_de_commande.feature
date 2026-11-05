@@ -82,6 +82,7 @@ Fonctionnalité: Analyse de la ligne de commande
     Et la sortie contient "jgit util status"
     # Interface
     Et la sortie contient "jgit ui"
+    Et la sortie contient "jgit auto-update [--no-interaction] [--json]"
     Et la sortie contient "jgit util check_rebase [--from <branche>]"
     Et la sortie contient "jgit util verify_rebase --from <branche_source> --into <branche_cible>"
     # L'aide doit dire ce que util clean supprime réellement, y compris les

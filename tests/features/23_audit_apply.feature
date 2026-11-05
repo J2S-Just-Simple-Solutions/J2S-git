@@ -103,6 +103,30 @@ Fonctionnalité: Appliquer ce que l'état des lieux trouve faisable sans conflit
     Et la branche distante "feature/TEST-1" est inchangée
     Et la branche distante "demo/sprint12" est inchangée
 
+  # Une démo peut contenir n'importe quelle branche du serveur. jgit ne sait
+  # rebaser que feature/ et hotfix/ : pour les autres, l'audit dit qu'elles
+  # sont en retard, sans inventer de commande, et --apply les laisse de côté.
+  Scénario: Une branche ni feature ni hotfix d'une démo est à rebaser à la main
+    Étant donné je lance "jgit demo create vitrine --from __PR__feature/TEST-1 --no-interaction"
+    Et un autre développeur pousse le fichier "src/preprod.txt" contenant "préprod" sur la branche "develop" avec le message "Livraison en préprod"
+    Et je note l'état de la branche distante "__PR__feature/TEST-1"
+    Quand je lance "jgit audit demos vitrine --apply --dry-run --json" en lisant le JSON
+    Alors jgit se termine sans erreur
+    Et le JSON a "tickets[ticket=__PR__feature/TEST-1].type" égal à "__PR__feature"
+    Et le JSON a "tickets[ticket=__PR__feature/TEST-1].status" égal à "to_rebase"
+    Et le JSON a "tickets[ticket=__PR__feature/TEST-1].command" nul
+    Et le JSON a "demos[0].prerequisites[0].ticket" égal à "__PR__feature/TEST-1"
+    Et le JSON a "demos[0].prerequisites[0].command" nul
+    Et le JSON a "demos[0].actions[0].kind" égal à "ticket"
+    Et le JSON a "demos[0].actions[0].command" nul
+    Et le JSON a "demos[0].actions[0].reason" qui contient "d'abord rebaser la branche à la main"
+    Et le JSON a "apply.left_aside[0].ticket" égal à "__PR__feature/TEST-1"
+    Et le JSON a "apply.left_aside[0].reason" égal à "manual"
+    Et le JSON a "apply.left_aside[0].command" nul
+    Et la sortie contient "__PR__feature/TEST-1 — jgit ne sait rebaser que feature/ et hotfix/ : à rebaser à la main sur develop"
+    Et la sortie ne contient pas "jgit __PR__feature rebase"
+    Et la branche distante "__PR__feature/TEST-1" est inchangée
+
   # Un ticket créé avant que jgit enregistre la branche d'origine : sa base est
   # supposée, et une supposition ne réécrit pas une branche toute seule.
   Scénario: Un ticket à base supposée est listé, pas rebasé

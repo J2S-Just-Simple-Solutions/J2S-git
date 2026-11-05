@@ -120,9 +120,13 @@ depuis une branche `demo/…`, `jgit demo show` sans nom montre cette démo-là.
 jgit demo candidates client-a
 ```
 
-Liste les tickets du serveur (`feature/…`, `hotfix/…`) qui ne sont pas encore
-dans la démo, du plus récent au plus ancien, et met à part ceux déjà livrés dans
-la base — inutile de les ajouter. Pour une démo encore à créer,
+Liste les branches du serveur qui ne sont pas encore dans la démo, du plus
+récent au plus ancien, et met à part celles déjà livrées dans la base — inutile
+de les ajouter. Toutes les branches y sont : `feature/…`, `hotfix/…`, mais
+aussi `bugfix/…`, une branche `__PR__…` ou une branche sans préfixe ; seules
+`develop`, `master` et `main` en sont exclues. `--from` accepte les mêmes.
+Pour une branche ni `feature/` ni `hotfix/`, `jgit audit` dit quand elle est en
+retard, mais ne propose pas de commande : elle se rebase à la main. Pour une démo encore à créer,
 `jgit demo candidates --based-on main` compare les tickets à la base envisagée.
 
 ### `demo bases` — d'où une démo peut partir
@@ -433,6 +437,7 @@ L'ancienne reste consultable dans `jgit demo list --archived`.
 | Ticket au mauvais format ou absent du serveur | refuse : *« le format attendu est feature/\<ticket\> ou hotfix/\<ticket\> »* | |
 | `add` d'un ticket réécrit depuis son ajout | refuse et propose `refresh` | ses commits ne s'ajoutent plus à la suite |
 | `add` d'un ticket déjà livré dans la base | refuse | son code est déjà dans la démo |
+| Un ticket dont la branche contient un commit de **fusion** (une autre branche, ou sa base, fusionnée dedans) | `create`, `add`, `refresh` et `rebase --from` refusent, en listant les fusions, avant de rien modifier | une démo rejoue les commits un par un : ce que la fusion a fait entrer n'arriverait jamais dans la démo. Rendre la branche linéaire sur sa base (`git rebase`, ou un seul commit par `git merge --squash`), puis relancer |
 | `drop` d'un ticket absent de la démo | refuse | |
 | Démo inconnue | refuse ; si elle a des archives, les liste | |
 | Un commit de **fusion** a été poussé à la main sur la démo | `drop`, `refresh` et `rebase` refusent, sauf `--drop-foreign` | une fusion ne se rejoue pas commit par commit |

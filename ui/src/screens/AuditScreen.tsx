@@ -102,10 +102,10 @@ function ticketLines(lines: Line[], tickets: AuditTicket[]) {
         ticketBlock(lines, ticket, {
           text: `  ✖ ${ticket.ticket} — en retard de ${ticket.behind_base} commit(s) sur ${baseText(ticket)} : son rebase coince`,
           color: 'red',
-        }, ticket.command ?? '');
+        }, ticket.command ?? 'à rebaser à la main');
         break;
       case 'base_missing':
-        ticketBlock(lines, ticket, { text: `  ✖ ${ticket.ticket} — sa base ${ticket.base ?? '?'} n'existe plus`, color: 'red' }, ticket.command ?? '');
+        ticketBlock(lines, ticket, { text: `  ✖ ${ticket.ticket} — sa base ${ticket.base ?? '?'} n'existe plus`, color: 'red' }, ticket.command ?? 'à rebaser à la main');
         break;
       case 'no_init':
         if (ticket.demos.length === 0) break;
@@ -119,7 +119,7 @@ function ticketLines(lines: Line[], tickets: AuditTicket[]) {
         ticketBlock(lines, ticket, {
           text: `  ↻ ${ticket.ticket} — en retard de ${ticket.behind_base} commit(s) sur ${baseText(ticket)}, son rebase passe`,
           color: 'yellow',
-        }, ticket.command ?? '');
+        }, ticket.command ?? 'à rebaser à la main');
         break;
     }
   }
@@ -181,8 +181,9 @@ function demoLines(lines: Line[], demo: AuditDemo) {
   if (demo.actions.length > 0) {
     lines.push({ text: "    Dans l'ordre :" });
     for (const action of demo.actions) {
-      lines.push({ text: `      ${action.command}`, color: 'cyan' });
-      lines.push({ text: `        ${action.reason}`, dim: true });
+      // Sans commande (branche ni feature/ ni hotfix/), la raison suffit.
+      if (action.command) lines.push({ text: `      ${action.command}`, color: 'cyan' });
+      lines.push({ text: action.command ? `        ${action.reason}` : `      ${action.reason}`, dim: true });
     }
   }
   if (demo.held.length > 0) {
