@@ -729,10 +729,11 @@ Fichier : [`tests/features/17_demo_creation_et_lecture.feature`](../tests/featur
 | `demo create` | branche `demo/<nom>` sur la version serveur de la base, commit d'init avec sa base ; on reste sur sa branche |
 | `demo create --from …` | les tickets dans l'ordre demandé, leurs commits de travail sans leurs commits d'init |
 | `--based-on`, confirmation refusée, `--dry-run` | base choisie ; rien créé ; rien créé mais le plan est annoncé |
-| Démo existante, nom invalide, nom manquant, base inconnue, ticket mal formé ou absent, espace de travail sale | refus identifiés, rien créé |
+| Démo existante, nom invalide, nom manquant, base inconnue, branche de référence (`develop`, `main`) ou absente, espace de travail sale | refus identifiés, rien créé |
+| Branche ni `feature/` ni `hotfix/` (`bugfix/…`, sans préfixe) | elle entre dans la démo comme un ticket ; `type` est son préfixe, `null` sans `/` |
 | `demo list` | chaque démo, sa base, ses tickets, son état ; « Aucune démo » ; aucune identité git nécessaire |
 | `demo show` | ticket à jour, qui a avancé, **rebasé par jgit (toujours à jour)**, squashé (réécrit), supprimé, livré ; démo en retard sur sa base ; commit poussé à la main ; démo de la branche courante ; refus d'une démo inconnue |
-| `demo candidates` | tickets absents de la démo, livrés mis à part ; sans démo, tous les tickets ; `--based-on` compare à une base envisagée (livrés compris), refuse une base inconnue ou combinée à une démo |
+| `demo candidates` | branches absentes de la démo, livrés mis à part, ni la base ni la démo elle-même ; sans démo, toutes les branches du serveur (`bugfix/…`, `__PR__…` compris) sauf `develop`, `master`, `main` ; `--based-on` compare à une base envisagée (livrés compris), refuse une base inconnue ou combinée à une démo |
 | `demo bases` | préprod et production en tête, puis releases ; ni tickets, ni PR, ni démos |
 
 ---
@@ -747,6 +748,7 @@ Fichier : [`tests/features/18_demo_tickets.feature`](../tests/features/18_demo_t
 | `demo add` d'un ticket qui a avancé | seuls ses nouveaux commits, à la suite ; le ticket garde sa place |
 | `demo add` d'un ticket à jour | rien n'est publié |
 | `demo add` d'un ticket réécrit ou déjà livré | refus, avec la commande à lancer |
+| Ticket dont la branche contient un commit de fusion (autre branche ou base fusionnée) | `demo add`, `demo create`, `demo refresh` et `demo rebase --from` refusent (`ticket_has_merges`) en citant la fusion ; démo inchangée, aucune opération en pause ; une fusion arrivée sur un ticket déjà présent est refusée au lieu de passer pour « à jour » |
 | `demo drop` | reconstruction sans le ticket, ordre conservé ; premier ticket compris ; confirmation ; `--dry-run` ; ticket absent refusé |
 | Commit poussé à la main | survit au retrait ; `--drop-foreign` l'écarte |
 | `demo refresh` | un ticket squashé est repris en entier, à sa place ; à jour : rien n'est publié |
@@ -862,6 +864,7 @@ passe sans conflit : le rebase de mes tickets, puis la mise à jour des démos.
 | `--dry-run` | le plan, rien n'est appliqué |
 | Confirmation refusée | rien n'est appliqué |
 | Ticket à base supposée | laissé de côté (`inferred_base`) avec sa commande ; la démo partie de cette base est, elle, remise à jour |
+| Branche d'une démo ni `feature/` ni `hotfix/` | en retard : à rebaser à la main, sans commande inventée (`command` nul) ; laissée de côté (`manual`) |
 | Tout à jour | « Rien à appliquer sans conflit. » |
 | Espace de travail modifié | refusé (`worktree_dirty`), rien ne bouge |
 | `--apply` hors de `jgit audit` | refusé (`usage`) |
@@ -896,3 +899,24 @@ développeur résout le conflit avant, et le merge peut passer sans intervention
 | Une branche de travail supprimée sans que `__PR__` ait été publiée, ou l'inverse |
 | Un commit validé et déjà livré rejoué une seconde fois |
 | Un ticket qui ne pourrait plus repartir (`restart`) après ce rebase |
+
+
+## Migration de l'installation (script autonome)
+
+Le script macOS `Mettre-a-jour-jgit.sh` convertit un ZIP reconnu dans
+l'historique officiel de `main` en clone au même emplacement. Une sauvegarde
+complète précède le remplacement, et l'alias reste identique. Il peut aussi
+mettre à jour un clone sans fichier suivi modifié, en avance rapide, sur le
+commit présenté lors de la confirmation. Les fichiers non suivis ou ignorés
+sont conservés et ne doivent pas être écrasés par la mise à jour du clone.
+
+Les tests `cases/25_migration.test.sh` vérifient la confirmation, les refus,
+la conservation des fichiers et le retour arrière après échec ou interruption
+avec de vrais dépôts locaux et un pseudo-terminal. Le détail des exclusions
+et des limites est dans le [guide](guide/09-migration-installation.md).
+
+La commande `jgit auto-update` réutilise le script en désignant son installation
+réelle. Elle s'exécute avant les prérequis et la configuration d'un projet et
+fonctionne donc hors dépôt. Le moteur est chargé en mémoire avant de pouvoir
+être remplacé. Les tests vérifient aussi la sélection sans alias, le ZIP, le
+retour arrière, l'aide, les options refusées et le document JSON unique.

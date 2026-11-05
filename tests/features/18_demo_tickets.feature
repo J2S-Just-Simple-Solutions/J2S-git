@@ -114,6 +114,74 @@ Fonctionnalité: Ajouter, retirer et reprendre les tickets d'une démo
       | feature/TEST-1 |
       | feature/TEST-2 |
 
+  # --- tickets avec commits de fusion -----------------------------------------
+  # Une démo rejoue les commits d'un ticket un par un : ce qu'une fusion fait
+  # entrer dans la branche n'y arriverait jamais. jgit refuse le ticket avant de
+  # rien modifier, au lieu de publier une démo incomplète sans un mot.
+
+  Scénario: Un ticket qui a fusionné une autre branche ne s'ajoute pas
+    Étant donné je lance "jgit feature start TEST-3 --no-interaction --no-open"
+    Et je commite le fichier "src/feature3.txt" contenant "feature 3" avec le message "Ajoute la feature 3"
+    Et je merge la branche "feature/TEST-2" dans la branche courante
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Quand je lance "jgit demo add sprint12 --from feature/TEST-3 --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "ticket_has_merges"
+    Et le JSON a "error.message" qui contient "Merge feature/TEST-2"
+    Et le JSON a "error.hint" égal à "Rendez feature/TEST-3 linéaire sur develop (git rebase, ou un seul commit avec git merge --squash), puis relancez."
+    Et la branche distante "demo/sprint12" est inchangée
+    Et aucune opération jgit n'est en pause
+    Et je suis sur la branche "develop"
+
+  Scénario: Une démo ne se crée pas avec un ticket qui a fusionné une autre branche
+    Étant donné je lance "jgit feature start TEST-3 --no-interaction --no-open"
+    Et je merge la branche "feature/TEST-2" dans la branche courante
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Quand je lance "jgit demo create sprint13 --from feature/TEST-1 --from feature/TEST-3 --no-interaction"
+    Alors jgit se termine avec le code 2
+    Et la sortie contient "feature/TEST-3 contient des commits de fusion"
+    Et la sortie contient "Merge feature/TEST-2"
+    Et la branche distante "demo/sprint13" n'existe pas
+    Et aucune opération jgit n'est en pause
+
+  # Même règle que « jgit feature rebase » : une fusion de la base n'est pas
+  # plus rejouable qu'une autre (sa résolution de conflit serait perdue).
+  Scénario: Un ticket qui a fusionné sa base ne s'ajoute pas non plus
+    Étant donné je lance "jgit feature start TEST-3 --no-interaction --no-open"
+    Et je commite le fichier "src/feature3.txt" contenant "feature 3" avec le message "Ajoute la feature 3"
+    Et un autre développeur pousse le fichier "src/preprod.txt" contenant "préprod" sur la branche "develop" avec le message "Livraison concurrente"
+    Et je récupère les nouveautés du remote
+    Et je merge la branche "origin/develop" dans la branche courante
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Quand je lance "jgit demo add sprint12 --from feature/TEST-3 --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "ticket_has_merges"
+    Et le JSON a "error.message" qui contient "Merge origin/develop"
+    Et la branche distante "demo/sprint12" est inchangée
+
+  # Les empreintes d'un ticket ignorent ses fusions : sans le garde-fou, add
+  # répondait « déjà à jour » et le contenu fusionné n'arrivait jamais.
+  Scénario: Une fusion arrivée sur un ticket déjà dans la démo est refusée, pas ignorée
+    Étant donné je me place sur la branche "feature/TEST-1"
+    Et je merge la branche "feature/TEST-2" dans la branche courante
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Quand je lance "jgit demo add sprint12 --from feature/TEST-1 --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "ticket_has_merges"
+    Et la branche distante "demo/sprint12" est inchangée
+    Quand je lance "jgit demo refresh sprint12 --from feature/TEST-1 --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "ticket_has_merges"
+    Quand je lance "jgit demo rebase sprint12 --from feature/TEST-1 --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "ticket_has_merges"
+    Et la branche distante "demo/sprint12" est inchangée
+    Et aucune opération jgit n'est en pause
+
   # --- demo drop -------------------------------------------------------------
 
   Scénario: Un ticket est retiré, les autres gardent leur ordre

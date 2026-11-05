@@ -8,6 +8,7 @@ le projet — code, messages, documentation, tests — est **en français**.
 
 | Fichier | Rôle |
 | --- | --- |
+| `Mettre-a-jour-jgit.sh` | moteur autonome de migration ZIP et de `jgit auto-update` sur macOS |
 | `jgit.sh` | point d'entrée : options, aide (`help()`), aiguillage des commandes |
 | `functions.sh` | socle : couleurs, garde-fous, branche d'origine, `switch_branch` (seul `git checkout` du dépôt) |
 | `json.sh` | contrat `--json` : fragments JSON, `json_emit`, `jgit_fail` |

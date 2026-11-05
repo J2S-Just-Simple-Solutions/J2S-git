@@ -381,7 +381,8 @@ test_passed
 
 ## Scénarios existants
 
-306 scénarios répartis par domaine fonctionnel.
+306 scénarios Gherkin répartis par domaine fonctionnel, complétés par 38 tests
+de migration de l’installation.
 
 | Fichier | Couverture |
 | --- | --- |
@@ -409,6 +410,31 @@ test_passed
 | `22_audit.feature` | `audit` : tout à jour ; base avancée (tickets à rebaser d'abord, puis la démo) ; rebase d'un ticket qui coince (qui doit intervenir, détail dans le JSON, démo qui le met de côté et le reprendra par `--from`) ; seuls les auteurs des commits en conflit sont appelés ; titre de la PR ; ancien ticket sans base enregistrée (base supposée, commande avec `--based-on` qui passe) ; ticket sans commit d'init ; ticket rebasé par son auteur repris par `--from` ; conflits entre tickets dans la démo, tous signalés ; tickets hors démo comptés par personne ; base disparue ; ticket livré ; rien n'est touché ; démos archivées et à l'ancien format ; arguments |
 | `23_audit_apply.feature` | `audit --apply` : mes tickets rebasés puis la démo (retour sur la branche de départ, branches créées retirées), tickets des collègues laissés de côté, ce qui coince laissé de côté et le reste appliqué, `--dry-run`, confirmation refusée, base supposée laissée de côté, rien à appliquer, espace de travail modifié, `--apply` hors de l'audit |
 | `24_rebase_pr_validee.feature` | `feature rebase` après le squash-merge : `__PR__` seule reconstruite, branche de travail supprimée ou déjà absente, conflit en pause puis `continue`, `restart` ensuite, PR rouverte et revalidée, `hotfix` ; refus (travail ajouté après la validation, poussé ou non ; PR jamais validée) ; `__PR__` déjà mergée : branches supprimées, ou rien si refusé |
+
+### Migration et mise à jour de l'installation
+
+`cases/25_migration.test.sh` pilote `migration.py` : 39 tests couvrent la
+reconnaissance du ZIP malgré ses fichiers suivis ignorés, les différences non
+masquées par `.gitignore`, la sauvegarde, l'annulation, la restauration après
+échec ou signal ; les clones à jour, l'avance rapide, la divergence, la branche
+de travail, les fichiers non suivis conservés sans être écrasés, les fichiers ignorés et les changements pendant la
+confirmation ; le fichier `.sh` lancé seul par Bash sans droit d’exécution ; les alias, l'origine officielle, SSH et les liens symboliques.
+
+Les 16 tests `AutoUpdate` lancent le vrai `jgit.sh` installé dans le dépôt
+jetable : mise à jour hors projet sans alias, alias différent ignoré, ZIP,
+remplacement du moteur, restauration, aide sans Git, moteur manquant, options
+refusées, confirmation par défaut sans interaction et document JSON unique
+sur succès et erreur, lien symbolique, configuration projet ignorée et
+contrôle des processus concurrents.
+
+Lancer `./tests/run.sh migration -v`. Le pilote utilise un vrai pseudo-terminal
+et des dépôts Git locaux jetables. `HOME` et la configuration Git sont isolés ;
+une règle Git `insteadOf` redirige l'adresse officielle vers le dépôt local.
+Le système détecté, l'utilisateur, les processus et SSH sont simulés pour jouer
+les mêmes tests sous macOS et Linux. Les tests de panne remplacent aussi `mv`
+pour provoquer l'échec ou le signal. Python n'est requis que par les tests.
+Le script reste autonome et destiné à macOS ; son aide figure en tête du
+fichier et dans le [guide de migration](../docs/guide/09-migration-installation.md).
 
 ### Écrire une fixture : reproduire un état réel, jamais le fabriquer
 
