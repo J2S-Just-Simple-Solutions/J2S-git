@@ -108,7 +108,7 @@ release_start() {
     else
         echo "Release does not exists, create it..."
         switch_branch "$branch" create
-        commit_init_with_based_on "$prefix_init_commit release ${branch}. $suffix_init_commit" "$branch" "$prod_branch"
+        commit_init_with_based_on "$(jgit_subject init_release "$branch")" "$branch" "$prod_branch"
         git push "$j2s_remote" "$branch"
     fi
 
@@ -147,7 +147,7 @@ release_merge_single() {
     local work_branch="${resolved_branch#$prefix_PR}"
     local last_commit_subject
     last_commit_subject=$(git log -1 --pretty=%s "$merge_source")
-    if [[ "$last_commit_subject" == "$prefix_init_commit $work_branch $suffix_init_commit" ]]; then
+    if jgit_subject_is "$last_commit_subject" init_pr "$work_branch"; then
         printf "${C_RED}/!\\ La branche '%s' ne contient que le commit d'initialisation. Merci de valider et merger la PR avant d'intégrer dans la release.${C_RESET}\n" "$resolved_branch"
         exit_safe 1
     fi
@@ -156,7 +156,7 @@ release_merge_single() {
     # Un merge en conflit laisse le dépôt à mi-chemin : sans contrôle du code de
     # retour, les sources suivantes échouaient à leur tour et la release était
     # tout de même poussée, amputée de tout ce qui suit. On s'arrête net.
-    if ! git merge --no-ff "$merge_source" -m "$prefix_commit Release merge feature branch : $resolved_branch"; then
+    if ! git merge --no-ff "$merge_source" -m "$(jgit_subject release_merge "$resolved_branch")"; then
         git merge --abort >/dev/null 2>&1
         printf "${C_RED}Conflit lors de l'intégration de %s dans %s.${C_RESET}\n" "$resolved_branch" "$release_branch" >&2
         printf "Le merge a été annulé : la release n'a pas été poussée et rien n'est perdu.\n" >&2
@@ -282,7 +282,7 @@ release_finish() {
     local last_commit_subject
     last_commit_subject=$(git log -1 --pretty=%s)
 
-    if [[ $last_commit_subject == "$prefix_init_commit release ${branch}. $suffix_init_commit" ]]; then
+    if jgit_subject_is "$last_commit_subject" init_release "$branch"; then
         echo "It seems that the release is empty..."
         exit_safe 1
     fi

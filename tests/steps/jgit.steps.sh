@@ -470,6 +470,11 @@ step_merge_branche() {
 }
 step_def "je merge la branche {chaine} dans la branche courante" step_merge_branche
 
+step_reprend_commit() {
+    repo_cherry_pick "$1"
+}
+step_def "je reprends le commit {chaine} sur la branche courante" step_reprend_commit
+
 step_sans_remote() {
     repo_remove_remote
 }
@@ -493,6 +498,11 @@ step_personne_pousse() {
     github_commit_file_as "$1" "$4" "$2" "$3" "$5"
 }
 step_def "{chaine} pousse le fichier {chaine} contenant {texte} sur la branche {chaine} avec le message {chaine}" step_personne_pousse
+
+step_renomme_branche_github() {
+    github_rename_branch "$1" "$2"
+}
+step_def "la branche {chaine} est renommée en {chaine} sur GitHub" step_renomme_branche_github
 
 step_note_etat_branche_distante() {
     remote_snapshot_save "$1"

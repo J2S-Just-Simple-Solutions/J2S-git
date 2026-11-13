@@ -427,7 +427,8 @@ replay_restamp_if_init() {
 
   if [[ -n "$JGIT_RESTAMP_BRANCH" && "$(git rev-parse HEAD)" != "$head_before" ]]; then
     subject=$(git log -n 1 --format=%s HEAD)
-    if [[ "$subject" == *"$suffix_init_commit"* ]]; then
+    # Seul le commit d'init de la branche reconstruite reçoit la nouvelle base.
+    if is_init_subject_of "$subject" "$JGIT_RESTAMP_BRANCH"; then
       restamp_based_on_head "$JGIT_RESTAMP_BRANCH" "$JGIT_RESTAMP_BASED_ON"
     fi
   fi

@@ -376,6 +376,7 @@ l'essentiel :
 | `history_diverged` | 1 | la branche de travail ne descend plus de sa branche de PR, alors que la PR n'a jamais été validée |
 | `pr_validated_new_work` | 2 | PR validée, mais la branche de travail porte du code absent de la branche de PR : rien n'est modifié |
 | `pr_not_validated` | 2 | branche de travail disparue et PR jamais validée : `hint` donne la commande qui supprime la branche de PR |
+| `init_commit_missing` | 2 | la branche de PR ne contient pas le commit d'init **de ce ticket** (branche renommée ou créée hors de jgit) : rien n'est modifié |
 | `cancelled` | 1 | une confirmation a été refusée |
 | `conflict`, `unresolved_files`, `conflict_markers_left` | 3 | conflit |
 | `lease_rejected`, `push_failed` | 4, 1 | publication refusée : quelqu'un a poussé entre-temps, ou le serveur a refusé |

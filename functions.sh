@@ -432,16 +432,176 @@ get_reference_branch() {
     return 1
 }
 
-# Renvoie le dernier commit dont une ligne du message commence exactement par
-# le texte donné (commit d'init jgit le plus souvent).
+###############################################
+#            Sujets des commits jgit
+###############################################
 #
-# Le texte est cherché au caractère près : ses crochets ne sont pas une classe
-# de caractères. L'expression reste une BRE POSIX, sans extension GNU, pour que
-# git l'interprète de la même façon sur macOS et sous Linux.
-get_last_commit_with_pattern() {
-  local pattern="$1"
+# Seul endroit où s'écrit et se reconnaît le sujet d'un commit posé par jgit.
+# La cartographie (qui écrit quoi, quand, et qui le relit) et les règles sont
+# dans docs/08-commits-jgit.md ; en bref :
+#
+#   - le sujet fait foi, jamais le message entier : un message de squash GitHub
+#     liste les sujets des commits de la PR, un commit repris garde le sien ;
+#   - un sujet n'est reconnu que s'il est exactement celui que jgit_subject
+#     écrirait : l'analyse recompose et compare, elle ne recopie aucun texte ;
+#   - un commit d'init n'est celui que de la branche qu'il nomme.
 
-  git log --basic-regexp --grep="^$(escape_basic_regex "$pattern")" -n 1 --pretty=format:"%H"
+# Les sortes de sujets que jgit écrit :
+#   init_pr <T>          [jgit] INIT <T> [empty_commit]           (branche __PR__<T>)
+#   start <T>            [jgit] commit for automatic PR creation … START <T> [empty_commit]
+#   restart <T>          idem avec RESTART                        (branche <T>)
+#   init_release <rel>   [jgit] INIT release <rel>. [empty_commit]
+#   release_merge <b>    [jgit] Release merge feature branch : <b>
+#   init_demo <démo>     [jgit] INIT demo <démo> [empty_commit]
+#   demo_marker <T>      [jgit] DEMO ticket <T> [empty_commit]
+#
+# Sans sous-processus (printf -v) : elle sert dans des boucles sur des centaines
+# de commits.
+#
+#   jgit_subject_into <variable> <sorte> <nom>
+jgit_subject_into() {
+  local var="$1"
+  local kind="$2"
+  local name="$3"
+  local start_text="commit for automatic PR creation - this commit will be deleted by squash and merge -"
+
+  case "$kind" in
+    init_pr)       printf -v "$var" '%s %s %s' "$prefix_init_commit" "$name" "$suffix_init_commit" ;;
+    start)         printf -v "$var" '%s %s START %s %s' "$prefix_commit" "$start_text" "$name" "$suffix_init_commit" ;;
+    restart)       printf -v "$var" '%s %s RESTART %s %s' "$prefix_commit" "$start_text" "$name" "$suffix_init_commit" ;;
+    init_release)  printf -v "$var" '%s release %s. %s' "$prefix_init_commit" "$name" "$suffix_init_commit" ;;
+    release_merge) printf -v "$var" '%s Release merge feature branch : %s' "$prefix_commit" "$name" ;;
+    init_demo)     printf -v "$var" '%s demo %s %s' "$prefix_init_commit" "$name" "$suffix_init_commit" ;;
+    demo_marker)   printf -v "$var" '%s DEMO ticket %s %s' "$prefix_commit" "$name" "$suffix_init_commit" ;;
+    *)             printf -v "$var" '%s' "" ; return 1 ;;
+  esac
+}
+
+# Le sujet, sur la sortie standard (pour git commit -m "$(jgit_subject …)").
+#   jgit_subject <sorte> <nom>
+jgit_subject() {
+  local subject
+  jgit_subject_into subject "$1" "$2" || return 1
+  printf '%s' "$subject"
+}
+
+# Le sujet donné est-il exactement celui de cette sorte, pour ce nom ?
+#   jgit_subject_is <sujet> <sorte> <nom>
+jgit_subject_is() {
+  local expected
+  jgit_subject_into expected "$2" "$3" || return 1
+  [[ "$1" == "$expected" ]]
+}
+
+# Analyse un sujet : JGIT_SUBJECT_KIND et JGIT_SUBJECT_NAME, vides si ce n'est
+# pas un sujet que jgit écrit (code 1). Le nom extrait est recomposé et comparé :
+# un sujet qui ressemble sans être identique n'est pas reconnu. Les formats
+# anciens, encore lus, ont leur sorte : legacy_release_merge (« [jgit] Merge
+# feature branch : <b> », suivi ou non de « [empty_commit] »). Les démos du
+# premier format restent lues par demo_read_legacy.
+#
+#   jgit_subject_parse <sujet>
+jgit_subject_parse() {
+  local subject="$1"
+  local kind="" name="" rest sfx=" $suffix_init_commit"
+
+  JGIT_SUBJECT_KIND=""
+  JGIT_SUBJECT_NAME=""
+  case "$subject" in
+    "$prefix_commit "*) ;;
+    *) return 1 ;;
+  esac
+
+  case "$subject" in
+    "$prefix_init_commit demo "*"$sfx")
+      kind=init_demo; rest="${subject#"$prefix_init_commit demo "}"; name="${rest%"$sfx"}" ;;
+    "$prefix_init_commit release "*".$sfx")
+      kind=init_release; rest="${subject#"$prefix_init_commit release "}"; name="${rest%".$sfx"}" ;;
+    "$prefix_init_commit "*"$sfx")
+      kind=init_pr; rest="${subject#"$prefix_init_commit "}"; name="${rest%"$sfx"}" ;;
+    "$prefix_commit "*" RESTART "*"$sfx")
+      kind=restart; rest="${subject##*" RESTART "}"; name="${rest%"$sfx"}" ;;
+    "$prefix_commit "*" START "*"$sfx")
+      kind=start; rest="${subject##*" START "}"; name="${rest%"$sfx"}" ;;
+    "$prefix_commit DEMO ticket "*"$sfx")
+      kind=demo_marker; rest="${subject#"$prefix_commit DEMO ticket "}"; name="${rest%"$sfx"}" ;;
+    "$prefix_commit Release merge feature branch : "*)
+      kind=release_merge; name="${subject#"$prefix_commit Release merge feature branch : "}" ;;
+    "$prefix_commit Merge feature branch : "*)
+      name="${subject#"$prefix_commit Merge feature branch : "}"; name="${name%"$sfx"}"
+      [[ -n "$name" && "$name" != *" "* ]] || return 1
+      JGIT_SUBJECT_KIND=legacy_release_merge
+      JGIT_SUBJECT_NAME="$name"
+      return 0 ;;
+    *) return 1 ;;
+  esac
+
+  # Un nom de branche n'a pas d'espace ; et le sujet doit être exactement celui
+  # que jgit écrirait.
+  [[ -n "$name" && "$name" != *" "* ]] || return 1
+  jgit_subject_is "$subject" "$kind" "$name" || return 1
+  JGIT_SUBJECT_KIND="$kind"
+  JGIT_SUBJECT_NAME="$name"
+}
+
+# Ce sujet est-il un commit d'init de ce ticket ? INIT nomme le ticket sans son
+# préfixe de PR : il est celui de <T> comme de __PR__<T> (son trailer jgit-branch
+# dit __PR__<T>). START et RESTART n'existent que sur la branche de travail <T>.
+#
+#   is_init_subject_of <sujet> <ticket>
+is_init_subject_of() {
+  local ticket="$2"
+
+  jgit_subject_parse "$1" || return 1
+  case "$JGIT_SUBJECT_KIND" in
+    init_pr)       [[ "$JGIT_SUBJECT_NAME" == "${ticket#"$prefix_PR"}" ]] ;;
+    start|restart) [[ "$JGIT_SUBJECT_NAME" == "$ticket" ]] ;;
+    *)             return 1 ;;
+  esac
+}
+
+# Signale une incohérence sans bloquer la commande : personne ne doit pouvoir
+# l'ignorer, mais on ne refuse pas tant que l'impact n'est pas mesuré
+# (docs/08-commits-jgit.md, décision 2). Sur la sortie d'erreur : visible aussi
+# en --json, et depuis une substitution de commande.
+#
+#   jgit_alert <message>
+jgit_alert() {
+  printf "%s[alerte] %s%s\n" "$(jgit_tput setaf 3)" "$1" "$(jgit_tput sgr0)" >&2
+}
+
+# Le trailer jgit-branch d'un commit d'init contredit son sujet.
+#   jgit_alert_init_trailer <sha> <ticket> <valeur du trailer>
+jgit_alert_init_trailer() {
+  jgit_alert "Le commit d'init ${1:0:10} de $2 porte « $trailer_branch: $3 » : son sujet et sa branche d'origine se contredisent. Il est retenu d'après son sujet ; vérifiez l'historique de la branche."
+}
+
+# Dernier commit d'init d'un ticket (is_init_subject_of) sur la lignée principale
+# d'une révision ou d'une plage. Rien s'il n'en a pas : branche créée ou renommée
+# hors de jgit, ou dont seuls des messages citent un commit d'init. Le trailer
+# jgit-branch, quand il existe, doit désigner <T> ou __PR__<T> : sinon, alerte.
+#
+#   last_init_commit_of <ticket> <révision ou plage>
+last_init_commit_of() {
+  local ticket="$1"
+  local range="$2"
+  local name="${ticket#"$prefix_PR"}"
+  local sha subject trailer
+
+  # --grep ne fait que présélectionner (il lit tout le message) : le sujet tranche.
+  while IFS=$'\037' read -r sha subject trailer; do
+    if is_init_subject_of "$subject" "$ticket"; then
+      trailer="${trailer##*,}"
+      if [[ -n "$trailer" && "$trailer" != "$name" && "$trailer" != "$prefix_PR$name" ]]; then
+        jgit_alert_init_trailer "$sha" "$ticket" "$trailer"
+      fi
+      printf '%s' "$sha"
+      return 0
+    fi
+  done < <(git log --first-parent \
+             --format="%H%x1f%s%x1f%(trailers:key=$trailer_branch,valueonly,separator=%x2C)" \
+             -F --grep="$name $suffix_init_commit" "$range" 2>/dev/null)
+  return 0
 }
 
 # Fonction pour lister tous les commits depuis celui trouvé (incluant ce commit)
@@ -624,18 +784,22 @@ restamp_based_on_head() {
 #            Squash des commits
 ###############################################
 
-# Renvoie l'index (base 0) du dernier commit d'init jgit (commit vide) trouvé dans la
-# liste de commits fournie (ordonnée du plus ancien au plus récent).
-# Renvoie -1 si aucun commit d'init n'est présent dans la liste.
+# Renvoie l'index (base 0) du dernier commit d'init de ce ticket
+# (is_init_subject_of) dans la liste de commits fournie (ordonnée du plus ancien
+# au plus récent). Renvoie -1 si la liste n'en contient pas. Un autre commit vide
+# de jgit (repère de démo, init d'un autre ticket repris) ne compte pas.
+#
+#   find_last_init_commit_index <ticket> <commit>...
 find_last_init_commit_index() {
+  local ticket="$1"
+  shift
   local commits=("$@")
   local index=-1
-  local i
+  local i subject
 
   for i in "${!commits[@]}"; do
-    local subject
     subject=$(git log -n 1 --pretty=format:"%s" "${commits[$i]}" 2>/dev/null)
-    if [[ "$subject" == *"$suffix_init_commit"* ]]; then
+    if is_init_subject_of "$subject" "$ticket"; then
       index=$i
     fi
   done

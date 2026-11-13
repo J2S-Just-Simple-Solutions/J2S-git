@@ -64,12 +64,13 @@ demo_name_is_valid() {
   git check-ref-format --branch "$DEMO_PREFIX$name" >/dev/null 2>&1
 }
 
+# Sujets de la démo : écrits par le module de functions.sh (« Sujets des commits jgit »).
 demo_init_subject() {
-  printf '%s demo %s %s' "$prefix_init_commit" "$1" "$suffix_init_commit"
+  jgit_subject init_demo "$1"
 }
 
 demo_marker_subject() {
-  printf '%s DEMO ticket %s %s' "$prefix_commit" "$1" "$suffix_init_commit"
+  jgit_subject demo_marker "$1"
 }
 
 demo_remote_ref() {
@@ -226,8 +227,7 @@ demo_require_target() {
 # Code 1 si la branche n'a pas de commit d'init de démo.
 demo_read() {
   local branch="$1"
-  local marker_re='^\[jgit\] DEMO ticket ([^ ]+) \[empty_commit\]$'
-  local sha parents email date subject fp
+  local sha parents email date subject marked fp
   local current_fps="" current_shas=""
 
   DEMO_REF=$(demo_remote_ref "$branch")
@@ -240,24 +240,27 @@ demo_read() {
   DEMO_TICKETS=()
   DEMO_FOREIGN_SHAS=""
 
-  DEMO_INIT=$(git log --first-parent -n 1 --format=%H --basic-regexp \
-    --grep="^$(escape_basic_regex "$prefix_init_commit demo ")" "$DEMO_REF" 2>/dev/null)
+  DEMO_INIT=$(demo_last_init_commit "$DEMO_REF")
   [[ -n "$DEMO_INIT" ]] || return 1
 
   DEMO_BASE=$(git log -n 1 --format=%B "$DEMO_INIT" | sed -n "s/^$trailer_based_on: *//p" | tail -n 1)
 
-  while IFS=$'\037' read -r -d '' sha parents email date subject; do
+  while IFS=$'\037' read -r -d '' sha parents email date subject marked; do
     if [[ "$parents" == *" "* ]]; then
       # Un commit de fusion n'appartient à aucune recette.
       DEMO_FOREIGN_SHAS="$DEMO_FOREIGN_SHAS$sha"$'\n'
       continue
     fi
-    if [[ "$subject" =~ $marker_re ]]; then
-      DEMO_SEG_TICKET[${#DEMO_SEG_TICKET[@]}]="${BASH_REMATCH[1]}"
+    if jgit_subject_parse "$subject" && [[ "$JGIT_SUBJECT_KIND" == demo_marker ]]; then
+      marked="${marked##*,}"
+      if [[ -n "$marked" && "$marked" != "$JGIT_SUBJECT_NAME" ]]; then
+        jgit_alert "Le repère ${sha:0:10} de la démo $branch clôt le ticket $JGIT_SUBJECT_NAME mais porte « $trailer_demo_ticket: $marked » : il est lu d'après son sujet ; vérifiez la démo."
+      fi
+      DEMO_SEG_TICKET[${#DEMO_SEG_TICKET[@]}]="$JGIT_SUBJECT_NAME"
       DEMO_SEG_FPS[${#DEMO_SEG_FPS[@]}]="$current_fps"
       DEMO_SEG_SHAS[${#DEMO_SEG_SHAS[@]}]="$current_shas"
       DEMO_SEG_MARKER[${#DEMO_SEG_MARKER[@]}]="$sha"
-      demo_add_unique_ticket "${BASH_REMATCH[1]}"
+      demo_add_unique_ticket "$JGIT_SUBJECT_NAME"
       current_fps=""
       current_shas=""
       continue
@@ -266,10 +269,27 @@ demo_read() {
     current_fps="$current_fps$fp"$'\n'
     current_shas="$current_shas$sha"$'\n'
   done < <(git log -z --first-parent --reverse \
-             --format='%H%x1f%P%x1f%ae%x1f%at%x1f%s' "$DEMO_INIT..$DEMO_REF" 2>/dev/null)
+             --format="%H%x1f%P%x1f%ae%x1f%at%x1f%s%x1f%(trailers:key=$trailer_demo_ticket,valueonly,separator=%x2C)" \
+             "$DEMO_INIT..$DEMO_REF" 2>/dev/null)
 
   # Ce qui suit le dernier repère n'a été posé par aucun ticket.
   DEMO_FOREIGN_SHAS="$DEMO_FOREIGN_SHAS$current_shas"
+  return 0
+}
+
+# Dernier commit d'init de démo sur la lignée principale (au sujet près). Le nom
+# qu'il porte n'est pas comparé à la branche : une démo archivée
+# (demo-archive/…) garde l'init de demo/<nom>.
+#   demo_last_init_commit <ref>
+demo_last_init_commit() {
+  local sha subject
+
+  while IFS=$'\037' read -r sha subject; do
+    if jgit_subject_parse "$subject" && [[ "$JGIT_SUBJECT_KIND" == init_demo ]]; then
+      printf '%s' "$sha"
+      return 0
+    fi
+  done < <(git log --first-parent --format='%H%x1f%s' -F --grep="$prefix_init_commit demo " "$1" 2>/dev/null)
   return 0
 }
 
@@ -320,7 +340,9 @@ demo_read_legacy() {
 ###############################################
 
 # Plage git des commits propres d'un ticket : ceux de sa version serveur qui
-# suivent son dernier commit d'init (START, ou RESTART).
+# suivent son dernier commit d'init (START, ou RESTART) — le sien, au sujet
+# près (last_init_commit_of) : un message de squash qui cite un commit d'init,
+# ou le commit d'init d'un autre ticket hérité de la base, ne délimite rien.
 #
 #   demo_ticket_range <ticket> <base>
 #
@@ -334,7 +356,7 @@ demo_ticket_range() {
   ref=$(demo_remote_ref "$ticket")
   git show-ref --verify --quiet "$ref" || return 1
 
-  start=$(git log --first-parent -n 1 --format=%H -F --grep="$suffix_init_commit" "$ref" 2>/dev/null)
+  start=$(last_init_commit_of "$ticket" "$ref")
   if [[ -n "$start" ]]; then
     printf '%s' "$start..$ref"
   elif [[ -n "$base" ]] && git show-ref --verify --quiet "$(demo_remote_ref "$base")"; then
@@ -439,7 +461,7 @@ DEMO_DELIVERED_TICKETS=""
 
 demo_delivered_cache_load() {
   local base="$1"
-  local p e
+  local subject
 
   [[ "$DEMO_DELIVERED_BASE" == "$base" ]] && return 0
   DEMO_DELIVERED_BASE="$base"
@@ -447,20 +469,23 @@ demo_delivered_cache_load() {
   [[ -n "$base" ]] || return 0
   git show-ref --verify --quiet "$(demo_remote_ref "$base")" || return 0
 
-  p=$(escape_basic_regex "$prefix_commit")
-  e=$(escape_basic_regex "$suffix_init_commit")
-
-  # Sujets exacts : « [jgit] INIT <ticket> [empty_commit] » (commit d'init de
-  # la branche de PR), « [jgit] Release merge feature branch : __PR__<ticket> »,
-  # et l'ancien « [jgit] Merge feature branch : __PR__<ticket> [[empty_commit]] ».
-  DEMO_DELIVERED_TICKETS=$'\n'$(git log "$(demo_remote_ref "$base")" --format=%s -F \
-    --grep="$prefix_init_commit " \
-    --grep="Release merge feature branch : " \
-    --grep="Merge feature branch : " 2>/dev/null \
-    | sed -n \
-        -e "s/^$p INIT \\([^ ]*\\) $e\$/\\1/p" \
-        -e "s/^$p Release merge feature branch : $prefix_PR\\([^ ]*\\)\$/\\1/p" \
-        -e "s/^$p Merge feature branch : $prefix_PR\\([^ ]*\\)\\( $e\\)\\{0,1\\}\$/\\1/p")$'\n'
+  # Sujets reconnus par jgit_subject_parse : commit d'init de la branche de PR
+  # (init_pr), merge de release (release_merge) et son ancien format
+  # (legacy_release_merge), ces deux derniers sur une branche __PR__.
+  DEMO_DELIVERED_TICKETS=$'\n'
+  while IFS= read -r subject; do
+    jgit_subject_parse "$subject" || continue
+    case "$JGIT_SUBJECT_KIND" in
+      init_pr)
+        DEMO_DELIVERED_TICKETS="$DEMO_DELIVERED_TICKETS$JGIT_SUBJECT_NAME"$'\n' ;;
+      release_merge|legacy_release_merge)
+        [[ "$JGIT_SUBJECT_NAME" == "$prefix_PR"* ]] || continue
+        DEMO_DELIVERED_TICKETS="$DEMO_DELIVERED_TICKETS${JGIT_SUBJECT_NAME#"$prefix_PR"}"$'\n' ;;
+    esac
+  done < <(git log "$(demo_remote_ref "$base")" --format=%s -F \
+             --grep="$prefix_init_commit " \
+             --grep="Release merge feature branch : " \
+             --grep="Merge feature branch : " 2>/dev/null)
 }
 
 # Vrai si le ticket est livré dans la base (cache chargé au préalable).

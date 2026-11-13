@@ -291,6 +291,10 @@ def step_supprime_branche_locale(context):
 def step_merge_branche(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
+@given("je reprends le commit {string} sur la branche courante")
+def step_reprend_commit(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
 @given("le dépôt n'a plus de remote")
 def step_sans_remote(context):
     """Définie dans tests/steps/jgit.steps.sh."""
@@ -305,6 +309,10 @@ def step_autre_dev_pousse(context):
 
 @given("{string} pousse le fichier {string} contenant {string} sur la branche {string} avec le message {string}")
 def step_personne_pousse(context):
+    """Définie dans tests/steps/jgit.steps.sh."""
+
+@given("la branche {string} est renommée en {string} sur GitHub")
+def step_renomme_branche_github(context):
     """Définie dans tests/steps/jgit.steps.sh."""
 
 @given("je note l'état de la branche distante {string}")
