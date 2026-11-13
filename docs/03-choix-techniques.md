@@ -452,6 +452,18 @@ d'interface au clavier digne de ce nom.
 - Ouvrir un éditeur ou Claude Code demande le terminal : l'interface se démonte,
   le lanceur (`cli.tsx`) exécute la commande, puis relance l'interface, qui
   relit `jgit util status`.
+- Claude Code est installé sur le poste, pas dans l'image (il lui faut le
+  compte et la configuration `~/.claude` de la personne). Quand `claude` existe
+  sur le poste, `jgit ui` monte un dossier temporaire et le nomme dans
+  `JGIT_UI_CLAUDE_RELAY` : l'interface y écrit la demande et s'arrête, `ui.sh`
+  lance `claude` sur le poste, dans le dossier courant, puis relance le
+  conteneur, qui retrouve l'opération en pause. Sans ce relais, l'écran de
+  conflit n'offrait jamais Claude dans Docker.
+- Le skill `jgit-demo` est livré avec jgit (`$JGIT_HOME/.claude/skills`). Si
+  ni le projet ni `~/.claude/skills` ne l'installent, `jgit ui` le donne à
+  Claude au lancement (`--add-dir` et son chemin dans la demande) : sans cela,
+  Claude résolvait « de façon standard », sans les règles des démos. Claude
+  rappelle en fin de résolution que `/exit` ramène à l'interface.
 - Livraison dans Docker : image `j2s/jgit:local` (Debian, Node 22, git,
   openssh, nano, tzdata), construite par `docker-compose.yml`, lancée par
   `jgit ui` avec `docker run`. Le dépôt est monté au même chemin, le conteneur

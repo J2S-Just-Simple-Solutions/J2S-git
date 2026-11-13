@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { render } from 'ink';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { App } from './app.js';
 import type { SpawnRequest } from './app.js';
 import type { Flash } from './components.js';
@@ -33,6 +34,12 @@ async function stage(file: string): Promise<void> {
   execFileSync('git', ['add', '--', file], { cwd, stdio: 'ignore' });
 }
 
+// Dans le conteneur (jgit ui), Claude Code n'est pas installé : il tourne sur
+// le poste. ui.sh donne alors un fichier de relais ; l'interface y écrit la
+// demande et s'arrête, ui.sh lance claude sur le poste puis relance l'interface.
+const claudeRelay = process.env.JGIT_UI_CLAUDE_RELAY;
+const claudeLocal = commandExists('claude');
+
 // Exécute ce que l'interface a demandé, terminal rendu. Renvoie le message à
 // afficher au retour.
 function runSpawn(request: SpawnRequest): Flash | null {
@@ -51,12 +58,40 @@ function runSpawn(request: SpawnRequest): Flash | null {
     execFileSync('git', ['add', '--', request.file], { cwd, stdio: 'ignore' });
     return { kind: 'success', text: `${request.file} est marqué résolu.` };
   }
-  spawnSync('claude', [request.prompt], { cwd, stdio: 'inherit' });
+  process.stderr.write('Claude Code prend la main. Pour revenir à jgit ui : /exit (ou Ctrl+D deux fois).\n');
+  spawnSync('claude', claudeArgs(request.prompt), { cwd, stdio: 'inherit' });
   return null;
 }
 
+// Le skill jgit-demo est livré avec jgit : si ni le projet ni ~/.claude ne
+// l'installent, on le donne à Claude (même règle que jgit_ui_claude, ui.sh).
+function claudeArgs(prompt: string): string[] {
+  let skill: string;
+  try {
+    skill = join(dirname(realpathSync(jgit)), '.claude', 'skills', 'jgit-demo');
+  } catch {
+    return [prompt];
+  }
+  let top = cwd;
+  try {
+    top = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' }).trim();
+  } catch {
+    // hors dépôt : le dossier courant
+  }
+  const installed = [join(homedir(), '.claude', 'skills', 'jgit-demo'), join(top, '.claude', 'skills', 'jgit-demo')];
+  if (!existsSync(join(skill, 'SKILL.md')) || installed.some((path) => existsSync(path))) return [prompt];
+  return ['--add-dir', skill, `${prompt} Le skill jgit-demo n'est pas installé dans ce projet : lis ${skill}/SKILL.md et suis-le.`];
+}
+
+// Vrai si la demande part au poste : l'interface doit alors s'arrêter.
+function relayToHost(request: SpawnRequest): boolean {
+  if (request.kind !== 'claude' || claudeLocal || !claudeRelay) return false;
+  writeFileSync(claudeRelay, request.prompt);
+  return true;
+}
+
 async function main(): Promise<void> {
-  const claudeAvailable = commandExists('claude');
+  const claudeAvailable = claudeLocal || Boolean(claudeRelay);
   let flash: Flash | null = null;
 
   for (;;) {
@@ -75,6 +110,7 @@ async function main(): Promise<void> {
     );
     await instance.waitUntilExit();
     if (!request) break;
+    if (relayToHost(request)) break;
     flash = runSpawn(request);
   }
 }
