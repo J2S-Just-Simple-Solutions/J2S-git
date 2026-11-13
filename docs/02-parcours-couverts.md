@@ -260,6 +260,7 @@ intact.** Plusieurs scénarios le vérifient explicitement.
 | Refus de la confirmation finale | rien n'est poussé, et l'historique local est rendu à son état d'origine |
 | Conflit en `--no-interaction` | arrêt explicite, cherry-pick abandonné, branches temporaires supprimées, remote intact |
 | Conflit après un squash | l'historique initial de la branche de travail est **restauré** |
+| Branche renommée sur GitHub (ses commits d'init portent l'ancien nom) | **refus** `init_commit_missing`, sans rien toucher : jgit ne rebase que ce qu'il a créé, au lieu de se caler sur l'init d'un autre ticket |
 | PR squash-mergée, puis branche finale qui a bougé | seule `__PR__` est reconstruite : voir le [parcours 23](#parcours-23--rebaser-une-pr-validée-avant-son-merge) |
 | Commit de fusion dans l'historique | refus explicite : un merge ne se rejoue pas en cherry-pick |
 | Feature inconnue, ou branche `__PR__` supprimée du serveur | refus, sans rien créer |
@@ -731,6 +732,7 @@ Fichier : [`tests/features/17_demo_creation_et_lecture.feature`](../tests/featur
 | `--based-on`, confirmation refusée, `--dry-run` | base choisie ; rien créé ; rien créé mais le plan est annoncé |
 | Démo existante, nom invalide, nom manquant, base inconnue, branche de référence (`develop`, `main`) ou absente, espace de travail sale | refus identifiés, rien créé |
 | Branche ni `feature/` ni `hotfix/` (`bugfix/…`, sans préfixe) | elle entre dans la démo comme un ticket ; `type` est son préfixe, `null` sans `/` |
+| Branche qui contient un commit repris d'une PR squash-mergée (son message cite le commit START de cette PR) | ce commit ne délimite pas le ticket : tous ses commits depuis la base entrent dans la démo |
 | `demo list` | chaque démo, sa base, ses tickets, son état ; « Aucune démo » ; aucune identité git nécessaire |
 | `demo show` | ticket à jour, qui a avancé, **rebasé par jgit (toujours à jour)**, squashé (réécrit), supprimé, livré ; démo en retard sur sa base ; commit poussé à la main ; démo de la branche courante ; refus d'une démo inconnue |
 | `demo candidates` | branches absentes de la démo, livrés mis à part, ni la base ni la démo elle-même ; sans démo, toutes les branches du serveur (`bugfix/…`, `__PR__…` compris) sauf `develop`, `master`, `main` ; `--based-on` compare à une base envisagée (livrés compris), refuse une base inconnue ou combinée à une démo |

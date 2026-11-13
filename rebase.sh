@@ -121,11 +121,14 @@ feature_rebase() {
 
     # Les commits de la branche de PR depuis son dernier commit d'init : le
     # commit d'init seul tant que la PR n'a pas été validée, suivi d'un commit
-    # par « squash and merge » ensuite.
-    last_init_commit=$(get_last_commit_with_pattern "$prefix_init_commit $feature_type")
-    if [ -z "$last_init_commit" ]; then
-        echo "Aucun commit trouvé avec le pattern jgit"
-        exit_safe 1
+    # par « squash and merge » ensuite. Son commit d'init à elle, au sujet près
+    # (last_init_commit_of) : jamais celui d'un autre ticket remonté par une
+    # release. Sans lui, jgit ne sait pas ce qui appartient au ticket : il refuse.
+    last_init_commit=$(last_init_commit_of "$branch" HEAD)
+    if [[ -z "$last_init_commit" ]]; then
+        jgit_fail init_commit_missing "$JGIT_EXIT_REFUSED" \
+            "$branch_PR ne contient pas le commit d'init de $branch : jgit ne rebase que les branches qu'il a créées (branche renommée, ou créée à la main ?). Rien n'a été modifié." \
+            "Recréez le ticket avec jgit $feature_type start, ou rebasez cette branche à la main."
     fi
     local commits_on_PR=($(list_commits_since "$last_init_commit"))
 
@@ -236,7 +239,7 @@ feature_rebase() {
     local squash_done=false
 
     local squash_base_index
-    squash_base_index=$(find_last_init_commit_index "${commits[@]}")
+    squash_base_index=$(find_last_init_commit_index "$branch" "${commits[@]}")
 
     if [[ $squash_base_index -ge 0 ]]; then
         local squashable_count=$(( ${#commits[@]} - squash_base_index - 1 ))

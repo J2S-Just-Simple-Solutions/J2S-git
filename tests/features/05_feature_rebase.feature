@@ -219,6 +219,26 @@ Fonctionnalité: Rebase d'une feature sur sa branche de référence
     Et l'historique local de "feature/TEST-13" contient "Ajoute un autre fichier"
     Et l'historique local de "feature/TEST-13" contient "Ajoute encore un fichier"
 
+  # jgit ne rebase que ce qu'il a créé : une branche renommée garde les commits
+  # d'init de son ancien nom. Avant, le rebase prenait le dernier « INIT
+  # feature » venu — celui de n'importe quel ticket — et continuait.
+  Scénario: Une branche renommée à la main n'est pas rebasée
+    Étant donné je lance "jgit feature start TEST-30 --no-interaction --no-open"
+    Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Et la branche "feature/TEST-30" est renommée en "feature/TEST-31" sur GitHub
+    Et la branche "__PR__feature/TEST-30" est renommée en "__PR__feature/TEST-31" sur GitHub
+    Et un autre développeur pousse le fichier "src/preprod.txt" contenant "préprod" sur la branche "develop" avec le message "Livraison concurrente"
+    Et je note l'état de la branche distante "feature/TEST-31"
+    Et je note l'état de la branche distante "__PR__feature/TEST-31"
+    Quand je lance "jgit feature rebase TEST-31 --no-interaction --json" en lisant le JSON
+    Alors jgit se termine avec le code 2
+    Et le JSON a "error.code" égal à "init_commit_missing"
+    Et le JSON a "error.message" qui contient "__PR__feature/TEST-31 ne contient pas le commit d'init de feature/TEST-31"
+    Et la branche distante "feature/TEST-31" est inchangée
+    Et la branche distante "__PR__feature/TEST-31" est inchangée
+
   Scénario: Un commit de fusion sur la branche de travail bloque le rebase
     Étant donné je lance "jgit feature start TEST-15 --no-interaction --no-open"
     Et je commite le fichier "src/a.txt" contenant "A" avec le message "Commit A"

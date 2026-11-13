@@ -217,3 +217,20 @@ Les couleurs passent exclusivement par les variables `C_RED`, `C_GREEN`…
 et par `jgit_tput` (`functions.sh`) : jamais de séquence `\033[` écrite à la
 main, jamais d'appel direct à `tput`. C'est ce qui garantit une sortie sans
 séquence ANSI hors d'un terminal.
+
+## 10. Un sujet de commit jgit ne s'écrit et ne se lit que par le module
+
+Les sujets que jgit pose (`INIT`, `START`, `RESTART`, release, démo) s'écrivent
+par `jgit_subject` et se reconnaissent par `jgit_subject_parse`,
+`jgit_subject_is`, `is_init_subject_of` et `last_init_commit_of` — la section
+« Sujets des commits jgit » de `functions.sh`. Jamais de texte de sujet recopié,
+jamais de `*"[empty_commit]"*`, jamais de décision prise sur le message entier
+(`--grep` ne sert qu'à présélectionner). Une incohérence qui ne bloque pas passe
+par `jgit_alert`, jamais en silence.
+
+Le cas vécu : le début d'un ticket se cherchait comme le premier
+`[empty_commit]` venu, dans tout le message. Un commit repris d'une PR
+squash-mergée (dont le message liste le commit START de cette PR) a délimité un
+ticket : la démo a été publiée sans la majeure partie de son contenu. La
+cartographie complète — qui écrit quoi, quand, et qui le relit — est dans
+[`08-commits-jgit.md`](08-commits-jgit.md).

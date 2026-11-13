@@ -164,11 +164,15 @@ github_squash_merge_pr() {
     local branch="$1"
     local message="${2:-$branch (#1)}"
     local pr_branch="${JGIT_PREFIX_PR:-__PR__}$branch"
+    local body
 
     github_git fetch --quiet origin
+    # Comme GitHub, le message par defaut liste dans son corps les commits de la
+    # PR (« * <sujet> »), commit START de jgit compris.
+    body=$(github_git log --reverse --format='* %s%n' "origin/$pr_branch..origin/$branch")
     github_git checkout --quiet -B "$pr_branch" "origin/$pr_branch"
     github_git merge --squash --quiet "origin/$branch"
-    github_git commit --quiet -m "$message"
+    github_git commit --quiet -m "$message" -m "$body"
     github_git push --quiet origin "$pr_branch"
     info "GitHub : PR $branch squash-mergee dans $pr_branch"
 }
@@ -400,6 +404,14 @@ repo_create_local_branch() {
     info "branche locale $branch creee depuis $start_point"
 }
 
+# Reprend un commit sur la branche courante (cherry-pick), message compris.
+repo_cherry_pick() {
+    repo_git fetch --quiet origin
+    repo_git cherry-pick "$1" >/dev/null || \
+        assert_failed "cherry-pick de $1" "le cherry-pick a echoue dans le depot de test"
+    info "commit $1 repris sur $(repo_current_branch)"
+}
+
 repo_delete_local_branch() {
     repo_git branch -D "$1" >/dev/null 2>&1
     info "branche locale $1 supprimee"
@@ -489,6 +501,13 @@ github_commit_file_as() {
 
 # Memorise le commit pointe par une branche du remote, pour verifier plus tard
 # qu'une commande interrompue ne l'a pas modifie.
+# Simule le renommage d'une branche sur GitHub (« Rename branch ») : le serveur
+# ne connait plus que le nouveau nom, les commits sont inchanges.
+github_rename_branch() {
+    origin_git branch -m "$1" "$2"
+    info "GitHub : branche $1 renommee en $2"
+}
+
 remote_snapshot_save() {
     local branch="$1"
     mkdir -p "$SANDBOX/snapshots"
