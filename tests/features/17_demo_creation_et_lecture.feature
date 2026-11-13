@@ -157,6 +157,30 @@ Fonctionnalité: Créer une démo, puis la lire
     Et le JSON a "tickets[ticket=essai-julien].type" nul
     Et le JSON a "tickets[ticket=essai-julien].id" égal à "essai-julien"
 
+  # Un message de squash GitHub liste les commits de la PR, son commit START
+  # compris. Repris sur une autre branche, il ne doit pas en marquer le début :
+  # seul compte un commit d'init de ce ticket-là, à son sujet. (Cas vécu : la
+  # démo ne recevait que les commits postérieurs à la reprise.)
+  Scénario: Un commit qui cite un commit d'init dans son message ne délimite pas le ticket
+    Étant donné je crée la branche locale "poc-couleur" depuis "develop"
+    Et je me place sur la branche "poc-couleur"
+    Et je commite le fichier "src/poc.txt" contenant "poc" avec le message "Pose le POC"
+    Et je pousse la branche courante
+    Et je lance "jgit feature start TEST-7 --based-on poc-couleur --no-interaction --no-open"
+    Et je commite le fichier "src/teinte.txt" contenant "teinte" avec le message "Ajoute la teinte"
+    Et je pousse la branche courante
+    Et la PR de "feature/TEST-7" est squash-mergée sur GitHub avec le message "TEST-7 (#7)"
+    Et je me place sur la branche "poc-couleur"
+    Et je reprends le commit "origin/__PR__feature/TEST-7" sur la branche courante
+    Et je commite le fichier "src/suite.txt" contenant "suite" avec le message "Poursuit le POC"
+    Et je pousse la branche courante
+    Et je me place sur la branche "develop"
+    Quand je lance "jgit demo create sprint12 --from poc-couleur --no-interaction"
+    Alors jgit se termine sans erreur
+    Et le fichier "src/poc.txt" existe sur la branche distante "demo/sprint12"
+    Et le fichier "src/teinte.txt" existe sur la branche distante "demo/sprint12"
+    Et le fichier "src/suite.txt" existe sur la branche distante "demo/sprint12"
+
   # Une démo se fabrique à partir du serveur, sur une branche temporaire : un
   # espace de travail en cours de modification n'y a pas sa place.
   Scénario: Un espace de travail sale empêche de fabriquer une démo

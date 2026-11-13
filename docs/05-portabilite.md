@@ -41,7 +41,7 @@ de tests.
 | --- | --- | --- |
 | `tail -r` (BSD seulement) | `rebase.sh` | `git rev-list --reverse` |
 | `tput` sans `TERM` exploitable | partout : messages colorés | couleurs centralisées (`jgit_init_colors`), coupées hors terminal, sans `TERM`, avec `NO_COLOR` |
-| Expression `\?` (extension GNU) passée à `git log --grep` | `get_last_commit_with_pattern` | BRE POSIX, interprétation imposée par `--basic-regexp` |
+| Expression `\?` (extension GNU) passée à `git log --grep` | l'ancienne `get_last_commit_with_pattern` (remplacée depuis par `last_init_commit_of`, qui compare les sujets en bash) | BRE POSIX, interprétation imposée par `--basic-regexp` |
 | `\s` dans `grep -E` | `clean_branches` | classe POSIX `[[:space:]]` |
 | Appel par un lien symbolique (`$0`) | `jgit.sh` et les modules | résolution du lien (`jgit_resolve_home`) |
 | Deux tags créés dans la même seconde | `release start`, `release finish` | à date égale, le plus haut numéro l'emporte (`--sort=-v:refname --sort=-creatordate`) |

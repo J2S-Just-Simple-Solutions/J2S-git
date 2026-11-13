@@ -32,6 +32,7 @@ les limites connues. Lisible sans être expert Git.
 | [05 — Portabilité](05-portabilite.md) | macOS et Linux : ce qui a été levé pour Linux, les règles à respecter, et pourquoi tout autre système est refusé |
 | [07 — Feuille de route](07-feuille-de-route.md) | Temps 2 (Jenkins et environnements) et temps 3 (prototypes) : ce qui est déjà prêt, ce qu'il reste à trancher |
 | [06 — Contrat de la ligne de commande](06-contrat-cli.md) | `--json` : le document unique, les codes de sortie, les schémas — ce qu'une IA, l'interface ou Jenkins peuvent attendre de `jgit` |
+| [08 — Les commits de jgit](08-commits-jgit.md) | Qui écrit quel commit, quand, sur quelle branche, ce qu'il devient, qui le relit et pour savoir quoi ; la règle unique de lecture |
 
 Le mode d'emploi opérationnel (lancer les tests, écrire un scénario, catalogue
 des étapes) est dans [`tests/README.md`](../tests/README.md).
