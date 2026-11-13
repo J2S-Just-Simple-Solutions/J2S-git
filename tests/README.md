@@ -168,6 +168,7 @@ Les valeurs sont toujours entre guillemets.
 | `Quand je me place sur la branche "…"` |
 | `Quand je récupère les nouveautés du remote` |
 | `Quand je merge la branche "…" dans la branche courante` (crée un commit de fusion) |
+| `Quand je reprends le commit "…" sur la branche courante` (cherry-pick, message compris) |
 
 ### Préparation du dépôt
 
@@ -191,8 +192,9 @@ Les valeurs sont toujours entre guillemets.
 
 | Étape |
 | --- |
-| `Quand la PR de "…" est squash-mergée sur GitHub avec le message "…"` |
+| `Quand la PR de "…" est squash-mergée sur GitHub avec le message "…"` (comme GitHub, le corps du message liste les commits de la PR, `* <sujet>`) |
 | `Quand la branche "…" est supprimée sur GitHub` |
+| `Étant donné la branche "…" est renommée en "…" sur GitHub` (le serveur ne connaît plus que le nouveau nom) |
 | `Quand la PR de "…" est livrée dans "…"` (la branche de PR est fusionnée dans la base avec le message d'une release jgit) |
 | `Étant donné une démo à l'ancien format "…" basée sur "…" contient les tickets "…"` (tickets séparés par des espaces ; reproduit ce que faisait la première version de `jgit`) |
 | `Étant donné une démo à l'ancien format "…" sans base enregistrée contient les tickets "…"` |

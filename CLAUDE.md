@@ -42,6 +42,11 @@ Elles sont détaillées dans `docs/04-regles-de-codage.md`. Les plus importantes
   du suffixe montre la réponse par défaut).
 - Une branche de travail sur un dépôt partagé ne se pousse en force qu'avec
   `--force-with-lease=<ref>:<sha lu au départ>`.
+- **Sujets des commits jgit** (`INIT`, `START`, `RESTART`, release, démo) :
+  écrits par `jgit_subject`, reconnus par `jgit_subject_parse` et ses dérivés
+  (`functions.sh`), sur le **sujet** seul, jamais le message entier ; un commit
+  d'init n'est celui que du ticket qu'il nomme. Cartographie :
+  `docs/08-commits-jgit.md`.
 
 ## Tester
 

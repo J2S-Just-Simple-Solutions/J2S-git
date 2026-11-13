@@ -380,6 +380,13 @@ façon. Il n'y avait pas de vue d'ensemble, pas de retrait possible.
   donc aussi le rebase de `jgit`. Jamais par un SHA.
 - « Livré » se lit dans les traces jgit que la release fait remonter dans la
   base : le commit d'init de la branche de PR, le merge de release.
+- Les commits d'un ticket sont ceux qui suivent **son** dernier commit d'init :
+  un commit dont le **sujet** est l'un de ceux que jgit écrit (`INIT`, `START`,
+  `RESTART`) **et nomme ce ticket** (`last_init_commit_of`). Le marqueur
+  `[empty_commit]` seul ne suffit pas : un message de squash GitHub le cite dans
+  son corps (il liste les commits de la PR), et un commit repris sur une autre
+  branche passait pour son début — tout ce qui le précédait manquait à la démo,
+  sans un mot. Sans commit d'init à elle, une branche se lit depuis sa base.
 - Toute modification passe par un plan (`init`, `pick`, `marker`) déroulé sur une
   branche temporaire par le moteur de rejeu commun (choix n°14), puis un seul
   `push --force-with-lease=<ref>:<sha lu>`. Ajouter est une avance rapide ;

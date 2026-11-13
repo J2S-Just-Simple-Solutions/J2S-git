@@ -52,11 +52,11 @@ feature_start() {
         switch_branch "$reference_branch"
         echo "Create pull request branch $branch_PR branch"
         switch_branch "$branch_PR" create
-        commit_init_with_based_on "$prefix_init_commit $branch $suffix_init_commit" "$branch_PR" "$reference_branch" --quiet
+        commit_init_with_based_on "$(jgit_subject init_pr "$branch")" "$branch_PR" "$reference_branch" --quiet
         git push $j2s_remote $branch_PR --quiet
         echo "Create working branch $branch branch"
         switch_branch "$branch" create
-        commit_init_with_based_on "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - START $branch $suffix_init_commit" "$branch" "$reference_branch" --quiet
+        commit_init_with_based_on "$(jgit_subject start "$branch")" "$branch" "$reference_branch" --quiet
         git push --set-upstream $j2s_remote $branch --quiet
         current_branch="$branch"
         git branch -D $branch_PR --quiet
@@ -126,7 +126,7 @@ feature_restart() {
 
     echo "Create working branch $branch"
     switch_branch "$branch" create
-    commit_init_with_based_on "$prefix_commit commit for automatic PR creation - this commit will be deleted by squash and merge - RESTART $branch $suffix_init_commit" "$branch" "$recorded_base" --quiet
+    commit_init_with_based_on "$(jgit_subject restart "$branch")" "$branch" "$recorded_base" --quiet
     git push --set-upstream $j2s_remote $branch --quiet
     current_branch="$branch"
     git branch -D $branch_PR --quiet

@@ -340,6 +340,7 @@ Utile quand un ticket doit finalement partir en correctif urgent.
 | Votre PR a été validée, mais votre branche de travail contient du code ajouté **après** | refuse, sans rien modifier (code `2`, `pr_validated_new_work`), et donne la commande pour voir ce code | ce travail n'a pas été relu ; supprimer la branche le perdrait |
 | Votre branche de travail a disparu et la PR n'a **jamais été validée** | refuse (code `2`, `pr_not_validated`), et donne la commande pour supprimer la branche de PR si le ticket est abandonné | il n'y a rien à rebaser |
 | La branche de PR n'existe plus sur le serveur | refuse en la nommant | il n'y a rien à reconstruire ni à publier |
+| La branche a été **renommée** (sur GitHub ou à la main) ou créée hors de `jgit` : la branche de PR ne contient pas le commit d'init **de ce ticket** | refuse, sans rien modifier (code `2`, `init_commit_missing`) | `jgit` ne sait pas quels commits sont les siens ; il ne se cale plus sur le commit d'init d'un autre ticket |
 | Un **commit de fusion** est présent dans l'historique | refuse en le nommant | une fusion ne se rejoue pas commit par commit ; ne mélangez pas merge et rebase |
 | La base enregistrée n'existe plus (ni en local ni sur le serveur) | **refuse**, sans rien modifier, et demande de nommer la base avec `--based-on` | se rabattre sur la référence du projet déplacerait la branche, et le résultat partirait en `push --force` |
 | `--based-on` sur une branche inconnue | **même refus, mot pour mot** | une saisie fausse et une base disparue sont le même problème |

@@ -674,7 +674,7 @@ audit_ticket_eval() {
   base_ref="refs/remotes/$j2s_remote/$base"
   ticket_ref="refs/remotes/$j2s_remote/$ticket"
 
-  if [[ "$pr_subject" == "$prefix_init_commit $ticket $suffix_init_commit" ]]; then
+  if jgit_subject_is "$pr_subject" init_pr "$ticket"; then
     pr_validated=false
   elif [[ -n "$pr_subject" ]]; then
     pr_validated=true
@@ -704,9 +704,10 @@ audit_ticket_eval() {
       status="up_to_date"
     else
       # Son commit d'init : celui qui porte sa branche d'origine, sinon le
-      # dernier commit d'init qui lui est propre.
+      # dernier commit d'init qui lui est propre (au sujet près : un message de
+      # squash qui en cite un ne compte pas).
       if [[ -z "$start" ]]; then
-        start=$(git log --first-parent -n 1 --format=%H -F --grep="$suffix_init_commit" "$base_ref..$ticket_ref" 2>/dev/null)
+        start=$(last_init_commit_of "$ticket" "$base_ref..$ticket_ref")
       fi
       if [[ -z "$start" ]]; then
         # Sans commit d'init, jgit ne sait pas quels commits sont les siens.
