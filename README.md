@@ -469,7 +469,10 @@ l'état des lieux (`v`, voir [`jgit audit`](#audit)), le choix des tickets **en 
 ticket seul à correspondre est coché d'office), la création d'une démo, le
 plan de chaque réécriture montré avant d'être appliqué (`--dry-run`), et un
 écran de conflit (fichiers à résoudre, ouverture dans l'éditeur, reprise,
-annulation, « résoudre avec Claude » quand Claude Code est installé).
+annulation, `i` « résoudre avec Claude » quand Claude Code est installé sur le
+poste : l'interface tourne dans Docker, elle passe la main à `claude` sur le
+poste, puis revient d'elle-même sur l'opération en pause quand on quitte Claude
+par `/exit`).
 
 Elle est écrite en TypeScript avec [Ink](https://github.com/vadimdemedes/ink)
 (dossier [`ui/`](ui/)) et ne fait **aucune** opération git elle-même : tout passe

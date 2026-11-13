@@ -72,7 +72,49 @@ jgit_ui() {
     run+=(-v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK" -e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK")
   fi
 
-  exec docker "${run[@]}" j2s/jgit:local jgit-ui
+  # Claude Code est installé sur le poste, pas dans l'image : l'interface écrit
+  # sa demande dans un fichier de relais et s'arrête ; on lance claude ici, dans
+  # le dossier courant, puis on relance l'interface, qui retrouve l'opération
+  # en pause.
+  if ! command -v claude >/dev/null 2>&1; then
+    exec docker "${run[@]}" j2s/jgit:local jgit-ui
+  fi
+  local relay status prompt
+  JGIT_UI_RELAY_DIR=$(mktemp -d "${TMPDIR:-/tmp}/jgit-ui.XXXXXX") || exec docker "${run[@]}" j2s/jgit:local jgit-ui
+  jgit_on_exit jgit_ui_relay_cleanup
+  # Chemin physique (/private/var/… sur Mac) : c'est lui que Docker partage.
+  JGIT_UI_RELAY_DIR=$(cd "$JGIT_UI_RELAY_DIR" && pwd -P)
+  relay="$JGIT_UI_RELAY_DIR/claude.request"
+  run+=(-v "$JGIT_UI_RELAY_DIR:$JGIT_UI_RELAY_DIR" -e "JGIT_UI_CLAUDE_RELAY=$relay")
+  while :; do
+    status=0
+    docker "${run[@]}" j2s/jgit:local jgit-ui || status=$?
+    [[ -s "$relay" ]] || return "$status"
+    prompt=$(cat "$relay")
+    rm -f "$relay"
+    printf "%sClaude Code prend la main. Pour revenir à jgit ui : /exit (ou Ctrl+D deux fois).%s\n" "$C_YELLOW" "$C_RESET" >&2
+    jgit_ui_claude "$prompt"
+  done
+}
+
+# Lance Claude Code sur le poste, dans le dossier courant. Le skill jgit-demo
+# est livré avec jgit ; si ni le projet ni ~/.claude ne l'installent, on le
+# donne à Claude (accès au dossier et chemin dans la demande) plutôt que de le
+# laisser résoudre sans lui. En natif, cli.tsx fait de même.
+jgit_ui_claude() {
+  local prompt="$1" skill="$JGIT_HOME/.claude/skills/jgit-demo" top
+  local args=()
+  top=$(git rev-parse --show-toplevel 2>/dev/null) || top="$PWD"
+  if [[ -f "$skill/SKILL.md" && ! -e "$HOME/.claude/skills/jgit-demo" && ! -e "$top/.claude/skills/jgit-demo" ]]; then
+    args=(--add-dir "$skill")
+    prompt="$prompt Le skill jgit-demo n'est pas installé dans ce projet : lis $skill/SKILL.md et suis-le."
+  fi
+  claude ${args[@]+"${args[@]}"} "$prompt" || true
+}
+
+jgit_ui_relay_cleanup() {
+  [[ -n "${JGIT_UI_RELAY_DIR:-}" ]] && rm -rf "$JGIT_UI_RELAY_DIR"
+  return 0
 }
 
 jgit_ui_native() {

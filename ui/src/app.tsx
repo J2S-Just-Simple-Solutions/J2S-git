@@ -172,7 +172,8 @@ export function App({ runner, claudeAvailable, stage, onSpawn, initialFlash = nu
           kind: 'claude',
           prompt:
             `Une opération jgit est en pause sur un conflit (${view.label}). ` +
-            'Lis « jgit util status --json », résous le conflit en suivant le skill jgit-demo, puis reprends.',
+            'Lis « jgit util status --json », résous le conflit en suivant le skill jgit-demo, puis reprends. ' +
+            'Tu as été lancé depuis « jgit ui » : termine en rappelant que /exit ramène à jgit ui.',
         });
       case 'stage':
         await stage(action.file);
